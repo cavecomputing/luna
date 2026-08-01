@@ -137,6 +137,54 @@ editing one type — the compiler then tells you every place that must change.
 
 Full pattern with code: [docs/architecture.md](docs/architecture.md#ipc).
 
+## Settings apply immediately — YOU MUST
+
+Every setting takes effect the moment it changes, in every window. No restart, no reload, no
+"takes effect next launch". If a control is on screen, flipping it changes behaviour now.
+
+This is harder than it is on a web page, and the reason is Electron-specific. Luna runs **two
+renderer processes** — the main window and Settings — each with its own React tree and its own
+memory. A write in Settings does not reach the main window on its own. Nothing warns you: the
+Settings window shows the new value, looks correct, and the main window quietly keeps the old
+one until it is reloaded. That silent divergence is what this section exists to prevent.
+
+**The shape that works:**
+
+1. Main owns the value. `main/prefs.ts` is the single source of truth. A renderer never holds
+   the authoritative copy, only a view of it.
+2. A renderer changes a setting by invoking `prefs:set`. It does not write to its own state and
+   assume the rest of the app followed.
+3. Main writes, updates its cache, re-applies any main-side effect, then **broadcasts to every
+   window** — `for (const w of BrowserWindow.getAllWindows()) …` — so the change reaches
+   renderers that had no part in making it.
+4. Every renderer subscribes and re-renders from the pushed value. The window that made the
+   change is not special; it learns about it the same way as the others.
+
+**Read a value at use time, not at mount time.** A pref captured in `useState(initial)`, in a
+module-level `const`, or in a stale closure is frozen at the moment it was captured. When the
+composer sends a message it reads the current mode, not the one that existed when the
+conversation was opened.
+
+**Never hand a setting to a window at construction** — not through `additionalArguments`, not
+through a query string. A value delivered that way cannot change without recreating the window,
+which is the reload we are avoiding.
+
+**Say so when something genuinely cannot apply live.** A few Electron options are fixed when the
+`BrowserWindow` is constructed — `titleBarStyle`, anything under `webPreferences`. If a setting
+ever maps to one of those, recreate the window as part of applying it or label the control with
+what it needs. A control that silently does nothing is worse than no control at all.
+
+**A setting is not done until propagation is tested.** Asserting that the value reached disk
+misses the entire failure mode. Assert that the broadcast fires and carries the new value.
+
+**Current state, so this isn't mistaken for a description of the code:** the broadcast does not
+exist yet. `Events` in `shared/ipc.ts` declares only `theme:changed`, and no renderer subscribes
+to it. Theme appears to work live because `nativeTheme.themeSource` flips Chromium's
+`prefers-color-scheme` for every window at once and the CSS follows — our own state is not
+involved. That is luck specific to theme, not a working pattern. `usePrefs` runs only in the
+Settings window and loads once on mount. **The first pref the main window consumes needs the
+`prefs:changed` event built first.**
+
 ## Naming
 
 Short and plain. If a name needs more than three words, the function is doing too much.
@@ -404,6 +452,8 @@ personal or secret is staged.
 - Add `better-sqlite3` or any other SQLite package. `node:sqlite` is built in.
 - Render model HTML into our own DOM. Sandboxed iframe or nothing.
 - Store a credential in the database, or any setting outside it.
+- Ship a setting that needs a reload or restart, or a control that changes nothing.
+- Let one window's copy of a setting drift from another's. Main broadcasts; every window listens.
 - `git add -A` / `git add .` without reading what it staged.
 - Put an API key anywhere outside main + Keychain.
 - Log prompt text, completion text, or a user file path.
