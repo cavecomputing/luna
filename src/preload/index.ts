@@ -38,6 +38,7 @@ const api = {
     open: () => invoke('settings:open', undefined),
   },
   onTheme: (fn: (data: EventData<'theme:changed'>) => void) => subscribe('theme:changed', fn),
+  onPrefs: (fn: (data: EventData<'prefs:changed'>) => void) => subscribe('prefs:changed', fn),
 }
 
 contextBridge.exposeInMainWorld('luna', api)

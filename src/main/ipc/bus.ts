@@ -1,4 +1,4 @@
-import { ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import { BrowserWindow, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import type { Channel, Req, Res } from '../../shared/ipc.js'
 import type { EventData, EventName } from '../../shared/ipc.js'
 import { err, type Result } from '../../shared/result.js'
@@ -51,4 +51,15 @@ export function emit<E extends EventName>(
 ): void {
   if (target.isDestroyed()) return
   target.send(event, data)
+}
+
+/**
+ * Push to every open window. Luna runs a renderer per window, so a change made
+ * in Settings reaches the main window only because this exists. The window that
+ * caused the change is not exempt — it learns the same way as the others.
+ */
+export function broadcast<E extends EventName>(event: E, data: EventData<E>): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    emit(win.webContents, event, data)
+  }
 }

@@ -2,6 +2,7 @@ import { BrowserWindow, app, nativeTheme } from 'electron'
 import { join } from 'node:path'
 import { registerAll } from './ipc/index.js'
 import { emit } from './ipc/bus.js'
+import * as db from './db.js'
 import * as dock from './dock.js'
 import * as menu from './menu.js'
 import * as prefs from './prefs.js'
@@ -16,9 +17,14 @@ app.whenReady().then(
     serveRenderer(join(import.meta.dirname, '../renderer'))
     dock.setIcon()
 
+    // Opens and migrates. No window exists yet, so a slow migration has nothing
+    // to block, and a failure lands in the rejection handler below.
+    const conn = db.handle()
+    await prefs.adoptLegacy(conn, prefs.legacyPath())
+
     // Theme comes from prefs, which default to light. Applied before the first
     // window so there is no flash of the wrong appearance.
-    prefs.applyTheme(await prefs.load())
+    prefs.applyTheme(prefs.load())
 
     menu.build()
     registerAll()
@@ -45,6 +51,11 @@ app.whenReady().then(
 // reopens one. Every other platform treats the app as its window and quits.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+// Checkpoints the WAL, so the next launch doesn't replay one.
+app.on('will-quit', () => {
+  db.close()
 })
 
 process.on('uncaughtException', (error) => {

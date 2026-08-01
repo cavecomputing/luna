@@ -4,7 +4,7 @@ import { Toggle } from '../../../ui/toggle.js'
 import { Bolt } from '../../../ui/icons/bolt.js'
 import { Crescent } from '../../../ui/icons/crescent.js'
 import { Panel, Row } from '../panel.js'
-import type { usePrefs } from '../use-prefs.js'
+import type { usePrefs } from '../../../lib/use-prefs.js'
 import styles from './chat.module.css'
 
 const modes: Segment<Mode>[] = [

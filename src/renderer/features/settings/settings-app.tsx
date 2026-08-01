@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { sections, type SectionId } from './sections.js'
-import { usePrefs } from './use-prefs.js'
+import { usePrefs } from '../../lib/use-prefs.js'
 import { Appearance } from './panels/appearance.js'
 import { About } from './panels/about.js'
 import { Chat } from './panels/chat.js'

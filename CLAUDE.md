@@ -154,9 +154,9 @@ one until it is reloaded. That silent divergence is what this section exists to 
    the authoritative copy, only a view of it.
 2. A renderer changes a setting by invoking `prefs:set`. It does not write to its own state and
    assume the rest of the app followed.
-3. Main writes, updates its cache, re-applies any main-side effect, then **broadcasts to every
-   window** — `for (const w of BrowserWindow.getAllWindows()) …` — so the change reaches
-   renderers that had no part in making it.
+3. Main writes, re-applies any main-side effect, then **broadcasts to every window** —
+   `broadcast()` in `ipc/bus.ts` — so the change reaches renderers that had no part in making
+   it. Store first, announce second: nothing is announced that wasn't written.
 4. Every renderer subscribes and re-renders from the pushed value. The window that made the
    change is not special; it learns about it the same way as the others.
 
@@ -177,13 +177,14 @@ what it needs. A control that silently does nothing is worse than no control at 
 **A setting is not done until propagation is tested.** Asserting that the value reached disk
 misses the entire failure mode. Assert that the broadcast fires and carries the new value.
 
-**Current state, so this isn't mistaken for a description of the code:** the broadcast does not
-exist yet. `Events` in `shared/ipc.ts` declares only `theme:changed`, and no renderer subscribes
-to it. Theme appears to work live because `nativeTheme.themeSource` flips Chromium's
-`prefers-color-scheme` for every window at once and the CSS follows — our own state is not
-involved. That is luck specific to theme, not a working pattern. `usePrefs` runs only in the
-Settings window and loads once on mount. **The first pref the main window consumes needs the
-`prefs:changed` event built first.**
+This is built. `prefs:changed` is declared in `shared/ipc.ts`, `broadcast()` in `ipc/bus.ts`
+sends it to every window, and `lib/use-prefs.ts` subscribes — so both windows follow a change
+made in either. Copy that path for the next thing that needs it; don't invent a second one.
+
+Note that theme is not evidence the path works. `nativeTheme.themeSource` flips Chromium's
+`prefers-color-scheme` for every window at once and the CSS follows without our state being
+involved, so theme would appear to work even with the broadcast removed. Test a pref that goes
+through React — `defaultMode` is the one currently wired end to end.
 
 ## Naming
 
@@ -211,19 +212,32 @@ no new attack surface. Don't add a SQLite package.
 - The database file lives under `app.getPath('userData')`. Main opens it; it is never
   touched from preload or the renderer.
 - `node:sqlite` is synchronous. That's fine for indexed reads and single-row writes, which
-  take microseconds. It is not fine for migrations, bulk import/export or a full-text scan —
-  those go to a `worker_threads` worker so the main process never blocks a window.
+  take microseconds. It is not fine for bulk import/export or a full-text scan — those go to
+  a `worker_threads` worker so the main process never blocks a window.
 - Write schema migrations as ordered, numbered steps with a `user_version` check. Never
   mutate a schema in place at startup without a migration.
+- **Migrations run on main, at startup, before the first window exists.** The worker rule
+  above does not apply to them: there is no window to block yet, and a failure belongs in the
+  startup path where it can stop the app cleanly. `migrate()` takes a database handle and
+  returns a number, so moving it into a worker later is a change at the call site only.
+- Each migration step commits with its own `user_version` bump. SQLite keeps that value in the
+  file header and rolls it back with the transaction (verified), so an interrupted migration
+  leaves a database that is behind rather than half-applied.
+- A database whose `user_version` is ahead of this build is refused, not opened. Downgrading
+  the app must not let it write a shape it doesn't understand.
 - Turn on `PRAGMA journal_mode = WAL` and `foreign_keys = ON`.
 - Parse every row on the way out. A column is `unknown` until validated, exactly like IPC
   and disk elsewhere. Rows are not typed by assertion.
 - **API keys never go in the database.** They stay in the Keychain via `safeStorage`. The
   database may hold a provider's name, base URL and model — never its credential.
 
-**Known debt:** `prefs.json` predates this decision and still holds settings. It needs
-folding into the database. Until it is gone, treat it as legacy, not as a second pattern
-to copy.
+Preferences live in the `prefs` table, one row per field, JSON-encoded so strings and booleans
+both round-trip. There is no in-memory cache: a single-row read takes microseconds, and a cache
+is one more place a value can go stale.
+
+`prefs.json` is gone. `adoptLegacy()` folds an existing file into the database on first launch
+and deletes it, so a setting never has two homes. Leave that function in place until the
+installed base has run it once; it is a no-op on every launch after the first.
 
 ## Rendering model output — YOU MUST
 

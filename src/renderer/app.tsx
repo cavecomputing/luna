@@ -9,6 +9,7 @@ import { Collapse } from './ui/icons/collapse.js'
 import { demoChats } from './data/demo.js'
 import styles from './app.module.css'
 import { useNow } from './lib/use-now.js'
+import { usePrefs } from './lib/use-prefs.js'
 import { cx } from './lib/cx.js'
 
 /**
@@ -16,7 +17,8 @@ import { cx } from './lib/cx.js'
  * things sit and passes the conversation store down.
  */
 export function App(): React.JSX.Element {
-  const chats = useChats(demoChats)
+  const { prefs } = usePrefs()
+  const chats = useChats(demoChats, prefs.defaultMode)
   const [open, setOpen] = useState(true)
 
   // One ticking clock for the whole shell, so every row agrees.

@@ -11,7 +11,7 @@ export type Chats = ReturnType<typeof useChats>
  * read it. When conversations move to main this hook is the only thing that
  * changes — every component below it keeps its props.
  */
-export function useChats(initial: Conversation[]) {
+export function useChats(initial: Conversation[], defaultMode: Mode) {
   const [chats, setChats] = useState<Conversation[]>(initial)
   const [query, setQuery] = useState('')
   const [openId, setOpenId] = useState<string | undefined>(initial[0]?.id)
@@ -24,7 +24,9 @@ export function useChats(initial: Conversation[]) {
       id: `c${String(Date.now())}`,
       title: 'New chat',
       icon: 'spark',
-      mode: 'fast',
+      // Read here, not captured at mount, so changing the pref in Settings
+      // affects the very next chat without a reload.
+      mode: defaultMode,
       updatedAt: Date.now(),
       messages: [],
     }

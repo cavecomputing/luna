@@ -4,7 +4,7 @@ import { Bolt } from '../../../ui/icons/bolt.js'
 import { Crescent } from '../../../ui/icons/crescent.js'
 import { Gear } from '../../../ui/icons/gear.js'
 import { Panel, Row } from '../panel.js'
-import type { usePrefs } from '../use-prefs.js'
+import type { usePrefs } from '../../../lib/use-prefs.js'
 
 const themes: Segment<Theme>[] = [
   { value: 'light', label: 'Light', icon: <Bolt size={14} /> },
