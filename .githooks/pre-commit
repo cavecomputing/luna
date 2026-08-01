@@ -1,0 +1,120 @@
+#!/bin/sh
+# Luna pre-commit hook — blocks secrets and personal data from entering git.
+#
+# Enable:      npm run setup      (or: sh scripts/setup-hooks.sh)
+# Bypass once: git commit --no-verify
+#
+# This catches accidents, not intent. It is not a security boundary.
+
+fail=0
+warn=0
+
+block() { echo "  BLOCKED  $1"; echo "           $2"; fail=1; }
+caution() { echo "  WARNING  $1"; echo "           $2"; warn=1; }
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+# ── 1. Filenames that must never be committed ───────────────────────────────
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  case "$f" in
+    *.env.example|*.env.sample|*.npmrc.example)
+      ;;
+    .env|.env.*|*/.env|*/.env.*)
+      block "$f" "environment file — may hold API keys" ;;
+    *.p12|*.pfx|*.pem|*.key|*.p8|*.jks|*.keystore)
+      block "$f" "private key or certificate" ;;
+    *.cer|*.crt|*.certSigningRequest|*.mobileprovision|*.provisionprofile)
+      block "$f" "signing certificate or profile" ;;
+    *.sqlite|*.sqlite3|*.db|*.db-wal|*.db-shm)
+      block "$f" "database — may hold real conversations" ;;
+    .npmrc|*/.npmrc)
+      block "$f" "may hold a registry auth token" ;;
+    .DS_Store|*/.DS_Store)
+      block "$f" "macOS metadata, never useful in git" ;;
+    *.log|logs/*|*/logs/*)
+      block "$f" "log file — may hold prompt or completion text" ;;
+    *.chatlog)
+      block "$f" "conversation data is the user's, not ours" ;;
+    # Root-level only. Nested paths like src/renderer/features/chats/ are source
+    # directories, not data directories, and must not be blocked.
+    transcripts/*|conversations/*|chats/*|exports/*|userData/*|user-data/*)
+      block "$f" "conversation data is the user's, not ours" ;;
+  esac
+done <<EOF
+$staged
+EOF
+
+# ── 2. Oversized blobs ──────────────────────────────────────────────────────
+# Git never forgets a large file. Catch it before it is permanent.
+limit=10485760   # 10 MB
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  blob=$(git ls-files -s -- "$f" 2>/dev/null | awk '{print $2}')
+  [ -z "$blob" ] && continue
+  size=$(git cat-file -s "$blob" 2>/dev/null) || continue
+  if [ "$size" -gt "$limit" ]; then
+    block "$f" "$((size / 1048576)) MB exceeds the 10 MB limit"
+  fi
+done <<EOF
+$staged
+EOF
+
+# ── 3. Secret-shaped strings in added lines ─────────────────────────────────
+# Scans only added lines. Excludes this hook (its own patterns would match)
+# and lockfiles (long hashes, all false positives).
+added=$(git diff --cached -U0 --diff-filter=ACM -- \
+          ':(exclude).githooks/*' \
+          ':(exclude)*lock.json' \
+          ':(exclude)*.lock' \
+        | grep '^+' | grep -v '^+++')
+
+if [ -n "$added" ]; then
+  if printf '%s\n' "$added" | grep -qE 'sk-ant-[A-Za-z0-9_-]{16,}'; then
+    block "staged content" "looks like an Anthropic API key"
+  fi
+  if printf '%s\n' "$added" | grep -qE '\bsk-[A-Za-z0-9]{20,}'; then
+    block "staged content" "looks like an OpenAI API key"
+  fi
+  if printf '%s\n' "$added" | grep -qE '\bAKIA[0-9A-Z]{16}\b'; then
+    block "staged content" "looks like an AWS access key id"
+  fi
+  if printf '%s\n' "$added" | grep -qE '\bgh[pousr]_[A-Za-z0-9]{30,}'; then
+    block "staged content" "looks like a GitHub token"
+  fi
+  if printf '%s\n' "$added" | grep -qE '\bxox[baprs]-[A-Za-z0-9-]{10,}'; then
+    block "staged content" "looks like a Slack token"
+  fi
+  if printf '%s\n' "$added" | grep -qE 'BEGIN [A-Z ]*PRIVATE KEY'; then
+    block "staged content" "contains a private key block"
+  fi
+  if printf '%s\n' "$added" | grep -qiE '(api[_-]?key|secret|passwd|password|access[_-]?token|auth[_-]?token)[a-z_]*["'"'"' ]*[:=]["'"'"' ]*[A-Za-z0-9/+_-]{16,}'; then
+    block "staged content" "a credential-looking value is assigned to a key-named variable"
+  fi
+
+  # Absolute home paths leak the machine's username and break on other machines.
+  if printf '%s\n' "$added" | grep -qE '/Users/[a-zA-Z][a-zA-Z0-9._-]+/'; then
+    caution "staged content" "hardcoded /Users/<name>/ path — use app.getPath() instead"
+  fi
+fi
+
+# ── Result ──────────────────────────────────────────────────────────────────
+if [ "$fail" -ne 0 ]; then
+  echo ""
+  echo "  Commit aborted. Nothing was committed; your staged files are untouched."
+  echo "  Unstage with:  git restore --staged <file>"
+  echo "  If this is a false positive:  git commit --no-verify"
+  echo ""
+  echo "  If a real key reached this point, treat it as burned and rotate it."
+  echo ""
+  exit 1
+fi
+
+if [ "$warn" -ne 0 ]; then
+  echo ""
+  echo "  Warnings above did not block the commit."
+  echo ""
+fi
+
+exit 0

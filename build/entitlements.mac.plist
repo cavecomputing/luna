@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Start minimal. Add an entitlement only when a shipped feature needs it, and
+  say why in a comment. Do not add allow-unsigned-executable-memory by reflex.
+-->
+<plist version="1.0">
+  <dict>
+    <!-- Required: Electron's V8 uses JIT. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+  </dict>
+</plist>

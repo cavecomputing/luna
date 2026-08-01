@@ -1,0 +1,38 @@
+#!/bin/sh
+# Luna pre-push hook — runs the slow checks once per push.
+#
+# Fast checks live in pre-commit. Anything that takes seconds lives here,
+# so committing stays instant and you never start bypassing hooks.
+#
+# Bypass once: git push --no-verify
+
+if [ ! -f package.json ]; then
+  echo "pre-push: no package.json yet — skipping checks"
+  exit 0
+fi
+
+has_script() {
+  node -e "const s=require('./package.json').scripts||{};process.exit(s['$1']?0:1)" 2>/dev/null
+}
+
+run() {
+  if ! has_script "$1"; then
+    echo "pre-push: no '$1' script — skipping"
+    return 0
+  fi
+  echo "pre-push: npm run $1"
+  if ! npm run --silent "$1"; then
+    echo ""
+    echo "  Push aborted: '$1' failed."
+    echo "  Fix the cause. Do not loosen the rule to get past this."
+    echo "  Bypass once with: git push --no-verify"
+    echo ""
+    exit 1
+  fi
+}
+
+run typecheck
+run lint
+run test
+
+exit 0

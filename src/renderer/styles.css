@@ -1,0 +1,97 @@
+:root {
+  --accent: #2563eb;
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --text: #14161a;
+  --muted: #6b7280;
+  --line: #e6e8ec;
+  --titlebar: 38px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181d;
+    --surface: #1c1f26;
+    --text: #f2f4f7;
+    --muted: #9aa3af;
+    --line: #2a2f38;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Content is drawn behind the title bar, so the top strip must be draggable. */
+.drag {
+  height: var(--titlebar);
+  flex: none;
+  -webkit-app-region: drag;
+}
+
+.shell {
+  display: flex;
+  height: 100%;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 260px;
+  flex: none;
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.label {
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.center {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+}
+
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}

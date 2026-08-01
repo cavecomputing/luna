@@ -1,0 +1,148 @@
+# ─── Secrets. Nothing here may ever be committed. ───────────────────────────
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+*.p8
+*.p12
+*.cer
+*.crt
+*.certSigningRequest
+*.provisionprofile
+*.mobileprovision
+*.keystore
+*.jks
+api-keys.json
+credentials.json
+.netrc
+.npmrc
+!.npmrc.example
+
+# ─── User data. Personal, never ours to commit. ─────────────────────────────
+userData/
+user-data/
+conversations/
+chats/
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+transcripts/
+exports/
+*.chatlog
+local-fixtures/
+
+# ─── Dependencies ──────────────────────────────────────────────────────────
+node_modules/
+jspm_packages/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/releases
+!.yarn/plugins
+!.yarn/versions
+
+# ─── Build output ──────────────────────────────────────────────────────────
+# NOTE: build/ is deliberately NOT ignored. It is electron-builder's
+# buildResources dir and holds icon.icns + entitlements, which must be committed.
+out/
+dist/
+release/
+.vite/
+*.tsbuildinfo
+.tsbuildinfo
+
+# ─── Packaged app artifacts ────────────────────────────────────────────────
+*.app
+*.dmg
+*.pkg
+*.zip
+*.tar.gz
+*.tgz
+*.blockmap
+mac/
+mac-arm64/
+mac-universal/
+latest-mac.yml
+builder-effective-config.yaml
+builder-debug.yml
+
+# ─── Tests and coverage ────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+__snapshots__/*.snap.new
+*.lcov
+
+# ─── Caches ────────────────────────────────────────────────────────────────
+.cache/
+.parcel-cache/
+.turbo/
+.eslintcache
+.stylelintcache
+.npm/
+.node_repl_history
+.electron-gyp/
+.electron/
+
+# ─── Logs ──────────────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ─── Local model / weight files (large, never in git) ──────────────────────
+models/
+*.gguf
+*.safetensors
+*.onnx
+*.bin
+
+# ─── macOS ─────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.DocumentRevisions-V100
+.TemporaryItems
+.Trashes
+.fseventsd
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+Icon?
+
+# ─── Editors and tooling ───────────────────────────────────────────────────
+.idea/
+.zed/
+.cursor/
+.fleet/
+*.swp
+*.swo
+*~
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+
+# ─── Claude Code ───────────────────────────────────────────────────────────
+CLAUDE.local.md
+.claude/settings.local.json
+
+# ─── Scratch ───────────────────────────────────────────────────────────────
+tmp/
+temp/
+.tmp/
+scratch/
+*.local
