@@ -10,6 +10,15 @@ files:
   - out/**
   - package.json
 
+# The tray icon is read from disk at runtime, so it must ship outside the asar.
+# Paths here mirror src/main/paths.ts — change one, change the other.
+extraResources:
+  - from: assets/LunaMenuBarIcon
+    to: assets/LunaMenuBarIcon
+    filter:
+      - LunaTemplate.png
+      - LunaTemplate@2x.png
+
 asar: true
 
 mac:
