@@ -182,8 +182,9 @@ Short and plain. If a name needs more than three words, the function is doing to
   content drawn behind the title bar.
 - Build a real app menu with standard roles (`about`, `services`, `hide`, `quit`, edit roles).
   Missing roles break ⌘C/⌘V and feel broken.
-- App stays alive on last window close; reopen from the dock (`activate`) recreates a window.
-  Only `window-all-closed` → quit on non-darwin.
+- App stays alive on last window close; the dock icon stays put and `activate` recreates a
+  window. Only `window-all-closed` → quit on non-darwin. Luna is an ordinary windowed app,
+  not a menu bar app — don't hide the dock icon or add a tray.
 - Follow the system theme via `nativeTheme`; support light and dark from day one.
 - System font stack: `-apple-system, BlinkMacSystemFont, 'SF Pro Text'`. 8px spacing grid.
 - Persist and restore window bounds across launches.

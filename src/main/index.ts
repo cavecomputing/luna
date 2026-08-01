@@ -2,10 +2,9 @@ import { BrowserWindow, app, nativeTheme } from 'electron'
 import { join } from 'node:path'
 import { registerAll } from './ipc/index.js'
 import { emit } from './ipc/bus.js'
+import * as dock from './dock.js'
 import * as menu from './menu.js'
-import { asset } from './paths.js'
 import { registerScheme, serveRenderer } from './protocol.js'
-import * as tray from './tray.js'
 import * as window from './window.js'
 
 // Must happen before 'ready'.
@@ -14,13 +13,8 @@ registerScheme()
 app.whenReady().then(
   () => {
     serveRenderer(join(import.meta.dirname, '../renderer'))
-
-    // Dev runs from the Electron binary, so the dock shows Electron's icon.
-    // A packaged build takes it from the bundle and needs no override.
-    if (!app.isPackaged) app.dock?.setIcon(asset('LunaAppIcon', 'icon.png'))
-
+    dock.setIcon()
     menu.build()
-    tray.show()
     registerAll()
     window.create()
 
@@ -41,7 +35,8 @@ app.whenReady().then(
   },
 )
 
-// macOS keeps the app running with no windows. Every other platform quits.
+// macOS keeps the app running with no windows; the dock icon stays put and
+// reopens one. Every other platform treats the app as its window and quits.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
