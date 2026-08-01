@@ -17,9 +17,11 @@
   padding-right: var(--s-6);
 }
 
+/* Wraps the shared Avatar so the row owns its placement and the component owns
+   its appearance. The nudge lines her eyes up with the bubble's first line. */
 .avatar {
   flex: none;
-  border-radius: var(--r-pill);
+  line-height: 0;
   margin-top: 2px;
 }
 

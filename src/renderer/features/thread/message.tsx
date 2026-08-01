@@ -1,7 +1,7 @@
 import type { Message as Msg } from '../../../shared/types.js'
 import { clock } from '../../lib/time.js'
 import { toBlocks } from './blocks.js'
-import logo from '../../../../assets/concepts/appLogo.png'
+import { Avatar } from '../../ui/avatar.js'
 import styles from './message.module.css'
 import { cx } from '../../lib/cx.js'
 
@@ -14,7 +14,11 @@ export function Message({ message }: Props): React.JSX.Element {
 
   return (
     <article className={cx(styles.row, mine ? styles.mine : styles.theirs)}>
-      {!mine && <img className={styles.avatar} src={logo} alt="Luna" width={28} height={28} />}
+      {!mine && (
+        <div className={styles.avatar}>
+          <Avatar size={28} />
+        </div>
+      )}
 
       <div className={styles.bubble}>
         <div className={styles.body}>

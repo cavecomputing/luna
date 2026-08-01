@@ -8,7 +8,7 @@
 }
 
 .mark {
-  border-radius: var(--r-lg);
+  line-height: 0;
   margin-bottom: var(--s-2);
 }
 

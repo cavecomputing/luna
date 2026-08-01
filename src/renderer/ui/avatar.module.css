@@ -1,0 +1,6 @@
+.avatar {
+  display: block;
+  /* The art is already round. This keeps the edge clean if it is ever swapped
+     for a square crop. */
+  border-radius: var(--r-pill);
+}
