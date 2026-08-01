@@ -138,6 +138,28 @@ Short and plain. If a name needs more than three words, the function is doing to
 - IPC channels are `domain:verb` — `files:pick`, `prefs:get`, `window:minimize`.
 - Don't abbreviate past recognition (`cfg` fine, `pfmc` not).
 
+## Renderer conventions
+
+- **CSS Modules, one per component**, colocated as `thing.module.css`. No global stylesheet
+  beyond the two in `styles/`: `tokens.css` (every colour, radius, spacing step, both themes)
+  and `base.css` (reset). A component that needs a colour references a token — never a hex.
+- Compose class names with `cx()` from `lib/cx.ts`. Template literals embed the string
+  `"undefined"` when a CSS module key misses, because `noUncheckedIndexedAccess` types those
+  lookups as `string | undefined`.
+- **One file per icon** in `ui/icons/`. They take `size` and draw in `currentColor` so they
+  re-tint for dark mode. `ui/chat-glyph.tsx` holds the per-conversation set and is the single
+  swap point if those become raster art.
+- `ui/` is dumb and reusable and holds no feature knowledge. `features/<name>/` owns its own
+  components, hooks and state. State shared by two features is lifted to `app.tsx`, not put
+  in a store.
+- Dark tokens live in one `@media (prefers-color-scheme: dark)` block in `tokens.css`. Main
+  pins the app to light (see macOS below), so that block is dormant until the theme preference
+  lands — keep it correct anyway. Don't branch on theme in JS.
+- Never call `Date.now()` during render — it is impure and freezes relative timestamps at the
+  last re-render. Use `useNow()`.
+- Any header that can sit at the window's left edge must clear the traffic lights (see
+  `.inset` in `app.module.css`), or its first control ends up underneath them.
+
 ## Code shape
 
 - A function does one thing and fits on a screen. If you're scrolling it, split it.
@@ -185,7 +207,10 @@ Short and plain. If a name needs more than three words, the function is doing to
 - App stays alive on last window close; the dock icon stays put and `activate` recreates a
   window. Only `window-all-closed` → quit on non-darwin. Luna is an ordinary windowed app,
   not a menu bar app — don't hide the dock icon or add a tray.
-- Follow the system theme via `nativeTheme`; support light and dark from day one.
+- **Light is the default.** Main sets `nativeTheme.themeSource = 'light'` at startup, so Luna
+  opens light whatever the system is set to. The dark tokens ship and stay maintained; this
+  becomes a light / dark / system preference once Settings exists. Don't change it back to
+  following the system without that setting.
 - System font stack: `-apple-system, BlinkMacSystemFont, 'SF Pro Text'`. 8px spacing grid.
 - Persist and restore window bounds across launches.
 - Universal binary (arm64 + x64), hardened runtime, notarized. Entitlements stay minimal —

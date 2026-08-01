@@ -14,6 +14,12 @@ app.whenReady().then(
   () => {
     serveRenderer(join(import.meta.dirname, '../renderer'))
     dock.setIcon()
+
+    // Luna opens light regardless of the system setting. The dark tokens still
+    // ship; this becomes a three-way preference (light / dark / system) once
+    // Settings exists.
+    nativeTheme.themeSource = 'light'
+
     menu.build()
     registerAll()
     window.create()

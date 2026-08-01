@@ -1,0 +1,42 @@
+.bar {
+  flex: none;
+  padding: var(--s-3) var(--s-6) var(--s-5);
+}
+
+.box {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--s-2);
+  max-width: 860px;
+  margin: 0 auto;
+  padding: var(--s-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  transition: border-color var(--fast) var(--ease);
+}
+
+.box:focus-within {
+  border-color: var(--accent);
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  max-height: 160px;
+  padding: var(--s-2) var(--s-1);
+  border: 0;
+  background: none;
+  resize: none;
+  font-size: var(--t-base);
+  line-height: 1.5;
+}
+
+.input:focus {
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--text-faint);
+}

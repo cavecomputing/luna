@@ -1,0 +1,42 @@
+.shell {
+  display: flex;
+  height: 100%;
+  background: var(--bg);
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  flex: none;
+  padding: var(--s-3) var(--s-5);
+  min-height: var(--titlebar);
+  -webkit-app-region: drag;
+}
+
+/**
+ * With the sidebar hidden this header owns the window's left edge, where the
+ * traffic lights sit. Reserve their width or the toggle hides underneath them.
+ */
+.inset {
+  padding-left: 84px;
+}
+
+.noDrag {
+  -webkit-app-region: no-drag;
+}
+
+/* The sidebar toggle points the way it will move the panel. */
+.flip {
+  display: inline-flex;
+  transform: rotate(180deg);
+}

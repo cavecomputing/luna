@@ -1,0 +1,26 @@
+.greeting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-1);
+  padding: var(--s-7) var(--s-4) var(--s-5);
+  text-align: center;
+}
+
+.mark {
+  border-radius: var(--r-lg);
+  margin-bottom: var(--s-2);
+}
+
+.hello {
+  margin: 0;
+  font-size: var(--t-xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.sub {
+  margin: 0;
+  font-size: var(--t-lg);
+  color: var(--text-muted);
+}

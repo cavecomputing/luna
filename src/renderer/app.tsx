@@ -1,31 +1,75 @@
-import { useAppInfo } from './lib/use-app-info.js'
+import { useState } from 'react'
+import { Sidebar } from './features/chats/sidebar.js'
+import { useChats } from './features/chats/use-chats.js'
+import { Composer } from './features/composer/composer.js'
+import { ModeSwitch } from './features/mode/mode-switch.js'
+import { Thread } from './features/thread/thread.js'
+import { IconButton } from './ui/icon-button.js'
+import { Collapse } from './ui/icons/collapse.js'
+import { demoChats, demoSuggestions } from './data/demo.js'
+import styles from './app.module.css'
+import { useNow } from './lib/use-now.js'
+import { cx } from './lib/cx.js'
 
 /**
- * Skeleton shell. The two-pane chat layout replaces this — see the surfaces
- * list in CLAUDE.md. What matters here is that the IPC round trip works.
+ * Layout only. Every pane owns its own state; the shell just decides where
+ * things sit and passes the conversation store down.
  */
 export function App(): React.JSX.Element {
-  const info = useAppInfo()
+  const chats = useChats(demoChats)
+  const [open, setOpen] = useState(true)
+  const [seed, setSeed] = useState<string>()
+
+  // One ticking clock for the whole shell, so every row agrees.
+  const now = useNow()
 
   return (
-    <div className="shell">
-      <aside className="sidebar">
-        <div className="drag" />
-        <p className="label">Chats</p>
-      </aside>
+    <div className={styles.shell}>
+      {open && (
+        <Sidebar
+          chats={chats}
+          now={now}
+          onSettings={() => {
+            // Settings is a surface of its own — not built yet.
+          }}
+        />
+      )}
 
-      <main className="pane">
-        <div className="drag" />
-        <div className="center">
-          <h1>Luna</h1>
-          {info === undefined && <p className="muted">Loading…</p>}
-          {info?.ok === false && <p className="muted">IPC failed: {info.code}</p>}
-          {info?.ok === true && (
-            <p className="muted">
-              v{info.value.version} · Electron {info.value.electron} · {info.value.platform}
-            </p>
-          )}
-        </div>
+      <main className={styles.pane}>
+        <header className={cx(styles.top, !open && styles.inset)}>
+          <div className={styles.noDrag}>
+            <IconButton
+              label={open ? 'Hide sidebar' : 'Show sidebar'}
+              onClick={() => {
+                setOpen((v) => !v)
+              }}
+            >
+              <span className={cx(!open && styles.flip)}>
+                <Collapse />
+              </span>
+            </IconButton>
+          </div>
+
+          <div className={styles.noDrag}>
+            <ModeSwitch value={chats.open?.mode ?? 'fast'} onChange={chats.setMode} />
+          </div>
+        </header>
+
+        <Thread
+          chat={chats.open}
+          suggestions={demoSuggestions}
+          onPickSuggestion={(label) => {
+            setSeed(label)
+          }}
+        />
+
+        <Composer
+          draft={seed}
+          onSend={(text) => {
+            chats.send(text)
+            setSeed(undefined)
+          }}
+        />
       </main>
     </div>
   )

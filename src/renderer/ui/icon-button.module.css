@@ -1,0 +1,49 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: var(--r-md);
+  color: var(--text-muted);
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    opacity var(--fast) var(--ease);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Sizes */
+.sm {
+  width: 24px;
+  height: 24px;
+}
+
+.md {
+  width: 30px;
+  height: 30px;
+}
+
+.lg {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-pill);
+}
+
+/* Variants */
+.ghost:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.accent {
+  background: var(--accent);
+  color: var(--accent-on);
+}
+
+.accent:hover:not(:disabled) {
+  background: var(--accent-hover);
+}

@@ -1,0 +1,94 @@
+/**
+ * Every colour, radius and spacing step in Luna. Components reference these
+ * and never hardcode a hex value, so dark mode is one block, not a hunt.
+ */
+
+:root {
+  /* Brand */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: #eaf1fe;
+  --accent-on: #ffffff;
+
+  /* Surfaces */
+  --bg: #eef0f4;
+  --surface: #ffffff;
+  --surface-sunken: #f5f6f8;
+  --surface-hover: #f0f2f6;
+
+  /* Text */
+  --text: #14161a;
+  --text-muted: #6b7280;
+  --text-faint: #9aa3af;
+
+  /* Lines and depth */
+  --line: #e6e8ec;
+  --line-soft: #f0f1f4;
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 6%), 0 8px 24px rgb(16 24 40 / 6%);
+  --shadow-pop: 0 2px 6px rgb(16 24 40 / 8%), 0 12px 32px rgb(16 24 40 / 10%);
+
+  /* Message bubbles */
+  --bubble-user: #e8f0fe;
+  --bubble-user-text: #14161a;
+  --bubble-bot: #ffffff;
+
+  /* Spacing — 8px grid, with 4px half-steps */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+
+  /* Radii */
+  --r-sm: 8px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 18px;
+  --r-pill: 999px;
+
+  /* Type */
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --t-xs: 11px;
+  --t-sm: 12px;
+  --t-md: 13px;
+  --t-base: 14px;
+  --t-lg: 16px;
+  --t-xl: 22px;
+
+  /* Chrome */
+  --titlebar: 52px;
+  --sidebar-w: 264px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0, 0.2, 1);
+  --fast: 120ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent: #4b83f0;
+    --accent-hover: #6b9bf5;
+    --accent-soft: #1b2740;
+    --accent-on: #ffffff;
+
+    --bg: #101216;
+    --surface: #191c22;
+    --surface-sunken: #14171c;
+    --surface-hover: #21252d;
+
+    --text: #f2f4f7;
+    --text-muted: #9aa3af;
+    --text-faint: #6b7280;
+
+    --line: #262b34;
+    --line-soft: #1e222a;
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 30%), 0 8px 24px rgb(0 0 0 / 24%);
+    --shadow-pop: 0 2px 6px rgb(0 0 0 / 36%), 0 12px 32px rgb(0 0 0 / 32%);
+
+    --bubble-user: #23304a;
+    --bubble-user-text: #eaf1fe;
+    --bubble-bot: #191c22;
+  }
+}

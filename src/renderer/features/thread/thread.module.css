@@ -1,0 +1,15 @@
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-4);
+  max-width: 860px;
+  margin: 0 auto;
+  padding: var(--s-4) var(--s-6) var(--s-5);
+}
