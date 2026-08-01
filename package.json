@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "description": "A macOS desktop AI chat assistant",
+  "license": "Apache-2.0",
+  "author": "Matt Haney",
   "type": "module",
   "main": "./out/main/index.js",
   "engines": {
