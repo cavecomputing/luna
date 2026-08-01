@@ -5,12 +5,59 @@ import { APP_ORIGIN } from './protocol.js'
 const MIN_WIDTH = 720
 const MIN_HEIGHT = 480
 
+const SETTINGS_WIDTH = 800
+const SETTINGS_HEIGHT = 580
+
+/** Only ever one Settings window; a second ⌘, focuses the existing one. */
+let settings: BrowserWindow | undefined
+
 export function create(): BrowserWindow {
-  const win = new BrowserWindow({
+  const win = build({
     width: 1100,
     height: 720,
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
+  })
+
+  load(win, 'index.html')
+  return win
+}
+
+export function openSettings(): BrowserWindow {
+  if (settings !== undefined && !settings.isDestroyed()) {
+    settings.show()
+    settings.focus()
+    return settings
+  }
+
+  const win = build({
+    width: SETTINGS_WIDTH,
+    height: SETTINGS_HEIGHT,
+    minWidth: 640,
+    minHeight: 460,
+    title: 'Settings',
+  })
+
+  win.on('closed', () => {
+    settings = undefined
+  })
+
+  load(win, 'settings.html')
+  settings = win
+  return win
+}
+
+type Shape = {
+  width: number
+  height: number
+  minWidth: number
+  minHeight: number
+  title?: string
+}
+
+function build(shape: Shape): BrowserWindow {
+  const win = new BrowserWindow({
+    ...shape,
     show: false,
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 18 },
@@ -30,7 +77,6 @@ export function create(): BrowserWindow {
   })
 
   lockNavigation(win)
-  load(win)
   return win
 }
 
@@ -50,11 +96,7 @@ function devUrl(): string | undefined {
   return process.env.ELECTRON_RENDERER_URL
 }
 
-function load(win: BrowserWindow): void {
+function load(win: BrowserWindow, page: string): void {
   const dev = devUrl()
-  if (dev !== undefined) {
-    void win.loadURL(dev)
-    return
-  }
-  void win.loadURL(`${APP_ORIGIN}/index.html`)
+  void win.loadURL(dev === undefined ? `${APP_ORIGIN}/${page}` : `${dev}/${page}`)
 }

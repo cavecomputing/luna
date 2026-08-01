@@ -5,6 +5,8 @@
  * missing handler in src/main/ipc and the missing wrapper in src/preload.
  */
 
+import type { Prefs } from './prefs.js'
+
 export type AppInfo = {
   name: string
   version: string
@@ -15,6 +17,9 @@ export type AppInfo = {
 /** Two-way. Renderer asks, main answers. ipcRenderer.invoke / ipcMain.handle. */
 export type Invocations = {
   'app:info': { req: undefined; res: AppInfo }
+  'prefs:get': { req: undefined; res: Prefs }
+  'prefs:set': { req: Prefs; res: Prefs }
+  'settings:open': { req: undefined; res: undefined }
 }
 
 /** One-way, main -> renderer. webContents.send / ipcRenderer.on. */

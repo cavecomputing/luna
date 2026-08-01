@@ -29,7 +29,7 @@ export function App(): React.JSX.Element {
           chats={chats}
           now={now}
           onSettings={() => {
-            // Settings is a surface of its own — not built yet.
+            void window.luna.settings.open()
           }}
         />
       )}

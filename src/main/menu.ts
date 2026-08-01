@@ -1,4 +1,5 @@
 import { Menu, app } from 'electron'
+import { openSettings } from './window.js'
 
 /**
  * macOS needs a real menu with standard roles. Without the edit roles,
@@ -10,6 +11,14 @@ export function build(): void {
       label: app.getName(),
       submenu: [
         { role: 'about' },
+        { type: 'separator' },
+        {
+          label: 'Settings\u2026',
+          accelerator: 'CmdOrCtrl+,',
+          click: () => {
+            openSettings()
+          },
+        },
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },

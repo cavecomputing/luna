@@ -1,0 +1,80 @@
+.panel {
+  max-width: 560px;
+}
+
+.head {
+  padding-bottom: var(--s-4);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--t-xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.desc {
+  margin: var(--s-1) 0 0;
+  font-size: var(--t-md);
+  color: var(--text-muted);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.row,
+.rowBlock {
+  display: flex;
+  gap: var(--s-4);
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.row {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rowBlock {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--s-2);
+}
+
+.labels {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.label {
+  font-size: var(--t-base);
+  font-weight: 500;
+}
+
+.hint {
+  font-size: var(--t-sm);
+  color: var(--text-muted);
+}
+
+.control {
+  flex: none;
+}
+
+.rowBlock .control {
+  flex: 1;
+}
+
+.notYet {
+  margin: 0;
+  padding: var(--s-5);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-lg);
+  font-size: var(--t-md);
+  color: var(--text-muted);
+  text-align: center;
+}

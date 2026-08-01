@@ -4,6 +4,7 @@ import { registerAll } from './ipc/index.js'
 import { emit } from './ipc/bus.js'
 import * as dock from './dock.js'
 import * as menu from './menu.js'
+import * as prefs from './prefs.js'
 import { registerScheme, serveRenderer } from './protocol.js'
 import * as window from './window.js'
 
@@ -11,14 +12,13 @@ import * as window from './window.js'
 registerScheme()
 
 app.whenReady().then(
-  () => {
+  async () => {
     serveRenderer(join(import.meta.dirname, '../renderer'))
     dock.setIcon()
 
-    // Luna opens light regardless of the system setting. The dark tokens still
-    // ship; this becomes a three-way preference (light / dark / system) once
-    // Settings exists.
-    nativeTheme.themeSource = 'light'
+    // Theme comes from prefs, which default to light. Applied before the first
+    // window so there is no flash of the wrong appearance.
+    prefs.applyTheme(await prefs.load())
 
     menu.build()
     registerAll()

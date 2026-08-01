@@ -24,7 +24,12 @@ export default defineConfig({
     plugins: [react()],
     build: {
       rollupOptions: {
-        input: 'src/renderer/index.html',
+        // One entry per window. Settings is its own bundle rather than a route,
+        // so neither window ships the other's code.
+        input: {
+          index: 'src/renderer/index.html',
+          settings: 'src/renderer/settings.html',
+        },
       },
     },
   },
