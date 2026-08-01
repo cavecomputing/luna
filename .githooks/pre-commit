@@ -89,7 +89,13 @@ if [ -n "$added" ]; then
   if printf '%s\n' "$added" | grep -qE 'BEGIN [A-Z ]*PRIVATE KEY'; then
     block "staged content" "contains a private key block"
   fi
-  if printf '%s\n' "$added" | grep -qiE '(api[_-]?key|secret|passwd|password|access[_-]?token|auth[_-]?token)[a-z_]*["'"'"' ]*[:=]["'"'"' ]*[A-Za-z0-9/+_-]{16,}'; then
+  # CLAUDE.md requires test fixtures use an obvious `test-` prefix, and a test
+  # that asserts a key is REJECTED has to name one. Exempt those from the fuzzy
+  # heuristic only — every provider-format check above still runs on all lines,
+  # so a real key remains caught no matter what it is assigned to.
+  fuzzy=$(printf '%s\n' "$added" | grep -viE '[:=][[:space:]"'"'"']*test-')
+
+  if printf '%s\n' "$fuzzy" | grep -qiE '(api[_-]?key|secret|passwd|password|access[_-]?token|auth[_-]?token)[a-z_]*["'"'"' ]*[:=]["'"'"' ]*[A-Za-z0-9/+_-]{16,}'; then
     block "staged content" "a credential-looking value is assigned to a key-named variable"
   fi
 
