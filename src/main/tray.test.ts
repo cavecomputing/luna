@@ -1,18 +1,29 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { trayMenu } from './tray.js'
 
+const actions = () => ({ onShow: vi.fn(), onQuit: vi.fn() })
+
+const labels = (items: ReturnType<typeof trayMenu>) =>
+  items.filter((i) => i.type !== 'separator').map((i) => i.label)
+
 describe('trayMenu', () => {
-  it('offers exactly one item', () => {
-    expect(trayMenu()).toHaveLength(1)
+  it('offers Show Luna and Quit Luna', () => {
+    expect(labels(trayMenu(actions()))).toEqual(['Show Luna', 'Quit Luna'])
   })
 
-  it('labels that item WIP', () => {
-    expect(trayMenu()[0]?.label).toBe('WIP')
+  it('wires Show Luna to the open action', () => {
+    const a = actions()
+    const item = trayMenu(a).find((i) => i.label === 'Show Luna')
+    expect(item?.click).toBe(a.onShow)
   })
 
-  it('leaves the item disabled with no click handler', () => {
-    const item = trayMenu()[0]
-    expect(item?.enabled).toBe(false)
-    expect(item?.click).toBeUndefined()
+  it('wires Quit Luna to the quit action', () => {
+    const a = actions()
+    const item = trayMenu(a).find((i) => i.label === 'Quit Luna')
+    expect(item?.click).toBe(a.onQuit)
+  })
+
+  it('separates the two so Quit is not a mis-click away', () => {
+    expect(trayMenu(actions())[1]?.type).toBe('separator')
   })
 })

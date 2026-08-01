@@ -34,6 +34,18 @@ export function create(): BrowserWindow {
   return win
 }
 
+/** Focus the existing window, or make one if the last was closed. */
+export function show(): void {
+  const [win] = BrowserWindow.getAllWindows()
+  if (win === undefined) {
+    create()
+    return
+  }
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+}
+
 /** Deny by default. Real links open in the user's browser, not in the app. */
 function lockNavigation(win: BrowserWindow): void {
   win.webContents.setWindowOpenHandler(({ url }) => {
