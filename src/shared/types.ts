@@ -36,10 +36,3 @@ export type Conversation = {
   updatedAt: number
   messages: Message[]
 }
-
-/** A follow-up prompt offered under the last assistant message. */
-export type Suggestion = {
-  id: string
-  label: string
-  icon: ChatIcon
-}

@@ -9,21 +9,11 @@ const MAX_ROWS_PX = 160
 
 type Props = {
   onSend: (text: string) => void
-  /** Seeded from a suggestion chip. Explicitly undefined when cleared. */
-  draft?: string | undefined
 }
 
-export function Composer({ onSend, draft }: Props): React.JSX.Element {
+export function Composer({ onSend }: Props): React.JSX.Element {
   const composer = useComposer(onSend)
   const box = useRef<HTMLTextAreaElement>(null)
-  const { setDraft } = composer
-
-  useEffect(() => {
-    if (draft !== undefined && draft !== '') {
-      setDraft(draft)
-      box.current?.focus()
-    }
-  }, [draft, setDraft])
 
   // Grow with the text, then scroll rather than pushing the thread off screen.
   useEffect(() => {

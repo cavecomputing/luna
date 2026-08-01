@@ -6,7 +6,7 @@ import { ModeSwitch } from './features/mode/mode-switch.js'
 import { Thread } from './features/thread/thread.js'
 import { IconButton } from './ui/icon-button.js'
 import { Collapse } from './ui/icons/collapse.js'
-import { demoChats, demoSuggestions } from './data/demo.js'
+import { demoChats } from './data/demo.js'
 import styles from './app.module.css'
 import { useNow } from './lib/use-now.js'
 import { cx } from './lib/cx.js'
@@ -18,7 +18,6 @@ import { cx } from './lib/cx.js'
 export function App(): React.JSX.Element {
   const chats = useChats(demoChats)
   const [open, setOpen] = useState(true)
-  const [seed, setSeed] = useState<string>()
 
   // One ticking clock for the whole shell, so every row agrees.
   const now = useNow()
@@ -55,21 +54,9 @@ export function App(): React.JSX.Element {
           </div>
         </header>
 
-        <Thread
-          chat={chats.open}
-          suggestions={demoSuggestions}
-          onPickSuggestion={(label) => {
-            setSeed(label)
-          }}
-        />
+        <Thread chat={chats.open} />
 
-        <Composer
-          draft={seed}
-          onSend={(text) => {
-            chats.send(text)
-            setSeed(undefined)
-          }}
-        />
+        <Composer onSend={chats.send} />
       </main>
     </div>
   )

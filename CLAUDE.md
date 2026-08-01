@@ -19,8 +19,11 @@ Surfaces, in build order:
    button, collapsible sidebar.
 3. **Composer** — multiline input, attachments, send. Enter sends, Shift+Enter newlines.
 4. **Mode switch** — `Fast` and `Expert`, a per-conversation model choice.
-5. **Suggestion chips** — follow-up prompts rendered under the last assistant message.
-6. **Settings** — API credentials, model defaults, appearance.
+5. **Settings** — a separate window (⌘,), not an in-app pane. Providers, the two model
+   slots, sampling, appearance, privacy.
+
+Deliberately not built: suggestion chips under assistant messages. Removed once the
+model config took shape — don't reintroduce without asking.
 
 Identity: blue `#2563EB` accent, white surfaces, rounded cards, generous whitespace, a fox
 mascot. Light and dark both ship. Ask before adding a surface that isn't on that list.

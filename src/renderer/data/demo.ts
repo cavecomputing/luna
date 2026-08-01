@@ -1,4 +1,4 @@
-import type { Conversation, Suggestion } from '../../shared/types.js'
+import type { Conversation } from '../../shared/types.js'
 
 /**
  * Placeholder content so the layout can be seen before any model is wired up.
@@ -92,10 +92,4 @@ export const demoChats: Conversation[] = [
     updatedAt: now - 9 * DAY,
     messages: [],
   },
-]
-
-export const demoSuggestions: Suggestion[] = [
-  { id: 's1', label: 'Popular coastal getaways nearby', icon: 'wave' },
-  { id: 's2', label: 'Things to do on a weekend trip', icon: 'camera' },
-  { id: 's3', label: 'Packing checklist for the coast', icon: 'gift' },
 ]
