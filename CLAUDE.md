@@ -14,7 +14,8 @@ the left, the active thread on the right. Design direction lives in
 Surfaces, in build order:
 
 1. **Chat thread** — user and assistant messages, timestamps, streamed assistant output,
-   markdown rendering (lists, code blocks, links).
+   markdown rendering (lists, code blocks, links) **and HTML rendering**. Both are required,
+   not optional polish. See **Rendering model output** below.
 2. **Conversation list** — searchable, relative timestamps, per-conversation icon, new-chat
    button, collapsible sidebar.
 3. **Composer** — multiline input, attachments, send. Enter sends, Shift+Enter newlines.
@@ -27,6 +28,14 @@ model config took shape — don't reintroduce without asking.
 
 Identity: blue `#2563EB` accent, white surfaces, rounded cards, generous whitespace, a fox
 mascot. Light and dark both ship. Ask before adding a surface that isn't on that list.
+
+Settled behaviour, decided — don't relitigate these while building:
+
+- **Message actions are a right-click context menu.** Not hover-reveal buttons, not a
+  permanently visible row of icons. Use a native `Menu.popup()` from main, requested over
+  IPC, so it looks and behaves like the rest of macOS.
+- **Conversation titles come from the Fast model**, generated after the first exchange.
+  The `autoTitle` pref governs it.
 
 Because Luna handles the user's private conversations and their API credentials, the
 **Privacy and secrets** section below is not optional.
@@ -140,6 +149,52 @@ Short and plain. If a name needs more than three words, the function is doing to
 - Files kebab-case, one clear subject per file. Types PascalCase, values camelCase.
 - IPC channels are `domain:verb` — `files:pick`, `prefs:get`, `window:minimize`.
 - Don't abbreviate past recognition (`cfg` fine, `pfmc` not).
+
+## Storage — SQLite
+
+**Everything persistent lives in one SQLite database**: conversations, messages, settings,
+themes, provider configuration. Not JSON files, not `localStorage`, not a mix.
+
+Use **`node:sqlite`**, the module built into Node. Electron 43 ships Node 24.18 and the
+module is present and working (verified: SQLite 3.53.1). That means **no `better-sqlite3`**
+and no native module — nothing to rebuild per Electron version, nothing extra in the bundle,
+no new attack surface. Don't add a SQLite package.
+
+- The database file lives under `app.getPath('userData')`. Main opens it; it is never
+  touched from preload or the renderer.
+- `node:sqlite` is synchronous. That's fine for indexed reads and single-row writes, which
+  take microseconds. It is not fine for migrations, bulk import/export or a full-text scan —
+  those go to a `worker_threads` worker so the main process never blocks a window.
+- Write schema migrations as ordered, numbered steps with a `user_version` check. Never
+  mutate a schema in place at startup without a migration.
+- Turn on `PRAGMA journal_mode = WAL` and `foreign_keys = ON`.
+- Parse every row on the way out. A column is `unknown` until validated, exactly like IPC
+  and disk elsewhere. Rows are not typed by assertion.
+- **API keys never go in the database.** They stay in the Keychain via `safeStorage`. The
+  database may hold a provider's name, base URL and model — never its credential.
+
+**Known debt:** `prefs.json` predates this decision and still holds settings. It needs
+folding into the database. Until it is gone, treat it as legacy, not as a second pattern
+to copy.
+
+## Rendering model output — YOU MUST
+
+Model output is untrusted input. It arrives over the network, and the renderer that displays
+it also holds the `window.luna` bridge.
+
+- **Never** put model text through `dangerouslySetInnerHTML`, `innerHTML`, or any equivalent
+  in our own DOM. One crafted reply then reaches the preload bridge, which is the whole
+  attack we designed the process model to prevent.
+- **HTML previews render in a sandboxed `<iframe>`** — `sandbox` without `allow-same-origin`,
+  a `srcdoc` payload, and its own restrictive CSP. No preload is attached to that frame. It
+  cannot reach our origin, our bridge, or the network.
+- HTML appears **inside a code block**, with a toggle to switch between **source** and
+  **rendered**. Source is the default. The user opts in to rendering; it never happens
+  automatically.
+- Markdown needs a real parser eventually. That's a production dependency — ask first, and
+  sanitise any inline HTML it passes through.
+- Links inside rendered output never navigate the frame. Route them through
+  `shell.openExternal` after the `https:` check.
 
 ## Renderer conventions
 
@@ -346,6 +401,9 @@ personal or secret is staged.
 ## Anti-patterns — do not
 
 - Commit a key, a `.env`, a real conversation, or anything else from the privacy section.
+- Add `better-sqlite3` or any other SQLite package. `node:sqlite` is built in.
+- Render model HTML into our own DOM. Sandboxed iframe or nothing.
+- Store a credential in the database, or any setting outside it.
 - `git add -A` / `git add .` without reading what it staged.
 - Put an API key anywhere outside main + Keychain.
 - Log prompt text, completion text, or a user file path.
