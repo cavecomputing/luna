@@ -1,3 +1,4 @@
+# WIP, not useable software yet
 # Luna
 
 A macOS desktop AI chat assistant. Electron + TypeScript + React.
