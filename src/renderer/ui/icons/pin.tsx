@@ -2,9 +2,10 @@ import { svgBase, type IconProps } from './icon-props.js'
 
 export function Pin({ size = 16 }: IconProps): React.JSX.Element {
   return (
-    <svg {...svgBase} viewBox="0 0 20 20" width={size} height={size}>
-      <path d="m14.5 3.5-2 2 .75 3.25 1.5 1.5-4.5 4.5-1.5-1.5-3.25-.75-2 2" />
-      <path d="m8.75 13.25-4 4" />
+    <svg {...svgBase} viewBox="0 0 24 24" width={size} height={size} strokeWidth={2}>
+      <path d="M12 17v5" />
+      <path d="M5 17h14" />
+      <path d="M17 17v-6a4 4 0 0 0-4-4V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v2a4 4 0 0 0-4 4v6" />
     </svg>
   )
 }

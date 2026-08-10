@@ -51,7 +51,7 @@ export function Composer({
   return (
     <div className={styles.bar}>
       <div className={styles.box}>
-        <IconButton label="Attachments are coming later" disabled>
+        <IconButton label="Attachments are coming later" size="lg" disabled>
           <Paperclip />
         </IconButton>
 
