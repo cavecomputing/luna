@@ -111,7 +111,7 @@ export function App(): React.JSX.Element {
           </div>
         </header>
 
-        <Thread chat={chats.open} />
+        <Thread key={chats.openId ?? 'empty-thread'} chat={chats.open} />
 
         <Composer
           key={chats.openId ?? 'new-chat'}

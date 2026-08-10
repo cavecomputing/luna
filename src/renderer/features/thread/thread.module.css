@@ -1,7 +1,32 @@
+.thread {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
 .scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+}
+
+.latest {
+  position: absolute;
+  right: var(--s-5);
+  bottom: var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  color: var(--text-muted);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+
+.latest:hover {
+  color: var(--text);
 }
 
 .inner {
