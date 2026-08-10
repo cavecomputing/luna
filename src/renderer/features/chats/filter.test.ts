@@ -5,6 +5,7 @@ import { byRecency, filterChats } from './filter.js'
 const chat = (id: string, title: string, updatedAt: number): Conversation => ({
   id,
   title,
+  draft: '',
   icon: 'spark',
   mode: 'fast',
   pinned: false,

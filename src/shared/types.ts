@@ -67,6 +67,8 @@ export type ChatIcon =
 export type Conversation = {
   id: string
   title: string
+  /** Unsent composer text, persisted separately for each conversation. */
+  draft: string
   icon: ChatIcon
   mode: Mode
   /** Pinned conversations sort ahead of unpinned conversations. */

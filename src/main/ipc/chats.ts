@@ -11,6 +11,7 @@ type Deps = {
   get: (id: string) => Conversation | undefined
   create: (id: string, mode: Mode, now: number) => Conversation
   setMode: (id: string, mode: Mode) => Conversation | undefined
+  setDraft: (id: string, draft: string) => boolean
   setPinned: (id: string, pinned: boolean) => Conversation | undefined
   remove: (id: string) => boolean
   newId: () => string
@@ -44,6 +45,7 @@ const deps: Deps = {
   get: chats.get,
   create: (id, mode, now) => chats.create(db.handle(), id, mode, now),
   setMode: (id, mode) => chats.setMode(db.handle(), id, mode),
+  setDraft: (id, draft) => chats.setDraft(db.handle(), id, draft),
   setPinned: (id, pinned) => chats.setPinned(db.handle(), id, pinned),
   remove: (id) => chats.remove(db.handle(), id),
   newId: randomUUID,
@@ -98,6 +100,16 @@ export function updateChatMode(input: unknown, d: Deps): Result<Conversation> {
   return ok(value)
 }
 
+export function updateChatDraft(input: unknown, d: Deps): Result<undefined> {
+  const req = object(input)
+  const chatId = id(req?.id)
+  if (chatId === undefined || typeof req?.draft !== 'string' || req.draft.length > 100_000) {
+    return err('chat/invalid', 'conversation draft was invalid')
+  }
+  if (!d.setDraft(chatId, req.draft)) return err('chat/missing', 'conversation was not found')
+  return ok(undefined)
+}
+
 export function updateChatPinned(input: unknown, d: Deps): Result<Conversation> {
   const req = object(input)
   const chatId = id(req?.id)
@@ -130,6 +142,7 @@ export function register(): void {
   handle('chats:list', () => listChats(deps))
   handle('chats:create', (_event, req) => createChat(req, deps))
   handle('chats:set-mode', (_event, req) => updateChatMode(req, deps))
+  handle('chats:set-draft', (_event, req) => updateChatDraft(req, deps))
   handle('chats:set-pinned', (_event, req) => updateChatPinned(req, deps))
   handle('chats:delete', (_event, req) => deleteChat(req, deps))
 }

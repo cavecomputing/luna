@@ -62,6 +62,8 @@ const steps: readonly string[] = [
    ON messages (conversation_id, ordinal);`,
   `ALTER TABLE messages ADD COLUMN provider_id TEXT;`,
   `ALTER TABLE messages ADD COLUMN reasoning TEXT NOT NULL DEFAULT '';`,
+  `ALTER TABLE conversations
+   ADD COLUMN draft TEXT NOT NULL DEFAULT '' CHECK (length(draft) <= 100000);`,
 ]
 
 /** The version a fully migrated database reports. */

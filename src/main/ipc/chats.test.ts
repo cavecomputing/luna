@@ -5,6 +5,7 @@ import {
   deleteChat,
   listChats,
   updateChatMode,
+  updateChatDraft,
   updateChatPinned,
 } from './chats.js'
 
@@ -12,6 +13,7 @@ function chat(id = 'chat-1'): Conversation {
   return {
     id,
     title: 'New chat',
+    draft: '',
     icon: 'spark',
     mode: 'fast',
     pinned: false,
@@ -38,6 +40,12 @@ function makeDeps(): TestDeps {
       const value = { ...found, mode }
       items = items.map((item) => (item.id === id ? value : item))
       return value
+    }),
+    setDraft: vi.fn((id: string, draft: string) => {
+      const found = items.find((item) => item.id === id)
+      if (found === undefined) return false
+      items = items.map((item) => (item.id === id ? { ...item, draft } : item))
+      return true
     }),
     setPinned: vi.fn((id: string, pinned: boolean) => {
       const found = items.find((item) => item.id === id)
@@ -83,6 +91,16 @@ describe('conversation IPC actions', () => {
     expect(d.notify).toHaveBeenCalledTimes(2)
   })
 
+  it('persists a conversation draft without broadcasting the full chat list', () => {
+    const d = makeDeps()
+    expect(updateChatDraft({ id: 'chat-1', draft: 'unfinished thought' }, d)).toEqual({
+      ok: true,
+      value: undefined,
+    })
+    expect(d.setDraft).toHaveBeenCalledWith('chat-1', 'unfinished thought')
+    expect(d.notify).not.toHaveBeenCalled()
+  })
+
   it('cancels an active request before deleting its confirmed conversation', async () => {
     const d = makeDeps()
     expect(await deleteChat({ id: 'chat-1' }, d)).toEqual({ ok: true, value: undefined })
@@ -103,6 +121,8 @@ describe('conversation IPC actions', () => {
   it.each([
     [() => createChat({ mode: 'turbo' }, makeDeps()), 'chat/invalid'],
     [() => updateChatMode({ id: '../bad', mode: 'fast' }, makeDeps()), 'chat/invalid'],
+    [() => updateChatDraft({ id: 'chat-1', draft: 42 }, makeDeps()), 'chat/invalid'],
+    [() => updateChatDraft({ id: 'missing', draft: 'text' }, makeDeps()), 'chat/missing'],
     [() => updateChatPinned({ id: 'chat-1', pinned: 'yes' }, makeDeps()), 'chat/invalid'],
     [() => deleteChat({ id: 'missing' }, makeDeps()), 'chat/missing'],
   ])('returns a stable error for invalid or missing input', async (run, code) => {

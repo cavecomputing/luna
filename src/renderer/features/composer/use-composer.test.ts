@@ -28,6 +28,17 @@ describe('useComposer', () => {
     expect(result.current.canSend).toBe(false)
   })
 
+  it('starts from and publishes a persisted conversation draft', () => {
+    const onDraftChange = vi.fn()
+    const { result } = renderHook(() => useComposer(vi.fn(), 'unfinished', onDraftChange))
+
+    expect(result.current.draft).toBe('unfinished')
+    act(() => {
+      result.current.setDraft('unfinished thought')
+    })
+    expect(onDraftChange).toHaveBeenCalledWith('unfinished thought')
+  })
+
   it('cannot send whitespace only', () => {
     const { result } = renderHook(() => useComposer(vi.fn()))
     act(() => {

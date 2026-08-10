@@ -114,9 +114,12 @@ export function App(): React.JSX.Element {
         <Thread chat={chats.open} />
 
         <Composer
+          key={chats.openId ?? 'new-chat'}
           onSend={chats.send}
           onCancel={chats.cancel}
           streaming={chats.streamingMessage !== undefined}
+          initialDraft={chats.open?.draft}
+          onDraftChange={chats.setDraft}
           notice={chats.error}
         />
       </main>

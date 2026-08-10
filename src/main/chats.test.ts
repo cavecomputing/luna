@@ -9,6 +9,7 @@ import {
   list,
   recoverInterrupted,
   remove,
+  setDraft,
   setMode,
   setPinned,
 } from './chats.js'
@@ -22,6 +23,8 @@ describe('chat storage', () => {
       pinned: false,
       messages: [],
     })
+    expect(setDraft(db, 'chat-1', 'unfinished')).toBe(true)
+    expect(find(db, 'chat-1')?.draft).toBe('unfinished')
     expect(setMode(db, 'chat-1', 'expert')?.mode).toBe('expert')
     expect(setPinned(db, 'chat-1', true)?.pinned).toBe(true)
     expect(list(db)).toHaveLength(1)
@@ -33,6 +36,7 @@ describe('chat storage', () => {
     const db = open(':memory:')
     create(db, 'chat-1', 'fast', 10)
     const turn = beginTurn(db, 'chat-1', 'Hello', 'user-1', 'assistant-1', 20)
+    expect(turn?.conversation.draft).toBe('')
     expect(turn?.conversation.messages).toEqual([
       { id: 'user-1', role: 'user', text: 'Hello', status: 'complete', at: 20 },
       { id: 'assistant-1', role: 'assistant', text: '', status: 'streaming', at: 20 },

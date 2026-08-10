@@ -56,6 +56,7 @@ const api = {
     list: () => invoke('chats:list', undefined),
     create: (mode: Mode) => invoke('chats:create', { mode }),
     setMode: (id: string, mode: Mode) => invoke('chats:set-mode', { id, mode }),
+    setDraft: (id: string, draft: string) => invoke('chats:set-draft', { id, draft }),
     setPinned: (id: string, pinned: boolean) =>
       invoke('chats:set-pinned', { id, pinned }),
     delete: (id: string) => invoke('chats:delete', { id }),

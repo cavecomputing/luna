@@ -12,11 +12,20 @@ type Props = {
   onSend: (text: string) => boolean | Promise<boolean>
   onCancel: () => void | Promise<void>
   streaming: boolean
+  initialDraft?: string | undefined
+  onDraftChange?: ((draft: string) => void) | undefined
   notice?: string | undefined
 }
 
-export function Composer({ onSend, onCancel, streaming, notice }: Props): React.JSX.Element {
-  const composer = useComposer(onSend)
+export function Composer({
+  onSend,
+  onCancel,
+  streaming,
+  initialDraft = '',
+  onDraftChange = () => undefined,
+  notice,
+}: Props): React.JSX.Element {
+  const composer = useComposer(onSend, initialDraft, onDraftChange)
   const box = useRef<HTMLTextAreaElement>(null)
 
   // Grow with the text, then scroll rather than pushing the thread off screen.

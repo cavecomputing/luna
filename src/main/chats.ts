@@ -116,6 +116,8 @@ function conversationRow(row: unknown, messages: Message[]): Conversation | unde
   if (
     typeof cell.id !== 'string' ||
     typeof cell.title !== 'string' ||
+    typeof cell.draft !== 'string' ||
+    cell.draft.length > 100_000 ||
     parsedIcon === undefined ||
     parsedMode === undefined ||
     (cell.pinned !== 0 && cell.pinned !== 1) ||
@@ -128,6 +130,7 @@ function conversationRow(row: unknown, messages: Message[]): Conversation | unde
   return {
     id: cell.id,
     title: cell.title,
+    draft: cell.draft,
     icon: parsedIcon,
     mode: parsedMode,
     pinned: cell.pinned === 1,
@@ -166,7 +169,7 @@ export function list(conn: DatabaseSync): Conversation[] {
 
   return conn
     .prepare(
-      `SELECT id, title, icon, mode, pinned, updated_at
+      `SELECT id, title, draft, icon, mode, pinned, updated_at
        FROM conversations ORDER BY pinned DESC, updated_at DESC, id`,
     )
     .all()
@@ -217,6 +220,7 @@ export function create(
   return {
     id,
     title: 'New chat',
+    draft: '',
     icon: 'spark',
     mode: selectedMode,
     pinned: false,
@@ -264,6 +268,10 @@ export function setTitle(
   return updateConversation(conn, id, 'UPDATE conversations SET title = ? WHERE id = ?', title)
 }
 
+export function setDraft(conn: DatabaseSync, id: string, draft: string): boolean {
+  return conn.prepare('UPDATE conversations SET draft = ? WHERE id = ?').run(draft, id).changes > 0
+}
+
 export function remove(conn: DatabaseSync, id: string): boolean {
   return conn.prepare('DELETE FROM conversations WHERE id = ?').run(id).changes > 0
 }
@@ -299,7 +307,7 @@ export function beginTurn(
     insert.run(userMessageId, conversationId, 'user', text, 'complete', now, next)
     insert.run(assistantMessageId, conversationId, 'assistant', '', 'streaming', now, next + 1)
     conn
-      .prepare('UPDATE conversations SET updated_at = ? WHERE id = ?')
+      .prepare("UPDATE conversations SET updated_at = ?, draft = '' WHERE id = ?")
       .run(now, conversationId)
     conn.exec('COMMIT')
   } catch (error) {

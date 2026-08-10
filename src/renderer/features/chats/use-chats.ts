@@ -64,12 +64,14 @@ export function mergeChats(
   const prior = new Map(
     current.flatMap((chat) => chat.messages.map((message) => [message.id, message] as const)),
   )
+  const priorChats = new Map(current.map((chat) => [chat.id, chat] as const))
   const seen = new Set<string>()
   return incoming.flatMap((chat) => {
     if (seen.has(chat.id)) return []
     seen.add(chat.id)
     return [{
       ...chat,
+      draft: priorChats.get(chat.id)?.draft ?? chat.draft,
       messages: chat.messages.map((message) => {
         const streamed = prior.get(message.id)
         return message.status === 'streaming' && streamed?.status === 'streaming'
@@ -220,6 +222,16 @@ export function useChats(defaultMode: Mode) {
     })
   }
 
+  function setDraft(draft: string): void {
+    if (open === undefined) return
+    setChats((current) =>
+      current.map((chat) => (chat.id === open.id ? { ...chat, draft } : chat)),
+    )
+    void window.luna.chats.setDraft(open.id, draft).then((result) => {
+      if (!result.ok) setError('The conversation draft could not be saved.')
+    })
+  }
+
   function togglePinned(id: string): void {
     const found = chats.find((chat) => chat.id === id)
     if (found === undefined) return
@@ -247,6 +259,7 @@ export function useChats(defaultMode: Mode) {
     send,
     cancel,
     setMode,
+    setDraft,
     togglePinned,
     remove,
   }

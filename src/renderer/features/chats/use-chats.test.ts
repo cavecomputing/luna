@@ -8,6 +8,7 @@ function chat(status: 'streaming' | 'complete' = 'streaming'): Conversation {
   return {
     id: 'chat-1',
     title: 'Chat',
+    draft: '',
     icon: 'spark',
     mode: 'fast',
     pinned: false,
@@ -73,6 +74,11 @@ describe('stream event reducers', () => {
       reasoning: 'Working',
       streamSeq: 1,
     })
+  })
+
+  it('keeps a locally edited draft through an unrelated full-list broadcast', () => {
+    const current = [{ ...chat(), draft: 'unfinished thought' }]
+    expect(mergeChats(current, [chat()])[0]?.draft).toBe('unfinished thought')
   })
 
   it('accepts persisted completion over local streaming state', () => {

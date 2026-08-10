@@ -65,6 +65,7 @@ export type Invocations = {
   'chats:list': { req: undefined; res: Conversation[] }
   'chats:create': { req: { mode: Mode }; res: Conversation }
   'chats:set-mode': { req: { id: string; mode: Mode }; res: Conversation }
+  'chats:set-draft': { req: { id: string; draft: string }; res: undefined }
   'chats:set-pinned': { req: { id: string; pinned: boolean }; res: Conversation }
   'chats:delete': { req: { id: string }; res: undefined }
   'chat:send': { req: { conversationId: string; text: string }; res: ChatStart }

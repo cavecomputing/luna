@@ -113,7 +113,8 @@ describe('migrate', () => {
     migrate(db)
     db.exec(`PRAGMA user_version = 3;
       ALTER TABLE messages DROP COLUMN reasoning;
-      ALTER TABLE messages DROP COLUMN provider_id;`)
+      ALTER TABLE messages DROP COLUMN provider_id;
+      ALTER TABLE conversations DROP COLUMN draft;`)
 
     migrate(db)
 
@@ -133,13 +134,31 @@ describe('migrate', () => {
       (id, conversation_id, role, text, status, created_at, ordinal)
       VALUES ('message-1', 'chat-1', 'assistant', 'Answer', 'complete', 1, 0);
       PRAGMA user_version = 4;
-      ALTER TABLE messages DROP COLUMN reasoning;`)
+      ALTER TABLE messages DROP COLUMN reasoning;
+      ALTER TABLE conversations DROP COLUMN draft;`)
 
     migrate(db)
 
     expect(db.prepare('SELECT text, reasoning FROM messages').get()).toEqual({
       text: 'Answer',
       reasoning: '',
+    })
+  })
+
+  it('adds empty conversation drafts without changing existing chats', () => {
+    const db = fresh()
+    migrate(db)
+    db.exec(`INSERT INTO conversations
+      (id, title, icon, mode, pinned, created_at, updated_at, draft)
+      VALUES ('chat-1', 'Chat', 'spark', 'fast', 0, 1, 1, 'temporary');
+      PRAGMA user_version = 5;
+      ALTER TABLE conversations DROP COLUMN draft;`)
+
+    migrate(db)
+
+    expect(db.prepare('SELECT title, draft FROM conversations').get()).toEqual({
+      title: 'Chat',
+      draft: '',
     })
   })
 
