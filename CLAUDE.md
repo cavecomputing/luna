@@ -279,8 +279,8 @@ it also holds the `window.luna` bridge.
 - HTML appears **inside a code block**, with a toggle to switch between **source** and
   **rendered**. Source is the default. The user opts in to rendering; it never happens
   automatically.
-- Markdown needs a real parser eventually. That's a production dependency — ask first, and
-  sanitise any inline HTML it passes through.
+- Markdown renders through `react-markdown` with `remark-gfm`. Raw inline HTML stays disabled;
+  fenced `html` and `htm` code blocks are the only path to an HTML preview.
 - Links inside rendered output never navigate the frame. Route them through
   `shell.openExternal` after the `https:` check.
 

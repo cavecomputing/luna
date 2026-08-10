@@ -1,0 +1,143 @@
+.markdown {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown blockquote,
+.markdown table,
+.markdown hr {
+  margin: 0 0 var(--s-3);
+}
+
+.markdown > pre {
+  margin: 0 0 var(--s-3);
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  margin: var(--s-4) 0 var(--s-2);
+  line-height: 1.25;
+}
+
+.markdown h1 {
+  font-size: 1.45em;
+}
+
+.markdown h2 {
+  font-size: 1.28em;
+}
+
+.markdown h3 {
+  font-size: 1.14em;
+}
+
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  font-size: 1em;
+}
+
+.markdown ul,
+.markdown ol {
+  padding-left: var(--s-5);
+}
+
+.markdown li + li {
+  margin-top: var(--s-1);
+}
+
+.markdown input[type='checkbox'] {
+  margin: 0 var(--s-1) 0 0;
+  accent-color: var(--accent);
+}
+
+.markdown blockquote {
+  padding-left: var(--s-3);
+  border-left: 3px solid var(--line);
+  color: var(--text-muted);
+}
+
+.markdown blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown code {
+  border-radius: var(--r-sm);
+  background: var(--surface-sunken);
+  padding: 0.12em 0.35em;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.markdown > pre {
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface-sunken);
+  padding: var(--s-4);
+}
+
+.markdown > pre code {
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  white-space: pre;
+}
+
+.markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.markdown th,
+.markdown td {
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--line);
+  text-align: left;
+}
+
+.markdown th {
+  background: var(--surface-sunken);
+  font-weight: 650;
+}
+
+.markdown hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.markdown img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--r-md);
+}
+
+.imageFallback {
+  color: var(--text-faint);
+  font-style: italic;
+}

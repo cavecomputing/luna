@@ -2,6 +2,7 @@ import { BrowserWindow, nativeTheme, shell } from 'electron'
 import { join } from 'node:path'
 import { APP_ORIGIN } from './protocol.js'
 import { background, chromeOptions, overlay } from './window-chrome.js'
+import { canFrameLoad } from './navigation.js'
 
 const MIN_WIDTH = 720
 const MIN_HEIGHT = 480
@@ -97,6 +98,10 @@ function lockNavigation(win: BrowserWindow): void {
 
   win.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith(devUrl() ?? APP_ORIGIN)) event.preventDefault()
+  })
+
+  win.webContents.on('will-frame-navigate', (details) => {
+    if (!canFrameLoad(details.url, details.isMainFrame)) details.preventDefault()
   })
 }
 

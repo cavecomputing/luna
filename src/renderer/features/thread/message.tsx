@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Message as Msg } from '../../../shared/types.js'
 import { clock } from '../../lib/time.js'
-import { toBlocks } from './blocks.js'
+import { Markdown } from './markdown.js'
 import { Avatar } from '../../ui/avatar.js'
 import styles from './message.module.css'
 import { cx } from '../../lib/cx.js'
@@ -65,35 +65,11 @@ export function Message({ message, onGrow }: Props): React.JSX.Element {
                   : 'Thinking'}
               </summary>
               <div className={styles.reasoningBody}>
-                {toBlocks(visibleReasoning).map((block, i) =>
-                  block.kind === 'para' ? (
-                    <p key={`rp${String(i)}`} className={styles.para}>
-                      {block.text}
-                    </p>
-                  ) : (
-                    <ul key={`rl${String(i)}`} className={styles.list}>
-                      {block.items.map((item, itemIndex) => (
-                        <li key={itemIndex}>{item}</li>
-                      ))}
-                    </ul>
-                  ),
-                )}
+                <Markdown text={visibleReasoning} />
               </div>
             </details>
           )}
-          {toBlocks(visibleText).map((block, i) =>
-            block.kind === 'para' ? (
-              <p key={`p${String(i)}`} className={styles.para}>
-                {block.text}
-              </p>
-            ) : (
-              <ul key={`l${String(i)}`} className={styles.list}>
-                {block.items.map((item, itemIndex) => (
-                  <li key={itemIndex}>{item}</li>
-                ))}
-              </ul>
-            ),
-          )}
+          <Markdown text={visibleText} />
         </div>
         {!mine && message.status === 'error' && message.text !== '' && (
           <p className={styles.interrupted}>Response interrupted</p>
