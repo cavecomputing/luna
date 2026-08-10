@@ -28,6 +28,8 @@ type Deps = {
     assistantMessageId: string,
     now: number,
   ) => Turn | undefined
+  retryTarget: (messageId: string) => string | undefined
+  restart: (messageId: string, now: number) => Conversation | undefined
   history: (conversationId: string) => StoredMessage[]
   finish: (
     id: string,
@@ -68,6 +70,8 @@ const deps: Deps = {
   prefs: prefs.load,
   begin: (conversationId, text, userId, assistantId, now) =>
     chats.beginTurn(db.handle(), conversationId, text, userId, assistantId, now),
+  retryTarget: chats.retry,
+  restart: (messageId, now) => chats.restartMessage(db.handle(), messageId, now),
   history: chats.transcript,
   finish: (id, text, reasoning, status, now, api, providerId, items) =>
     chats.finishMessage(db.handle(), id, text, reasoning, status, now, api, providerId, items),
@@ -118,6 +122,22 @@ type Active = {
   controller: AbortController
 }
 
+type Selection = {
+  provider: ProviderConfig
+  model: string
+}
+
+function selection(conversation: Conversation, d: Deps): Result<Selection> {
+  const slot = d.slots()[conversation.mode]
+  if (slot.providerId === null) {
+    return err('chat/no-provider', 'conversation mode has no provider')
+  }
+  if (slot.model.trim() === '') return err('chat/no-model', 'conversation mode has no model')
+  const provider = d.getProvider(slot.providerId)
+  if (provider === undefined) return err('chat/no-provider', 'configured provider was not found')
+  return ok({ provider, model: slot.model })
+}
+
 export class ChatCoordinator {
   private readonly active = new Map<string, Active>()
   private readonly background = new Set<AbortController>()
@@ -135,25 +155,14 @@ export class ChatCoordinator {
 
     const conversation = this.d.getChat(conversationId)
     if (conversation === undefined) return err('chat/missing', 'conversation was not found')
-    if (
-      this.starting.has(conversationId) ||
-      [...this.active.values()].some((item) => item.conversationId === conversationId)
-    ) {
-      return err('chat/busy', 'conversation already has an active response')
-    }
-
-    const slot = this.d.slots()[conversation.mode]
-    if (slot.providerId === null) {
-      return err('chat/no-provider', 'conversation mode has no provider')
-    }
-    if (slot.model.trim() === '') return err('chat/no-model', 'conversation mode has no model')
-    const provider = this.d.getProvider(slot.providerId)
-    if (provider === undefined) return err('chat/no-provider', 'configured provider was not found')
+    if (this.isBusy(conversationId)) return err('chat/busy', 'conversation already has an active response')
+    const selected = selection(conversation, this.d)
+    if (!selected.ok) return selected
 
     let apiKey: string | undefined
     this.starting.add(conversationId)
     try {
-      apiKey = await this.d.readKey(provider.id)
+      apiKey = await this.d.readKey(selected.value.provider.id)
     } catch {
       this.starting.delete(conversationId)
       return err('secret/unavailable', 'secure credential read failed')
@@ -175,21 +184,40 @@ export class ChatCoordinator {
     }
     if (turn === undefined) return err('chat/missing', 'conversation was not found')
 
-    const controller = new AbortController()
-    this.active.set(assistantMessageId, { conversationId, controller })
-    this.d.notifyChats(this.d.list())
-    const request: ChatRequest = {
-      provider,
-      ...(apiKey === undefined ? {} : { apiKey }),
-      model: slot.model,
-      systemPrompt: this.d.prefs().systemPrompt,
-      history: this.d.history(conversationId),
-    }
-    const showStream = this.d.prefs().stream
-    void this.run(conversationId, assistantMessageId, request, controller, showStream).catch(() => {
-      this.active.delete(assistantMessageId)
-    })
+    this.launch(conversationId, assistantMessageId, selected.value, apiKey)
     return ok({ ...turn })
+  }
+
+  async retry(input: unknown): Promise<Result<undefined>> {
+    const messageId = id(object(input)?.messageId)
+    if (messageId === undefined) return err('chat/invalid', 'message id was invalid')
+    const conversationId = this.d.retryTarget(messageId)
+    if (conversationId === undefined) {
+      return err('chat/not-retryable', 'message cannot be retried')
+    }
+    const conversation = this.d.getChat(conversationId)
+    if (conversation === undefined) return err('chat/missing', 'conversation was not found')
+    if (this.isBusy(conversationId)) return err('chat/busy', 'conversation already has an active response')
+    const selected = selection(conversation, this.d)
+    if (!selected.ok) return selected
+
+    let apiKey: string | undefined
+    this.starting.add(conversationId)
+    try {
+      try {
+        apiKey = await this.d.readKey(selected.value.provider.id)
+      } catch {
+        return err('secret/unavailable', 'secure credential read failed')
+      }
+      if (this.d.restart(messageId, this.d.now()) === undefined) {
+        return err('chat/not-retryable', 'message cannot be retried')
+      }
+    } finally {
+      this.starting.delete(conversationId)
+    }
+
+    this.launch(conversationId, messageId, selected.value, apiKey)
+    return ok(undefined)
   }
 
   cancel(input: unknown): Result<undefined> {
@@ -211,6 +239,40 @@ export class ChatCoordinator {
   stopAll(): void {
     for (const active of this.active.values()) active.controller.abort()
     for (const controller of this.background) controller.abort()
+  }
+
+  private isBusy(conversationId: string): boolean {
+    return (
+      this.starting.has(conversationId) ||
+      [...this.active.values()].some((item) => item.conversationId === conversationId)
+    )
+  }
+
+  private launch(
+    conversationId: string,
+    messageId: string,
+    selected: Selection,
+    apiKey: string | undefined,
+  ): void {
+    const controller = new AbortController()
+    this.active.set(messageId, { conversationId, controller })
+    this.d.notifyChats(this.d.list())
+    const request: ChatRequest = {
+      provider: selected.provider,
+      ...(apiKey === undefined ? {} : { apiKey }),
+      model: selected.model,
+      systemPrompt: this.d.prefs().systemPrompt,
+      history: this.d.history(conversationId),
+    }
+    void this.run(
+      conversationId,
+      messageId,
+      request,
+      controller,
+      this.d.prefs().stream,
+    ).catch(() => {
+      this.active.delete(messageId)
+    })
   }
 
   private async run(

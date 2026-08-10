@@ -69,6 +69,18 @@ function makeDeps(): TestDeps {
       userMessageId: userId,
       assistantMessageId: assistantId,
     })),
+    retryTarget: vi.fn((id: string) => (id === 'assistant-1' ? 'chat-1' : undefined)),
+    restart: vi.fn((id: string) =>
+      id === 'assistant-1'
+        ? {
+            ...conversation,
+            messages: [
+              { id: 'user-1', role: 'user' as const, text: 'Hello', status: 'complete' as const, at: 10 },
+              { id, role: 'assistant' as const, text: '', status: 'streaming' as const, at: 10 },
+            ],
+          }
+        : undefined,
+    ),
     history: vi.fn(() => [
       { id: 'user-1', role: 'user' as const, text: 'Hello', status: 'complete' as const, at: 10 },
       { id: 'assistant-1', role: 'assistant' as const, text: '', status: 'streaming' as const, at: 10 },
@@ -238,6 +250,36 @@ describe('ChatCoordinator', () => {
       code: 'chat/busy',
     })
     chat.stopAll()
+  })
+
+  it('retries the latest stopped response without adding another user message', async () => {
+    const d = makeDeps()
+    const chat = new ChatCoordinator(d)
+    expect(await chat.retry({ messageId: 'assistant-1' })).toEqual({
+      ok: true,
+      value: undefined,
+    })
+    await vi.waitFor(() => {
+      expect(d.notifyDone).toHaveBeenCalledWith('chat-1', assistant('complete', 'Hello'))
+    })
+    expect(d.restart).toHaveBeenCalledWith('assistant-1', 10)
+    expect(d.begin).not.toHaveBeenCalled()
+    expect(d.stream).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'model-fast' }),
+      expect.any(AbortSignal),
+      expect.any(Function),
+    )
+  })
+
+  it('rejects a response that is no longer retryable', async () => {
+    const d = makeDeps()
+    d.retryTarget = vi.fn(() => undefined)
+    expect(await new ChatCoordinator(d).retry({ messageId: 'assistant-1' })).toMatchObject({
+      ok: false,
+      code: 'chat/not-retryable',
+    })
+    expect(d.restart).not.toHaveBeenCalled()
+    expect(d.stream).not.toHaveBeenCalled()
   })
 
   it.each([

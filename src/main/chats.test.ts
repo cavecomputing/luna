@@ -7,9 +7,12 @@ import {
   finishMessage,
   history,
   list,
+  messageAction,
   messageText,
   recoverInterrupted,
   remove,
+  restartMessage,
+  retryConversation,
   setDraft,
   setMode,
   setPinned,
@@ -80,6 +83,44 @@ describe('chat storage', () => {
     expect(finishMessage(db, 'assistant-1', 'partial', '', 'cancelled', 25)).toBeDefined()
     expect(finishMessage(db, 'assistant-1', 'late', '', 'complete', 30)).toBeUndefined()
     expect(find(db, 'chat-1')?.messages[1]?.text).toBe('partial')
+  })
+
+  it('restarts only the latest failed or cancelled assistant message', () => {
+    const db = open(':memory:')
+    create(db, 'chat-1', 'fast', 10)
+    beginTurn(db, 'chat-1', 'Hello', 'user-1', 'assistant-1', 20)
+    finishMessage(db, 'assistant-1', 'partial', 'unfinished', 'cancelled', 25)
+
+    expect(messageAction(db, 'assistant-1')).toEqual({
+      id: 'assistant-1',
+      role: 'assistant',
+      text: 'partial',
+      status: 'cancelled',
+      retryable: true,
+    })
+    expect(retryConversation(db, 'assistant-1')).toBe('chat-1')
+    expect(restartMessage(db, 'assistant-1', 30)).toMatchObject({
+      id: 'chat-1',
+      updatedAt: 30,
+      messages: [
+        { id: 'user-1', status: 'complete' },
+        { id: 'assistant-1', text: '', status: 'streaming' },
+      ],
+    })
+    expect(retryConversation(db, 'assistant-1')).toBeUndefined()
+  })
+
+  it('does not retry a stopped response after a newer turn', () => {
+    const db = open(':memory:')
+    create(db, 'chat-1', 'fast', 10)
+    beginTurn(db, 'chat-1', 'First', 'user-1', 'assistant-1', 20)
+    finishMessage(db, 'assistant-1', 'partial', '', 'error', 25)
+    beginTurn(db, 'chat-1', 'Second', 'user-2', 'assistant-2', 30)
+    finishMessage(db, 'assistant-2', 'done', '', 'complete', 35)
+
+    expect(retryConversation(db, 'assistant-1')).toBeUndefined()
+    expect(restartMessage(db, 'assistant-1', 40)).toBeUndefined()
+    expect(messageAction(db, 'assistant-1')?.retryable).toBe(false)
   })
 
   it('recovers a streaming placeholder left by an interrupted process', () => {

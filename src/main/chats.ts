@@ -22,6 +22,10 @@ export type Turn = {
   assistantMessageId: string
 }
 
+export type MessageAction = Pick<Message, 'id' | 'role' | 'text' | 'status'> & {
+  retryable: boolean
+}
+
 const icons: readonly ChatIcon[] = [
   'wave',
   'bowl',
@@ -209,6 +213,79 @@ export function messageText(conn: DatabaseSync, id: string): string | undefined 
   const row = conn.prepare('SELECT text FROM messages WHERE id = ?').get(id)
   const cell = object(row)
   return typeof cell?.text === 'string' ? cell.text : undefined
+}
+
+export function messageAction(conn: DatabaseSync, id: string): MessageAction | undefined {
+  const cell = object(
+    conn.prepare('SELECT id, role, text, status FROM messages WHERE id = ?').get(id),
+  )
+  const parsedRole = role(cell?.role)
+  const parsedStatus = status(cell?.status)
+  if (
+    typeof cell?.id !== 'string' ||
+    parsedRole === undefined ||
+    typeof cell.text !== 'string' ||
+    parsedStatus === undefined
+  ) {
+    return undefined
+  }
+  return {
+    id: cell.id,
+    role: parsedRole,
+    text: cell.text,
+    status: parsedStatus,
+    retryable: retryConversation(conn, cell.id) !== undefined,
+  }
+}
+
+export function retryConversation(conn: DatabaseSync, id: string): string | undefined {
+  const cell = object(
+    conn
+      .prepare(
+        `SELECT conversation_id FROM messages
+         WHERE id = ? AND role = 'assistant' AND status IN ('error', 'cancelled')
+           AND ordinal = (
+             SELECT max(ordinal) FROM messages AS latest
+             WHERE latest.conversation_id = messages.conversation_id
+           )`,
+      )
+      .get(id),
+  )
+  return typeof cell?.conversation_id === 'string' ? cell.conversation_id : undefined
+}
+
+export function restartMessage(
+  conn: DatabaseSync,
+  id: string,
+  now: number,
+): Conversation | undefined {
+  let conversationId: string | undefined
+  conn.exec('BEGIN')
+  try {
+    conversationId = retryConversation(conn, id)
+    if (conversationId === undefined) {
+      conn.exec('ROLLBACK')
+      return undefined
+    }
+    const result = conn
+      .prepare(
+        `UPDATE messages
+         SET text = '', reasoning = '', status = 'streaming',
+             provider_id = NULL, provider_api = NULL, provider_items = NULL
+         WHERE id = ? AND status IN ('error', 'cancelled')`,
+      )
+      .run(id)
+    if (result.changes === 0) {
+      conn.exec('ROLLBACK')
+      return undefined
+    }
+    conn.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
+    conn.exec('COMMIT')
+  } catch (error) {
+    conn.exec('ROLLBACK')
+    throw error
+  }
+  return find(conn, conversationId)
 }
 
 export function create(
@@ -405,4 +482,12 @@ export function transcript(id: string): StoredMessage[] {
 
 export function text(id: string): string | undefined {
   return messageText(db.handle(), id)
+}
+
+export function action(id: string): MessageAction | undefined {
+  return messageAction(db.handle(), id)
+}
+
+export function retry(id: string): string | undefined {
+  return retryConversation(db.handle(), id)
 }

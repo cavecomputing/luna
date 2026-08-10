@@ -1,11 +1,14 @@
-import type { WebContents } from 'electron'
+import type { MenuItemConstructorOptions, WebContents } from 'electron'
 import { err, ok, type Result } from '../../shared/result.js'
 import * as chats from '../chats.js'
+import type { MessageAction } from '../chats.js'
+import { coordinator } from './chat.js'
 import { handle } from './bus.js'
 
 type Deps = {
-  getText: (id: string) => string | undefined
-  show: (text: string) => void
+  getMessage: (id: string) => MessageAction | undefined
+  retry: (id: string) => void
+  show: (message: MessageAction, retry: () => void) => void
 }
 
 function object(input: unknown): Record<string, unknown> | undefined {
@@ -21,23 +24,36 @@ function id(input: unknown): string | undefined {
 export function showMessageMenu(input: unknown, d: Deps): Result<undefined> {
   const messageId = id(object(input)?.id)
   if (messageId === undefined) return err('message/invalid', 'message id was invalid')
-  const text = d.getText(messageId)
-  if (text === undefined) return err('message/missing', 'message was not found')
-  d.show(text)
+  const message = d.getMessage(messageId)
+  if (message === undefined) return err('message/missing', 'message was not found')
+  d.show(message, () => {
+    d.retry(message.id)
+  })
   return ok(undefined)
 }
 
-async function popup(sender: WebContents, text: string): Promise<void> {
+async function popup(
+  sender: WebContents,
+  message: MessageAction,
+  retry: () => void,
+): Promise<void> {
   const { BrowserWindow, Menu, clipboard } = await import('electron')
-  const menu = Menu.buildFromTemplate([
+  const template: MenuItemConstructorOptions[] = [
     {
       label: 'Copy Message',
-      enabled: text !== '',
+      enabled: message.text !== '',
       click: () => {
-        clipboard.writeText(text)
+        clipboard.writeText(message.text)
       },
     },
-  ])
+    ...(message.retryable
+      ? [
+          { type: 'separator' as const },
+          { label: 'Retry Response', click: retry },
+        ]
+      : []),
+  ]
+  const menu = Menu.buildFromTemplate(template)
   const window = BrowserWindow.fromWebContents(sender)
   menu.popup(window === null ? {} : { window })
 }
@@ -45,9 +61,12 @@ async function popup(sender: WebContents, text: string): Promise<void> {
 export function register(): void {
   handle('messages:menu', (event, req) =>
     showMessageMenu(req, {
-      getText: chats.text,
-      show: (text) => {
-        void popup(event.sender, text).catch(() => undefined)
+      getMessage: chats.action,
+      retry: (id) => {
+        void coordinator.retry({ messageId: id }).catch(() => undefined)
+      },
+      show: (message, retry) => {
+        void popup(event.sender, message, retry).catch(() => undefined)
       },
     }),
   )
