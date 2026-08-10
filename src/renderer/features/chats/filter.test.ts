@@ -38,11 +38,18 @@ describe('filterChats', () => {
     expect(filterChats(chats, 'submarine')).toEqual([])
   })
 
-  it('does not search message bodies', () => {
+  it('matches message text when the title does not match', () => {
     const withBody = [
       { ...chat('d', 'Untitled', 1), messages: [{ id: 'm', role: 'user' as const, text: 'submarine', at: 1 }] },
     ]
-    expect(filterChats(withBody, 'submarine')).toEqual([])
+    expect(filterChats(withBody, 'submarine').map((item) => item.id)).toEqual(['d'])
+  })
+
+  it('ignores case when matching message text', () => {
+    const withBody = [
+      { ...chat('d', 'Untitled', 1), messages: [{ id: 'm', role: 'assistant' as const, text: 'Coastal route', at: 1 }] },
+    ]
+    expect(filterChats(withBody, 'COASTAL').map((item) => item.id)).toEqual(['d'])
   })
 })
 
@@ -55,5 +62,12 @@ describe('byRecency', () => {
     const order = chats.map((c) => c.id)
     byRecency(chats)
     expect(chats.map((c) => c.id)).toEqual(order)
+  })
+
+  it('places pinned chats first and keeps each group newest-first', () => {
+    const pinned = chats.map((item) =>
+      item.id === 'b' || item.id === 'c' ? { ...item, pinned: true } : item,
+    )
+    expect(byRecency(pinned).map((c) => c.id)).toEqual(['c', 'b', 'a'])
   })
 })

@@ -32,6 +32,8 @@ export type Conversation = {
   title: string
   icon: ChatIcon
   mode: Mode
+  /** Pinned conversations sort ahead of unpinned conversations. */
+  pinned?: boolean
   /** Epoch milliseconds of the most recent message. */
   updatedAt: number
   messages: Message[]

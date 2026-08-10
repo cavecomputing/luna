@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Sidebar } from './features/chats/sidebar.js'
 import { useChats } from './features/chats/use-chats.js'
 import { Composer } from './features/composer/composer.js'
@@ -11,6 +11,8 @@ import styles from './app.module.css'
 import { useNow } from './lib/use-now.js'
 import { usePrefs } from './lib/use-prefs.js'
 import { cx } from './lib/cx.js'
+import { isSearchShortcut } from './features/chats/search-shortcut.js'
+import { ChatSearch } from './features/chats/chat-search.js'
 
 /**
  * Layout only. Every pane owns its own state; the shell just decides where
@@ -20,7 +22,28 @@ export function App(): React.JSX.Element {
   const { prefs } = usePrefs()
   const chats = useChats(demoChats, prefs.defaultMode)
   const [open, setOpen] = useState(true)
+  const [searchOpen, setSearchOpen] = useState(false)
   const usesTrafficLights = window.luna.platform === 'darwin'
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if (isSearchShortcut(event)) {
+        event.preventDefault()
+        setSearchOpen(true)
+      } else if (event.key === 'Escape' && searchOpen) {
+        setSearchOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [searchOpen])
+
+  function closeSearch(): void {
+    setSearchOpen(false)
+  }
 
   // One ticking clock for the whole shell, so every row agrees.
   const now = useNow()
@@ -31,6 +54,9 @@ export function App(): React.JSX.Element {
         <Sidebar
           chats={chats}
           now={now}
+          onSearchOpen={() => {
+            setSearchOpen(true)
+          }}
           onSettings={() => {
             void window.luna.settings.open()
           }}
@@ -61,6 +87,18 @@ export function App(): React.JSX.Element {
 
         <Composer onSend={chats.send} />
       </main>
+
+      {searchOpen && (
+        <ChatSearch
+          chats={chats.all}
+          now={now}
+          onClose={closeSearch}
+          onSelect={(id) => {
+            chats.setOpenId(id)
+            closeSearch()
+          }}
+        />
+      )}
     </div>
   )
 }

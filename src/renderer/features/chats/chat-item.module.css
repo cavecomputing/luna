@@ -1,15 +1,15 @@
 .item {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--s-3);
   width: 100%;
-  padding: var(--s-2);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   text-align: left;
   transition: background var(--fast) var(--ease);
 }
 
-.item:hover {
+.item:hover,
+.item:focus-within {
   background: var(--surface-hover);
 }
 
@@ -18,14 +18,25 @@
   background: var(--accent-soft);
 }
 
+.select {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  width: 100%;
+  min-width: 0;
+  padding: 5px var(--s-2);
+  border-radius: inherit;
+  text-align: left;
+}
+
 .glyph {
   display: flex;
   align-items: center;
   justify-content: center;
   flex: none;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--r-md);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
   background: var(--surface-sunken);
   color: var(--accent);
 }
@@ -41,6 +52,11 @@
   gap: 1px;
 }
 
+.item:hover .text,
+.item:focus-within .text {
+  padding-right: 48px;
+}
+
 .title {
   font-size: var(--t-md);
   font-weight: 500;
@@ -53,4 +69,43 @@
 .when {
   font-size: var(--t-sm);
   color: var(--text-faint);
+}
+
+.actions {
+  position: absolute;
+  right: var(--s-1);
+  display: flex;
+  gap: 1px;
+  padding-left: var(--s-2);
+  background: linear-gradient(90deg, transparent, var(--surface-hover) 18%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--fast) var(--ease);
+}
+
+.active .actions {
+  background: linear-gradient(90deg, transparent, var(--accent-soft) 18%);
+}
+
+.item:hover .actions,
+.item:focus-within .actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.pinned:not(:hover, :focus-within) .actions > :first-child {
+  opacity: 0.65;
+}
+
+.pinned:not(:hover, :focus-within) .actions {
+  opacity: 1;
+  background: linear-gradient(90deg, transparent, var(--surface) 18%);
+}
+
+.active.pinned:not(:hover, :focus-within) .actions {
+  background: linear-gradient(90deg, transparent, var(--accent-soft) 18%);
+}
+
+.pinned:not(:hover, :focus-within) .actions > :last-child {
+  display: none;
 }

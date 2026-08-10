@@ -37,6 +37,9 @@ Settled behaviour, decided — don't relitigate these while building:
   IPC, so it looks and behaves like the host operating system.
 - **Conversation titles come from the Fast model**, generated after the first exchange.
   The `autoTitle` pref governs it.
+- **Conversation search is a centered, debounced `CmdOrCtrl+F` dialog**, not a permanently
+  visible field. It searches conversation titles and message text, and must not change sidebar
+  visibility. Row actions for pin and delete appear on hover and keyboard focus.
 - **Mode is stored per conversation and restored on reopen.** Reopening a thread puts the
   switch back where the user left it, whatever the current `defaultMode` is — that pref only
   seeds a *new* chat. Nothing about a conversation should change while it wasn't being looked

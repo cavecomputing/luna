@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
 import type { Conversation, Message, Mode } from '../../../shared/types.js'
-import { byRecency, filterChats } from './filter.js'
+import { byRecency } from './filter.js'
 
 export type Chats = ReturnType<typeof useChats>
 
 /**
- * Owns the conversation list, the search query and which chat is open.
+ * Owns the conversation list and which chat is open.
  *
  * Lifted to the app shell because the sidebar, the thread and the composer all
  * read it. When conversations move to main this hook is the only thing that
@@ -13,10 +13,9 @@ export type Chats = ReturnType<typeof useChats>
  */
 export function useChats(initial: Conversation[], defaultMode: Mode) {
   const [chats, setChats] = useState<Conversation[]>(initial)
-  const [query, setQuery] = useState('')
   const [openId, setOpenId] = useState<string | undefined>(initial[0]?.id)
 
-  const visible = useMemo(() => byRecency(filterChats(chats, query)), [chats, query])
+  const visible = useMemo(() => byRecency(chats), [chats])
   const open = chats.find((c) => c.id === openId)
 
   function start(): void {
@@ -32,7 +31,6 @@ export function useChats(initial: Conversation[], defaultMode: Mode) {
     }
     setChats((prev) => [chat, ...prev])
     setOpenId(chat.id)
-    setQuery('')
   }
 
   function send(text: string): void {
@@ -57,5 +55,28 @@ export function useChats(initial: Conversation[], defaultMode: Mode) {
     setChats((prev) => prev.map((c) => (c.id === openId ? { ...c, mode } : c)))
   }
 
-  return { visible, open, query, setQuery, openId, setOpenId, start, send, setMode }
+  function togglePinned(id: string): void {
+    setChats((prev) =>
+      prev.map((chat) => (chat.id === id ? { ...chat, pinned: chat.pinned !== true } : chat)),
+    )
+  }
+
+  function remove(id: string): void {
+    const remaining = chats.filter((chat) => chat.id !== id)
+    setChats(remaining)
+    if (openId === id) setOpenId(byRecency(remaining)[0]?.id)
+  }
+
+  return {
+    visible,
+    all: chats,
+    open,
+    openId,
+    setOpenId,
+    start,
+    send,
+    setMode,
+    togglePinned,
+    remove,
+  }
 }
