@@ -27,6 +27,19 @@
   -webkit-app-region: no-drag;
 }
 
+.collapse {
+  position: absolute;
+  top: 10px;
+  left: 82px;
+  -webkit-app-region: no-drag;
+}
+
+:global([data-platform='darwin']) .actions {
+  position: absolute;
+  top: 10px;
+  right: var(--s-3);
+}
+
 :global([data-platform='win32']) .head {
   align-items: center;
   min-height: var(--titlebar);

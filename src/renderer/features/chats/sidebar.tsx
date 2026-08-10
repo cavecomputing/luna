@@ -8,16 +8,24 @@ import styles from './sidebar.module.css'
 
 type Props = {
   chats: Chats
+  collapse: React.ReactNode | null
   /** Frozen per render of the shell so every row formats against one clock. */
   now: number
   onSearchOpen: () => void
   onSettings: () => void
 }
 
-export function Sidebar({ chats, now, onSearchOpen, onSettings }: Props): React.JSX.Element {
+export function Sidebar({
+  chats,
+  collapse,
+  now,
+  onSearchOpen,
+  onSettings,
+}: Props): React.JSX.Element {
   return (
     <aside className={styles.sidebar}>
       <header className={styles.head}>
+        {collapse !== null && <div className={styles.collapse}>{collapse}</div>}
         <h1 className={styles.brand}>Chats</h1>
         <div className={styles.actions}>
           <IconButton label="Search chats (Ctrl+F)" onClick={onSearchOpen}>

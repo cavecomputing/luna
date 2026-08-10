@@ -39,6 +39,11 @@
   color: var(--text);
 }
 
+.soft:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .accent {
   background: var(--accent);
   color: var(--accent-on);

@@ -6,7 +6,7 @@ type Props = {
   label: string
   children: React.ReactNode
   onClick?: () => void
-  variant?: 'ghost' | 'accent'
+  variant?: 'ghost' | 'soft' | 'accent'
   size?: 'sm' | 'md' | 'lg'
   disabled?: boolean
 }

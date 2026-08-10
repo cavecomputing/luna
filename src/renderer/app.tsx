@@ -49,6 +49,7 @@ export function App(): React.JSX.Element {
   const sidebarButton = (
     <IconButton
       label={open ? 'Hide sidebar' : 'Show sidebar'}
+      variant="soft"
       onClick={() => {
         setOpen((value) => !value)
       }}
@@ -59,11 +60,10 @@ export function App(): React.JSX.Element {
 
   return (
     <div className={styles.shell} data-platform={window.luna.platform}>
-      {usesTrafficLights && <div className={styles.trafficToggle}>{sidebarButton}</div>}
-
       {open && (
         <Sidebar
           chats={chats}
+          collapse={usesTrafficLights ? sidebarButton : null}
           now={now}
           onSearchOpen={() => {
             setSearchOpen(true)
@@ -76,6 +76,9 @@ export function App(): React.JSX.Element {
 
       <main className={styles.pane}>
         <header className={cx(styles.top, !usesTrafficLights && styles.withInlineToggle)}>
+          {usesTrafficLights && !open && (
+            <div className={styles.trafficToggle}>{sidebarButton}</div>
+          )}
           {!usesTrafficLights && <div className={styles.noDrag}>{sidebarButton}</div>}
 
           <div className={styles.noDrag}>
