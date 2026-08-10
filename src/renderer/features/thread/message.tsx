@@ -36,6 +36,10 @@ export function Message({ message, onGrow }: Props): React.JSX.Element {
   return (
     <article
       className={cx(styles.row, mine ? styles.mine : styles.theirs, incoming && styles.incoming)}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        void window.luna.messages.menu(message.id)
+      }}
     >
       {!mine && (
         <div className={styles.avatar}>

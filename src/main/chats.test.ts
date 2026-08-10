@@ -7,6 +7,7 @@ import {
   finishMessage,
   history,
   list,
+  messageText,
   recoverInterrupted,
   remove,
   setDraft,
@@ -63,6 +64,7 @@ describe('chat storage', () => {
       at: 20,
     })
     expect(find(db, 'chat-1')).toMatchObject({ updatedAt: 30 })
+    expect(messageText(db, 'assistant-1')).toBe('Hi there')
     expect(history(db, 'chat-1')[1]).toMatchObject({
       providerApi: 'responses',
       providerId: 'openai',

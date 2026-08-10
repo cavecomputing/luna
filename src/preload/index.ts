@@ -66,6 +66,9 @@ const api = {
       invoke('chat:send', { conversationId, text }),
     cancel: (messageId: string) => invoke('chat:cancel', { messageId }),
   },
+  messages: {
+    menu: (id: string) => invoke('messages:menu', { id }),
+  },
   settings: {
     open: () => invoke('settings:open', undefined),
   },

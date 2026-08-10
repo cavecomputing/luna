@@ -205,6 +205,12 @@ export function history(conn: DatabaseSync, conversationId: string): StoredMessa
     })
 }
 
+export function messageText(conn: DatabaseSync, id: string): string | undefined {
+  const row = conn.prepare('SELECT text FROM messages WHERE id = ?').get(id)
+  const cell = object(row)
+  return typeof cell?.text === 'string' ? cell.text : undefined
+}
+
 export function create(
   conn: DatabaseSync,
   id: string,
@@ -395,4 +401,8 @@ export function get(id: string): Conversation | undefined {
 
 export function transcript(id: string): StoredMessage[] {
   return history(db.handle(), id)
+}
+
+export function text(id: string): string | undefined {
+  return messageText(db.handle(), id)
 }

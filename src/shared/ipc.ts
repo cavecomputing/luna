@@ -70,6 +70,7 @@ export type Invocations = {
   'chats:delete': { req: { id: string }; res: undefined }
   'chat:send': { req: { conversationId: string; text: string }; res: ChatStart }
   'chat:cancel': { req: { messageId: string }; res: undefined }
+  'messages:menu': { req: { id: string }; res: undefined }
   'settings:open': { req: undefined; res: undefined }
 }
 
