@@ -1,6 +1,7 @@
 import { BrowserWindow, nativeTheme, shell } from 'electron'
 import { join } from 'node:path'
 import { APP_ORIGIN } from './protocol.js'
+import { background, chromeOptions, overlay } from './window-chrome.js'
 
 const MIN_WIDTH = 720
 const MIN_HEIGHT = 480
@@ -56,16 +57,12 @@ type Shape = {
 }
 
 function build(shape: Shape): BrowserWindow {
+  const dark = nativeTheme.shouldUseDarkColors
   const win = new BrowserWindow({
     ...shape,
     show: false,
-    ...(process.platform === 'darwin'
-      ? {
-          titleBarStyle: 'hiddenInset' as const,
-          trafficLightPosition: { x: 16, y: 18 },
-        }
-      : {}),
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#16181d' : '#f5f6f8',
+    ...chromeOptions(process.platform, dark),
+    backgroundColor: background(dark),
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.cjs'),
       contextIsolation: true,
@@ -82,6 +79,13 @@ function build(shape: Shape): BrowserWindow {
 
   lockNavigation(win)
   return win
+}
+
+/** Keep Windows caption buttons legible when the persisted theme changes. */
+export function updateChrome(win: BrowserWindow): void {
+  if (process.platform === 'win32') {
+    win.setTitleBarOverlay(overlay(nativeTheme.shouldUseDarkColors))
+  }
 }
 
 /** Deny by default. Real links open in the user's browser, not in the app. */

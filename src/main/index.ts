@@ -32,6 +32,7 @@ app.whenReady().then(
 
     nativeTheme.on('updated', () => {
       for (const win of BrowserWindow.getAllWindows()) {
+        window.updateChrome(win)
         emit(win.webContents, 'theme:changed', { dark: nativeTheme.shouldUseDarkColors })
       }
     })

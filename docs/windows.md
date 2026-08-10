@@ -40,9 +40,9 @@ npm.cmd run lint
 npm.cmd run test
 ```
 
-Renderer edits hot-reload. Main-process and preload edits restart Electron. Luna uses the
-standard Windows title bar and window controls; the inset title bar and traffic-light
-positioning are applied only on macOS.
+Renderer edits hot-reload. Main-process and preload edits restart Electron. Luna uses Electron's
+Windows title-bar overlay so its navigation controls sit beside the native caption buttons.
+The inset title bar and traffic-light positioning are applied only on macOS.
 
 Application preferences and the conversation database live under Electron's Windows
 `userData` directory, normally `%APPDATA%\Luna`. Build output does not contain that data.

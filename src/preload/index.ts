@@ -27,6 +27,8 @@ function subscribe<E extends EventName>(
 
 /** The entire surface the renderer can reach. Wrappers only, no logic. */
 const api = {
+  /** Synchronous because window chrome cannot shift after the first paint. */
+  platform: process.platform,
   app: {
     info: () => invoke('app:info', undefined),
   },

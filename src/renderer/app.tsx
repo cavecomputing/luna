@@ -20,12 +20,13 @@ export function App(): React.JSX.Element {
   const { prefs } = usePrefs()
   const chats = useChats(demoChats, prefs.defaultMode)
   const [open, setOpen] = useState(true)
+  const usesTrafficLights = window.luna.platform === 'darwin'
 
   // One ticking clock for the whole shell, so every row agrees.
   const now = useNow()
 
   return (
-    <div className={styles.shell}>
+    <div className={styles.shell} data-platform={window.luna.platform}>
       {open && (
         <Sidebar
           chats={chats}
@@ -37,7 +38,7 @@ export function App(): React.JSX.Element {
       )}
 
       <main className={styles.pane}>
-        <header className={cx(styles.top, !open && styles.inset)}>
+        <header className={cx(styles.top, !open && usesTrafficLights && styles.inset)}>
           <div className={styles.noDrag}>
             <IconButton
               label={open ? 'Hide sidebar' : 'Show sidebar'}
