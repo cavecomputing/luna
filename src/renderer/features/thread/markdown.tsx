@@ -1,6 +1,7 @@
 import { Children, isValidElement, type ComponentPropsWithoutRef, type ReactNode } from 'react'
 import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { CodeBlock } from './code-block.js'
 import { HtmlPreview } from './html-preview.js'
 import styles from './markdown.module.css'
 
@@ -35,6 +36,14 @@ function MarkdownCode({ className, children }: CodeProps): React.JSX.Element {
 function MarkdownPre({ children }: PreProps): React.JSX.Element {
   if (isValidElement<CodeProps>(children) && htmlLanguage(children.props.className)) {
     return children
+  }
+  if (isValidElement<CodeProps>(children)) {
+    return (
+      <CodeBlock
+        className={children.props.className}
+        code={codeText(children.props.children).replace(/\n$/, '')}
+      />
+    )
   }
   return <pre>{children}</pre>
 }

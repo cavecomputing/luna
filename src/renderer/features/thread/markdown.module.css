@@ -24,6 +24,10 @@
   margin: 0 0 var(--s-3);
 }
 
+.markdown > section {
+  margin: 0 0 var(--s-3);
+}
+
 .markdown h1,
 .markdown h2,
 .markdown h3,
@@ -82,7 +86,7 @@
   text-underline-offset: 2px;
 }
 
-.markdown code {
+.markdown :not(pre) > code {
   border-radius: var(--r-sm);
   background: var(--surface-sunken);
   padding: 0.12em 0.35em;

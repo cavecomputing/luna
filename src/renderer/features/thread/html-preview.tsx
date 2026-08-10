@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CopyButton } from './copy-button.js'
 import styles from './html-preview.module.css'
 
 type Props = {
@@ -45,27 +46,30 @@ export function HtmlPreview({ code }: Props): React.JSX.Element {
     <section className={styles.preview} aria-label="HTML code block">
       <header className={styles.bar}>
         <span className={styles.label}>HTML</span>
-        <div className={styles.modes} aria-label="HTML display mode">
-          <button
-            type="button"
-            className={!rendered ? styles.on : undefined}
-            aria-pressed={!rendered}
-            onClick={() => {
-              setRendered(false)
-            }}
-          >
-            Source
-          </button>
-          <button
-            type="button"
-            className={rendered ? styles.on : undefined}
-            aria-pressed={rendered}
-            onClick={() => {
-              setRendered(true)
-            }}
-          >
-            Render
-          </button>
+        <div className={styles.actions}>
+          <div className={styles.modes} aria-label="HTML display mode">
+            <button
+              type="button"
+              className={!rendered ? styles.on : undefined}
+              aria-pressed={!rendered}
+              onClick={() => {
+                setRendered(false)
+              }}
+            >
+              Source
+            </button>
+            <button
+              type="button"
+              className={rendered ? styles.on : undefined}
+              aria-pressed={rendered}
+              onClick={() => {
+                setRendered(true)
+              }}
+            >
+              Render
+            </button>
+          </div>
+          <CopyButton code={code} />
         </div>
       </header>
 

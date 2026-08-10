@@ -1,0 +1,37 @@
+.copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-sm);
+  color: var(--text-muted);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.copy:hover {
+  background: var(--surface-hover);
+  color: var(--accent);
+}
+
+.copy[data-status='copied'] {
+  color: var(--accent);
+}
+
+.copy[data-status='failed'] {
+  color: var(--danger);
+}
+
+.icon {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
