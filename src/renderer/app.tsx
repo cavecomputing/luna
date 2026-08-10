@@ -46,9 +46,21 @@ export function App(): React.JSX.Element {
 
   // One ticking clock for the whole shell, so every row agrees.
   const now = useNow()
+  const sidebarButton = (
+    <IconButton
+      label={open ? 'Hide sidebar' : 'Show sidebar'}
+      onClick={() => {
+        setOpen((value) => !value)
+      }}
+    >
+      <Collapse />
+    </IconButton>
+  )
 
   return (
     <div className={styles.shell} data-platform={window.luna.platform}>
+      {usesTrafficLights && <div className={styles.trafficToggle}>{sidebarButton}</div>}
+
       {open && (
         <Sidebar
           chats={chats}
@@ -63,19 +75,8 @@ export function App(): React.JSX.Element {
       )}
 
       <main className={styles.pane}>
-        <header className={cx(styles.top, !open && usesTrafficLights && styles.inset)}>
-          <div className={styles.noDrag}>
-            <IconButton
-              label={open ? 'Hide sidebar' : 'Show sidebar'}
-              onClick={() => {
-                setOpen((v) => !v)
-              }}
-            >
-              <span className={cx(!open && styles.flip)}>
-                <Collapse />
-              </span>
-            </IconButton>
-          </div>
+        <header className={cx(styles.top, !usesTrafficLights && styles.withInlineToggle)}>
+          {!usesTrafficLights && <div className={styles.noDrag}>{sidebarButton}</div>}
 
           <div className={styles.noDrag}>
             <ModeSwitch value={chats.currentMode} onChange={chats.setMode} />

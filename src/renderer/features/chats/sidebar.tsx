@@ -4,7 +4,6 @@ import { IconButton } from '../../ui/icon-button.js'
 import { Gear } from '../../ui/icons/gear.js'
 import { Plus } from '../../ui/icons/plus.js'
 import { Search } from '../../ui/icons/search.js'
-import { useAppInfo } from '../../lib/use-app-info.js'
 import styles from './sidebar.module.css'
 
 type Props = {
@@ -16,8 +15,6 @@ type Props = {
 }
 
 export function Sidebar({ chats, now, onSearchOpen, onSettings }: Props): React.JSX.Element {
-  const info = useAppInfo()
-
   return (
     <aside className={styles.sidebar}>
       <header className={styles.head}>
@@ -53,7 +50,6 @@ export function Sidebar({ chats, now, onSearchOpen, onSettings }: Props): React.
           <Gear />
           Settings
         </button>
-        {info?.ok === true && <p className={styles.version}>v{info.value.version}</p>}
       </footer>
     </aside>
   )

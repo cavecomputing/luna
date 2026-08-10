@@ -81,10 +81,3 @@
   background: var(--surface-hover);
   color: var(--text);
 }
-
-.version {
-  margin: 0;
-  padding: 0 var(--s-3) var(--s-1);
-  font-size: var(--t-xs);
-  color: var(--text-faint);
-}

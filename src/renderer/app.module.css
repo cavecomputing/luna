@@ -1,4 +1,5 @@
 .shell {
+  position: relative;
   display: flex;
   height: 100%;
   background: var(--bg);
@@ -15,7 +16,7 @@
 .top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: var(--s-4);
   flex: none;
   padding: var(--s-3) var(--s-5);
@@ -23,25 +24,23 @@
   -webkit-app-region: drag;
 }
 
+.withInlineToggle {
+  justify-content: space-between;
+}
+
 /* Three 46px Windows caption buttons, plus breathing room before them. */
 .shell[data-platform='win32'] .top {
   padding-right: 150px;
-}
-
-/**
- * With the sidebar hidden this header owns the window's left edge, where the
- * traffic lights sit. Reserve their width or the toggle hides underneath them.
- */
-.inset {
-  padding-left: 84px;
 }
 
 .noDrag {
   -webkit-app-region: no-drag;
 }
 
-/* The sidebar toggle points the way it will move the panel. */
-.flip {
-  display: inline-flex;
-  transform: rotate(180deg);
+.trafficToggle {
+  position: absolute;
+  z-index: 2;
+  top: 11px;
+  left: 82px;
+  -webkit-app-region: no-drag;
 }
