@@ -55,6 +55,7 @@ function makeDeps(): TestDeps {
     now: vi.fn(() => 20),
     notify: vi.fn(),
     cancelConversation: vi.fn(),
+    confirmDelete: vi.fn(() => Promise.resolve(true)),
   }
 }
 
@@ -82,11 +83,21 @@ describe('conversation IPC actions', () => {
     expect(d.notify).toHaveBeenCalledTimes(2)
   })
 
-  it('cancels an active request before deleting its conversation', () => {
+  it('cancels an active request before deleting its confirmed conversation', async () => {
     const d = makeDeps()
-    expect(deleteChat({ id: 'chat-1' }, d)).toEqual({ ok: true, value: undefined })
+    expect(await deleteChat({ id: 'chat-1' }, d)).toEqual({ ok: true, value: undefined })
     expect(d.cancelConversation).toHaveBeenCalledWith('chat-1')
     expect(d.remove).toHaveBeenCalledWith('chat-1')
+  })
+
+  it('keeps a conversation when deletion is cancelled', async () => {
+    const d = makeDeps()
+    d.confirmDelete = vi.fn(() => Promise.resolve(false))
+
+    expect(await deleteChat({ id: 'chat-1' }, d)).toEqual({ ok: true, value: undefined })
+    expect(d.cancelConversation).not.toHaveBeenCalled()
+    expect(d.remove).not.toHaveBeenCalled()
+    expect(d.notify).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -94,7 +105,7 @@ describe('conversation IPC actions', () => {
     [() => updateChatMode({ id: '../bad', mode: 'fast' }, makeDeps()), 'chat/invalid'],
     [() => updateChatPinned({ id: 'chat-1', pinned: 'yes' }, makeDeps()), 'chat/invalid'],
     [() => deleteChat({ id: 'missing' }, makeDeps()), 'chat/missing'],
-  ])('returns a stable error for invalid or missing input', (run, code) => {
-    expect(run()).toMatchObject({ ok: false, code })
+  ])('returns a stable error for invalid or missing input', async (run, code) => {
+    expect(await run()).toMatchObject({ ok: false, code })
   })
 })

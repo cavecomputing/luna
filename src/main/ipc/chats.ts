@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import type { MessageBoxOptions } from 'electron'
 import { err, ok, type Result } from '../../shared/result.js'
 import type { Conversation, Mode } from '../../shared/types.js'
 import * as chats from '../chats.js'
@@ -16,6 +17,26 @@ type Deps = {
   now: () => number
   notify: (value: Conversation[]) => void
   cancelConversation: (id: string) => void
+  confirmDelete: () => Promise<boolean>
+}
+
+async function confirmDelete(): Promise<boolean> {
+  const { BrowserWindow, dialog } = await import('electron')
+  const options: MessageBoxOptions = {
+    type: 'warning',
+    buttons: ['Delete', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+    message: 'Delete this conversation?',
+    detail: 'This cannot be undone.',
+  }
+  const parent = BrowserWindow.getFocusedWindow()
+  const result =
+    parent === null
+      ? await dialog.showMessageBox(options)
+      : await dialog.showMessageBox(parent, options)
+  return result.response === 0
 }
 
 const deps: Deps = {
@@ -33,6 +54,7 @@ const deps: Deps = {
   cancelConversation: (id) => {
     void id
   },
+  confirmDelete,
 }
 
 function object(input: unknown): Record<string, unknown> | undefined {
@@ -88,11 +110,12 @@ export function updateChatPinned(input: unknown, d: Deps): Result<Conversation> 
   return ok(value)
 }
 
-export function deleteChat(input: unknown, d: Deps): Result<undefined> {
+export async function deleteChat(input: unknown, d: Deps): Promise<Result<undefined>> {
   const req = object(input)
   const chatId = id(req?.id)
   if (chatId === undefined) return err('chat/invalid', 'conversation id was invalid')
   if (d.get(chatId) === undefined) return err('chat/missing', 'conversation was not found')
+  if (!(await d.confirmDelete())) return ok(undefined)
   d.cancelConversation(chatId)
   d.remove(chatId)
   announce(d)
