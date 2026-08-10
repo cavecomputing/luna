@@ -29,6 +29,7 @@ export default defineConfig({
         input: {
           index: 'src/renderer/index.html',
           settings: 'src/renderer/settings.html',
+          shortcuts: 'src/renderer/shortcuts.html',
         },
       },
     },

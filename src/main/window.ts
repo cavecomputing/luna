@@ -3,15 +3,19 @@ import { join } from 'node:path'
 import { APP_ORIGIN } from './protocol.js'
 import { background, chromeOptions, overlay } from './window-chrome.js'
 import { canFrameLoad } from './navigation.js'
+import { matchesShortcut } from './shortcut-input.js'
 
 const MIN_WIDTH = 720
 const MIN_HEIGHT = 480
 
 const SETTINGS_WIDTH = 800
 const SETTINGS_HEIGHT = 580
+const SHORTCUTS_WIDTH = 520
+const SHORTCUTS_HEIGHT = 500
 
 /** Only ever one Settings window; a second ⌘, focuses the existing one. */
 let settings: BrowserWindow | undefined
+let shortcuts: BrowserWindow | undefined
 
 export function create(): BrowserWindow {
   const win = build({
@@ -49,6 +53,30 @@ export function openSettings(): BrowserWindow {
   return win
 }
 
+export function openShortcuts(): BrowserWindow {
+  if (shortcuts !== undefined && !shortcuts.isDestroyed()) {
+    shortcuts.show()
+    shortcuts.focus()
+    return shortcuts
+  }
+
+  const win = build({
+    width: SHORTCUTS_WIDTH,
+    height: SHORTCUTS_HEIGHT,
+    minWidth: 420,
+    minHeight: 420,
+    title: 'Keyboard Shortcuts',
+  })
+
+  win.on('closed', () => {
+    shortcuts = undefined
+  })
+
+  load(win, 'shortcuts.html')
+  shortcuts = win
+  return win
+}
+
 type Shape = {
   width: number
   height: number
@@ -79,7 +107,20 @@ function build(shape: Shape): BrowserWindow {
   })
 
   lockNavigation(win)
+  bindShortcuts(win)
   return win
+}
+
+function bindShortcuts(win: BrowserWindow): void {
+  win.webContents.on('before-input-event', (event, input) => {
+    if (matchesShortcut(input, 'settings', process.platform)) {
+      event.preventDefault()
+      openSettings()
+    } else if (matchesShortcut(input, 'shortcuts', process.platform)) {
+      event.preventDefault()
+      openShortcuts()
+    }
+  })
 }
 
 /** Keep Windows caption buttons legible when the persisted theme changes. */

@@ -26,7 +26,6 @@ export function Sidebar({
     <aside className={styles.sidebar}>
       <header className={styles.head}>
         {collapse !== null && <div className={styles.collapse}>{collapse}</div>}
-        <h1 className={styles.brand}>Chats</h1>
         <div className={styles.actions}>
           <IconButton label="Search chats (Ctrl+F)" onClick={onSearchOpen}>
             <Search />

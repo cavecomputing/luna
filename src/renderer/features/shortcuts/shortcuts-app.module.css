@@ -1,0 +1,80 @@
+.shell {
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--titlebar) var(--s-6) var(--s-6);
+  background: var(--bg);
+}
+
+.shell::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--titlebar);
+  content: '';
+  -webkit-app-region: drag;
+}
+
+.head {
+  margin-bottom: var(--s-5);
+  -webkit-app-region: drag;
+}
+
+.head h1 {
+  margin: 0;
+  font-size: var(--t-xl);
+  line-height: 1.25;
+}
+
+.head p {
+  margin: var(--s-1) 0 0;
+  color: var(--text-muted);
+}
+
+.list {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  min-height: 52px;
+  padding: var(--s-3) var(--s-4);
+}
+
+.row + .row {
+  border-top: 1px solid var(--line-soft);
+}
+
+.row dt {
+  font-weight: 500;
+}
+
+.row dd {
+  display: flex;
+  gap: var(--s-1);
+  margin: 0;
+}
+
+.row kbd {
+  min-width: 28px;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-sunken);
+  box-shadow: 0 1px 0 var(--line);
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+}

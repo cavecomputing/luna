@@ -1,5 +1,6 @@
 import { Menu, app } from 'electron'
-import { openSettings } from './window.js'
+import { keyboardShortcuts } from '../shared/keyboard-shortcuts.js'
+import { openSettings, openShortcuts } from './window.js'
 
 /**
  * macOS needs a real menu with standard roles. Without the edit roles,
@@ -14,7 +15,7 @@ export function build(): void {
         { type: 'separator' },
         {
           label: 'Settings\u2026',
-          accelerator: 'CmdOrCtrl+,',
+          accelerator: keyboardShortcuts.settings.accelerator,
           click: () => {
             openSettings()
           },
@@ -61,6 +62,18 @@ export function build(): void {
     {
       label: 'Window',
       submenu: [{ role: 'minimize' }, { role: 'zoom' }, { role: 'front' }],
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'Keyboard Shortcuts',
+          accelerator: keyboardShortcuts.shortcuts.accelerator,
+          click: () => {
+            openShortcuts()
+          },
+        },
+      ],
     },
   ])
 

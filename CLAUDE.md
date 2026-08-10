@@ -40,6 +40,9 @@ Settled behaviour, decided — don't relitigate these while building:
 - **Conversation search is a centered, debounced `CmdOrCtrl+F` dialog**, not a permanently
   visible field. It searches conversation titles and message text, and must not change sidebar
   visibility. Row actions for pin and delete appear on hover and keyboard focus.
+- **Keyboard shortcuts are declared in `shared/keyboard-shortcuts.ts`.** The native menu and
+  Keyboard Shortcuts window both read that catalog. Add every future app shortcut there so the
+  help window cannot drift out of date.
 - **Mode is stored per conversation and restored on reopen.** Reopening a thread puts the
   switch back where the user left it, whatever the current `defaultMode` is — that pref only
   seeds a *new* chat. Nothing about a conversation should change while it wasn't being looked
