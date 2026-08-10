@@ -5,7 +5,7 @@ import { err, ok, type Result } from '../../shared/result.js'
 import type { ChatStart } from '../../shared/ipc.js'
 import type { ApiKind, Conversation, Message, ModelSlots } from '../../shared/types.js'
 import { parseThinkingTags } from '../../shared/thinking.js'
-import { streamChat, type ChatCompletion, type ChatRequest } from '../chat-api.js'
+import { streamChat, type ChatChunk, type ChatCompletion, type ChatRequest } from '../chat-api.js'
 import * as chats from '../chats.js'
 import type { StoredMessage, Turn } from '../chats.js'
 import * as db from '../db.js'
@@ -44,7 +44,7 @@ type Deps = {
   stream: (
     request: ChatRequest,
     signal: AbortSignal,
-    onDelta: (text: string) => void,
+    onDelta: (chunk: ChatChunk) => void,
   ) => Promise<Result<ChatCompletion>>
   newId: () => string
   now: () => number
@@ -105,6 +105,12 @@ function messageText(input: unknown): string | undefined {
   if (typeof input !== 'string') return undefined
   const value = input.trim()
   return value !== '' && value.length <= 100_000 ? value : undefined
+}
+
+function combineReasoning(structured: string, tagged: string): string {
+  if (structured === '') return tagged
+  if (tagged === '' || structured === tagged) return structured
+  return `${structured}\n\n${tagged}`
 }
 
 type Active = {
@@ -217,10 +223,10 @@ export class ChatCoordinator {
     let partial = ''
     let partialReasoning = ''
     let seq = 0
-    const result = await this.d.stream(request, controller.signal, (raw) => {
-      const parsed = parseThinkingTags(raw)
+    const result = await this.d.stream(request, controller.signal, (chunk) => {
+      const parsed = parseThinkingTags(chunk.text)
       partial = parsed.text
-      partialReasoning = parsed.reasoning
+      partialReasoning = combineReasoning(chunk.reasoning, parsed.reasoning)
       if (showStream) {
         seq += 1
         this.d.notifyDelta({
@@ -236,20 +242,21 @@ export class ChatCoordinator {
     this.active.delete(messageId)
     if (result.ok) {
       const parsed = parseThinkingTags(result.value.text, true)
-      if (!showStream && (parsed.text !== '' || parsed.reasoning !== '')) {
+      const reasoning = combineReasoning(result.value.reasoning, parsed.reasoning)
+      if (!showStream && (parsed.text !== '' || reasoning !== '')) {
         seq += 1
         this.d.notifyDelta({
           conversationId,
           messageId,
           text: parsed.text,
-          reasoning: parsed.reasoning,
+          reasoning,
           seq,
         })
       }
       const message = this.d.finish(
         messageId,
         parsed.text,
-        parsed.reasoning,
+        reasoning,
         'complete',
         this.d.now(),
         request.provider.api,

@@ -97,18 +97,22 @@ describe('streamChat', () => {
         ]),
       ),
     )
-    const deltas: string[] = []
-    const result = await streamChat(request(), new AbortController().signal, (text) => {
-      deltas.push(text)
+    const deltas: { text: string; reasoning: string }[] = []
+    const result = await streamChat(request(), new AbortController().signal, (chunk) => {
+      deltas.push(chunk)
     }, fetcher)
-    expect(deltas).toEqual(['Hello', 'Hello!'])
     expect(result).toEqual({
       ok: true,
       value: {
         text: 'Hello!',
+        reasoning: '',
         providerItems: [{ type: 'message', id: 'msg_2' }],
       },
     })
+    expect(deltas).toEqual([
+      { text: 'Hello', reasoning: '' },
+      { text: 'Hello!', reasoning: '' },
+    ])
   })
 
   it('assembles Chat Completions deltas until DONE', async () => {
@@ -123,7 +127,75 @@ describe('streamChat', () => {
     )
     expect(
       await streamChat(request('chat-completions'), new AbortController().signal, () => undefined, fetcher),
-    ).toEqual({ ok: true, value: { text: 'Hi there' } })
+    ).toEqual({ ok: true, value: { text: 'Hi there', reasoning: '' } })
+  })
+
+  it('accepts an OpenRouter Responses DONE marker and streams reasoning', async () => {
+    const fetcher = vi.fn(() =>
+      Promise.resolve(
+        sse([
+          'data: {"type":"response.reasoning.delta","delta":"Checking"}\n\n',
+          'data: {"type":"response.output_text.delta","delta":"Answer"}\n\n',
+          'data: {"type":"response.completed","response":{"output":[]}}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      ),
+    )
+    const deltas: { text: string; reasoning: string }[] = []
+    expect(
+      await streamChat(request(), new AbortController().signal, (chunk) => {
+        deltas.push(chunk)
+      }, fetcher),
+    ).toEqual({ ok: true, value: { text: 'Answer', reasoning: 'Checking', providerItems: [] } })
+    expect(deltas).toEqual([
+      { text: '', reasoning: 'Checking' },
+      { text: 'Answer', reasoning: 'Checking' },
+    ])
+  })
+
+  it('supports OpenAI reasoning summary and reasoning text events', async () => {
+    const fetcher = vi.fn(() =>
+      Promise.resolve(
+        sse([
+          'data: {"type":"response.reasoning_summary_text.delta","delta":"Summary"}\n\n',
+          'data: {"type":"response.reasoning_text.delta","delta":" details"}\n\n',
+          'data: {"type":"response.completed","response":{"output":[]}}\n\n',
+        ]),
+      ),
+    )
+    expect(
+      await streamChat(request(), new AbortController().signal, () => undefined, fetcher),
+    ).toEqual({
+      ok: true,
+      value: { text: '', reasoning: 'Summary details', providerItems: [] },
+    })
+  })
+
+  it('supports Chat Completions reasoning aliases and completion without DONE', async () => {
+    const fetcher = vi.fn(() =>
+      Promise.resolve(
+        sse([
+          'data: {"choices":[{"delta":{"reasoning_content":"Think"}}]}\n\n',
+          'data: {"choices":[{"delta":{"content":"Answer"},"finish_reason":"stop"}]}\n\n',
+        ]),
+      ),
+    )
+    expect(
+      await streamChat(request('chat-completions'), new AbortController().signal, () => undefined, fetcher),
+    ).toEqual({ ok: true, value: { text: 'Answer', reasoning: 'Think' } })
+  })
+
+  it('extracts plaintext Chat Completions reasoning details', async () => {
+    const fetcher = vi.fn(() =>
+      Promise.resolve(
+        sse([
+          'data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.text","text":"One"},{"type":"reasoning.encrypted","data":"secret"},{"type":"reasoning.summary","summary":"Two"}]},"finish_reason":"stop"}]}\n\n',
+        ]),
+      ),
+    )
+    expect(
+      await streamChat(request('chat-completions'), new AbortController().signal, () => undefined, fetcher),
+    ).toEqual({ ok: true, value: { text: '', reasoning: 'OneTwo' } })
   })
 
   it('uses completed Responses output when a server sends no delta events', async () => {
@@ -134,13 +206,13 @@ describe('streamChat', () => {
         ]),
       ),
     )
-    const deltas: string[] = []
+    const deltas: { text: string; reasoning: string }[] = []
     expect(
-      await streamChat(request(), new AbortController().signal, (text) => {
-        deltas.push(text)
+      await streamChat(request(), new AbortController().signal, (chunk) => {
+        deltas.push(chunk)
       }, fetcher),
     ).toMatchObject({ ok: true, value: { text: 'Whole reply' } })
-    expect(deltas).toEqual(['Whole reply'])
+    expect(deltas).toEqual([{ text: 'Whole reply', reasoning: '' }])
   })
 
   it('returns a stable error for a provider error mid-stream', async () => {

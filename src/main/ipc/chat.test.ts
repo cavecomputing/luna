@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Prefs } from '../../shared/prefs.js'
 import type { Result } from '../../shared/result.js'
 import type { Conversation, Message, MessageStatus } from '../../shared/types.js'
-import type { ChatCompletion, ChatRequest } from '../chat-api.js'
+import type { ChatChunk, ChatCompletion, ChatRequest } from '../chat-api.js'
 import type { ProviderConfig } from '../providers.js'
 import { ChatCoordinator } from './chat.js'
 
@@ -84,10 +84,10 @@ function makeDeps(): TestDeps {
       id === conversation.id ? { ...conversation, title } : undefined,
     ),
     list: vi.fn(() => [conversation]),
-    stream: vi.fn((_request: ChatRequest, _signal: AbortSignal, onDelta: (text: string) => void) => {
-      onDelta('Hel')
-      onDelta('Hello')
-      return Promise.resolve({ ok: true as const, value: { text: 'Hello' } })
+    stream: vi.fn((_request: ChatRequest, _signal: AbortSignal, onDelta: (chunk: ChatChunk) => void) => {
+      onDelta({ text: 'Hel', reasoning: '' })
+      onDelta({ text: 'Hello', reasoning: '' })
+      return Promise.resolve({ ok: true as const, value: { text: 'Hello', reasoning: '' } })
     }),
     newId: vi.fn(() => `${++ids === 1 ? 'user' : 'assistant'}-1`),
     now: vi.fn(() => 10),
@@ -131,13 +131,13 @@ describe('ChatCoordinator', () => {
   it('separates thinking tags even when they are split across streamed deltas', async () => {
     const d = makeDeps()
     d.stream = vi.fn(
-      (_request: ChatRequest, _signal: AbortSignal, onDelta: (text: string) => void) => {
-        onDelta('<thi')
-        onDelta('<think>checking</thi')
-        onDelta('<think>checking</think>Answer')
+      (_request: ChatRequest, _signal: AbortSignal, onDelta: (chunk: ChatChunk) => void) => {
+        onDelta({ text: '<thi', reasoning: '' })
+        onDelta({ text: '<think>checking</thi', reasoning: '' })
+        onDelta({ text: '<think>checking</think>Answer', reasoning: '' })
         return Promise.resolve({
           ok: true as const,
-          value: { text: '<think>checking</think>Answer' },
+          value: { text: '<think>checking</think>Answer', reasoning: '' },
         })
       },
     )
@@ -167,10 +167,30 @@ describe('ChatCoordinator', () => {
     )
   })
 
+  it('combines structured provider reasoning with thinking tags', async () => {
+    const d = makeDeps()
+    d.stream = vi.fn(
+      (_request: ChatRequest, _signal: AbortSignal, onDelta: (chunk: ChatChunk) => void) => {
+        onDelta({ text: '<think>tagged</think>Answer', reasoning: 'structured' })
+        return Promise.resolve({
+          ok: true as const,
+          value: { text: '<think>tagged</think>Answer', reasoning: 'structured' },
+        })
+      },
+    )
+    await new ChatCoordinator(d).send({ conversationId: 'chat-1', text: 'Question' })
+    await vi.waitFor(() => {
+      expect(d.notifyDone).toHaveBeenCalledWith(
+        'chat-1',
+        assistant('complete', 'Answer', 'structured\n\ntagged'),
+      )
+    })
+  })
+
   it('persists and publishes a mid-stream error', async () => {
     const d = makeDeps()
-    d.stream = vi.fn((_request: ChatRequest, _signal: AbortSignal, onDelta: (text: string) => void) => {
-      onDelta('partial')
+    d.stream = vi.fn((_request: ChatRequest, _signal: AbortSignal, onDelta: (chunk: ChatChunk) => void) => {
+      onDelta({ text: 'partial', reasoning: '' })
       return Promise.resolve({ ok: false as const, code: 'chat/provider', message: 'failed' })
     })
     const chat = new ChatCoordinator(d)
@@ -186,9 +206,9 @@ describe('ChatCoordinator', () => {
 
   it('aborts an active message and stores the partial reply as cancelled', async () => {
     const d = makeDeps()
-    d.stream = vi.fn((_request: ChatRequest, signal: AbortSignal, onDelta: (text: string) => void) =>
+    d.stream = vi.fn((_request: ChatRequest, signal: AbortSignal, onDelta: (chunk: ChatChunk) => void) =>
       new Promise<Result<ChatCompletion>>((resolve) => {
-        onDelta('partial')
+        onDelta({ text: 'partial', reasoning: '' })
         signal.addEventListener('abort', () => {
           resolve({ ok: false, code: 'chat/cancelled', message: 'cancelled' })
         })
@@ -245,13 +265,13 @@ describe('ChatCoordinator', () => {
     d.prefs = vi.fn(() => ({ ...preferences, autoTitle: true }))
     let calls = 0
     d.stream = vi.fn(
-      (_request: ChatRequest, _signal: AbortSignal, onDelta: (text: string) => void) => {
+      (_request: ChatRequest, _signal: AbortSignal, onDelta: (chunk: ChatChunk) => void) => {
         calls += 1
         if (calls === 1) {
-          onDelta('Answer')
-          return Promise.resolve({ ok: true as const, value: { text: 'Answer' } })
+          onDelta({ text: 'Answer', reasoning: '' })
+          return Promise.resolve({ ok: true as const, value: { text: 'Answer', reasoning: '' } })
         }
-        return Promise.resolve({ ok: true as const, value: { text: 'Helpful Greeting' } })
+        return Promise.resolve({ ok: true as const, value: { text: 'Helpful Greeting', reasoning: '' } })
       },
     )
     await new ChatCoordinator(d).send({ conversationId: 'chat-1', text: 'Hello' })

@@ -15,7 +15,13 @@ export type ChatRequest = {
 
 export type ChatCompletion = {
   text: string
+  reasoning: string
   providerItems?: unknown[]
+}
+
+export type ChatChunk = {
+  text: string
+  reasoning: string
 }
 
 function object(input: unknown): Record<string, unknown> | undefined {
@@ -88,6 +94,46 @@ function outputText(items: unknown[]): string {
   return text
 }
 
+function textParts(input: unknown): string {
+  if (typeof input === 'string') return input
+  if (!Array.isArray(input)) return ''
+  let text = ''
+  for (const part of input) {
+    const value = object(part)
+    if (typeof value?.text === 'string') text += value.text
+    else if (typeof value?.content === 'string') text += value.content
+  }
+  return text
+}
+
+function reasoningDetails(input: unknown): string {
+  if (!Array.isArray(input)) return ''
+  let reasoning = ''
+  for (const detail of input) {
+    const value = object(detail)
+    if (typeof value?.text === 'string') reasoning += value.text
+    else if (typeof value?.summary === 'string') reasoning += value.summary
+  }
+  return reasoning
+}
+
+function outputReasoning(items: unknown[]): string {
+  let reasoning = ''
+  for (const item of items) {
+    const value = object(item)
+    if (typeof value?.reasoning === 'string') reasoning += value.reasoning
+    reasoning += reasoningDetails(value?.summary)
+    if (!Array.isArray(value?.content)) continue
+    for (const part of value.content) {
+      const content = object(part)
+      if (content?.type === 'reasoning_text' && typeof content.text === 'string') {
+        reasoning += content.text
+      }
+    }
+  }
+  return reasoning
+}
+
 function statusError(status: number): Result<never> {
   if (status === 401 || status === 403) {
     return err('chat/auth', 'provider rejected the credential')
@@ -99,8 +145,14 @@ function statusError(status: number): Result<never> {
 
 type StreamState = {
   text: string
+  reasoning: string
   done: boolean
   providerItems?: unknown[]
+}
+
+type EventDelta = {
+  text?: string
+  reasoning?: string
 }
 
 function parseJson(data: string): Record<string, unknown> | undefined {
@@ -111,7 +163,11 @@ function parseJson(data: string): Record<string, unknown> | undefined {
   }
 }
 
-function responseEvent(event: SseEvent, state: StreamState): Result<string | undefined> {
+function responseEvent(event: SseEvent, state: StreamState): Result<EventDelta | undefined> {
+  if (event.data === '[DONE]') {
+    state.done = true
+    return ok(undefined)
+  }
   const body = parseJson(event.data)
   if (body === undefined) return err('chat/bad-stream', 'provider sent invalid stream JSON')
   const type = typeof body.type === 'string' ? body.type : event.event
@@ -119,31 +175,57 @@ function responseEvent(event: SseEvent, state: StreamState): Result<string | und
     if (typeof body.delta !== 'string') {
       return err('chat/bad-stream', 'response delta was not text')
     }
-    return ok(body.delta)
+    return ok({ text: body.delta })
   }
   if (type === 'response.refusal.delta') {
     if (typeof body.delta !== 'string') {
       return err('chat/bad-stream', 'response refusal delta was not text')
     }
-    return ok(body.delta)
+    return ok({ text: body.delta })
   }
-  if (type === 'response.completed') {
-    const response = object(body.response)
-    if (Array.isArray(response?.output)) {
-      state.providerItems = response.output
-      const fallback = state.text === '' ? outputText(response.output) : ''
-      state.done = true
-      return ok(fallback === '' ? undefined : fallback)
+  if (
+    type === 'response.reasoning.delta' ||
+    type === 'response.reasoning_text.delta' ||
+    type === 'response.reasoning_summary_text.delta'
+  ) {
+    if (typeof body.delta !== 'string') {
+      return err('chat/bad-stream', 'response reasoning delta was not text')
     }
-    state.done = true
+    return ok({ reasoning: body.delta })
+  }
+  if (type === 'response.reasoning_text.done' || type === 'response.reasoning_summary_text.done') {
+    return state.reasoning === '' && typeof body.text === 'string'
+      ? ok({ reasoning: body.text })
+      : ok(undefined)
   }
   if (type === 'response.failed' || type === 'error') {
     return err('chat/provider', 'provider reported a response error')
   }
+  if (type === 'response.completed' || type === 'response.incomplete') {
+    const response = object(body.response)
+    if (Array.isArray(response?.output)) {
+      state.providerItems = response.output
+      const text = state.text === '' ? outputText(response.output) : ''
+      const reasoning = state.reasoning === '' ? outputReasoning(response.output) : ''
+      state.done = true
+      return ok({
+        ...(text === '' ? {} : { text }),
+        ...(reasoning === '' ? {} : { reasoning }),
+      })
+    }
+    state.done = true
+  }
   return ok(undefined)
 }
 
-function chatEvent(event: SseEvent, state: StreamState): Result<string | undefined> {
+function chatReasoning(delta: Record<string, unknown>): string {
+  const direct = [delta.reasoning, delta.reasoning_content, delta.thinking].find(
+    (value) => typeof value === 'string' && value !== '',
+  )
+  return typeof direct === 'string' ? direct : reasoningDetails(delta.reasoning_details)
+}
+
+function chatEvent(event: SseEvent, state: StreamState): Result<EventDelta | undefined> {
   if (event.data === '[DONE]') {
     state.done = true
     return ok(undefined)
@@ -154,14 +236,25 @@ function chatEvent(event: SseEvent, state: StreamState): Result<string | undefin
     return err('chat/provider', 'provider reported a completion error')
   }
   if (!Array.isArray(body.choices)) return ok(undefined)
-  let delta = ''
+  let text = ''
+  let reasoning = ''
   for (const choice of body.choices) {
-    const item = object(object(choice)?.delta)
-    const content = item?.content
-    if (typeof content === 'string') delta += content
-    if (typeof item?.refusal === 'string') delta += item.refusal
+    const parsedChoice = object(choice)
+    const finishReason = parsedChoice?.finish_reason
+    if (finishReason === 'error') {
+      return err('chat/provider', 'provider reported a completion error')
+    }
+    if (typeof finishReason === 'string' && finishReason !== '') state.done = true
+    const item = object(parsedChoice?.delta)
+    if (item === undefined) continue
+    text += textParts(item.content)
+    if (typeof item.refusal === 'string') text += item.refusal
+    reasoning += chatReasoning(item)
   }
-  return ok(delta === '' ? undefined : delta)
+  return ok({
+    ...(text === '' ? {} : { text }),
+    ...(reasoning === '' ? {} : { reasoning }),
+  })
 }
 
 function isAbort(error: unknown): boolean {
@@ -171,7 +264,7 @@ function isAbort(error: unknown): boolean {
 export async function streamChat(
   request: ChatRequest,
   signal: AbortSignal,
-  onDelta: (text: string) => void,
+  onDelta: (chunk: ChatChunk) => void,
   fetcher: Fetch,
 ): Promise<Result<ChatCompletion>> {
   let response: Response
@@ -195,7 +288,7 @@ export async function streamChat(
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   const parser = new SseParser()
-  const state: StreamState = { text: '', done: false }
+  const state: StreamState = { text: '', reasoning: '', done: false }
   const consume = (events: SseEvent[]): Result<undefined> => {
     for (const event of events) {
       const parsed =
@@ -204,8 +297,11 @@ export async function streamChat(
           : chatEvent(event, state)
       if (!parsed.ok) return parsed
       if (parsed.value !== undefined) {
-        state.text += parsed.value
-        onDelta(state.text)
+        state.text += parsed.value.text ?? ''
+        state.reasoning += parsed.value.reasoning ?? ''
+        if (parsed.value.text !== undefined || parsed.value.reasoning !== undefined) {
+          onDelta({ text: state.text, reasoning: state.reasoning })
+        }
       }
     }
     return ok(undefined)
@@ -236,6 +332,7 @@ export async function streamChat(
   if (!state.done) return err('chat/stream-ended', 'provider stream ended before completion')
   return ok({
     text: state.text,
+    reasoning: state.reasoning,
     ...(state.providerItems === undefined ? {} : { providerItems: state.providerItems }),
   })
 }
