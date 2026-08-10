@@ -1,9 +1,10 @@
 # Luna
 
-A macOS desktop AI chat assistant. Electron + TypeScript + React. Not currently scaffolded —
-the layout and commands below are the contract that scaffolding must satisfy.
+A desktop AI chat assistant for macOS and Windows. Electron + TypeScript + React. The layout,
+commands, security boundaries, and platform rules below are the contract for ongoing work.
 
 Deep reference (read on demand, do not preload): [docs/architecture.md](docs/architecture.md).
+Windows setup and packaging reference: [docs/windows.md](docs/windows.md).
 
 ## What Luna is
 
@@ -20,7 +21,7 @@ Surfaces, in build order:
    button, collapsible sidebar.
 3. **Composer** — multiline input, attachments, send. Enter sends, Shift+Enter newlines.
 4. **Mode switch** — `Fast` and `Expert`, a per-conversation model choice.
-5. **Settings** — a separate window (⌘,), not an in-app pane. Providers, the two model
+5. **Settings** — a separate window (`CmdOrCtrl+,`), not an in-app pane. Providers, the two model
    slots, sampling, appearance, privacy.
 
 Deliberately not built: suggestion chips under assistant messages. Removed once the
@@ -33,7 +34,7 @@ Settled behaviour, decided — don't relitigate these while building:
 
 - **Message actions are a right-click context menu.** Not hover-reveal buttons, not a
   permanently visible row of icons. Use a native `Menu.popup()` from main, requested over
-  IPC, so it looks and behaves like the rest of macOS.
+  IPC, so it looks and behaves like the host operating system.
 - **Conversation titles come from the Fast model**, generated after the first exchange.
   The `autoTitle` pref governs it.
 - **Mode is stored per conversation and restored on reopen.** Reopening a thread puts the
@@ -53,10 +54,12 @@ npm run typecheck    # tsc --noEmit against tsconfig.node.json and tsconfig.web.
 npm run lint         # eslint --max-warnings 0
 npm run test         # vitest run
 npm run build        # typecheck + lint + electron-vite build
-npm run package      # electron-builder, unsigned local .app
-npm run dist         # electron-builder DMG (signing/notarizing needs env credentials)
+npm run package      # electron-builder, unpacked app for the current operating system
+npm run dist         # DMG on macOS; NSIS installer on Windows
 npm run setup        # re-enable git hooks by hand; `prepare` already does this
 ```
+
+On Windows PowerShell, use `npm.cmd` if the local execution policy blocks the `npm.ps1` shim.
 
 Prefer a single test file (`npm run test -- src/main/ipc/app.test.ts`) over the full suite
 while iterating.
@@ -232,8 +235,9 @@ no new attack surface. Don't add a SQLite package.
 - Turn on `PRAGMA journal_mode = WAL` and `foreign_keys = ON`.
 - Parse every row on the way out. A column is `unknown` until validated, exactly like IPC
   and disk elsewhere. Rows are not typed by assertion.
-- **API keys never go in the database.** They stay in the Keychain via `safeStorage`. The
-  database may hold a provider's name, base URL and model — never its credential.
+- **API keys never go in the database.** They stay in platform secure storage via
+  `safeStorage` (Keychain on macOS, DPAPI-backed storage on Windows). The database may hold a
+  provider's name, base URL and model — never its credential.
 
 Preferences live in the `prefs` table, one row per field, JSON-encoded so strings and booleans
 both round-trip. There is no in-memory cache: a single-row read takes microseconds, and a cache
@@ -277,12 +281,12 @@ it also holds the `window.luna` bridge.
   components, hooks and state. State shared by two features is lifted to `app.tsx`, not put
   in a store.
 - Dark tokens live in one `@media (prefers-color-scheme: dark)` block in `tokens.css`. Main
-  pins the app to light (see macOS below), so that block is dormant until the theme preference
-  lands — keep it correct anyway. Don't branch on theme in JS.
+  applies the stored preference and defaults it to light, so keep that block correct. Don't
+  branch on theme in JS.
 - Never call `Date.now()` during render — it is impure and freezes relative timestamps at the
   last re-render. Use `useNow()`.
-- Any header that can sit at the window's left edge must clear the traffic lights (see
-  `.inset` in `app.module.css`), or its first control ends up underneath them.
+- On macOS, any header that can sit at the window's left edge must clear the traffic lights
+  (see `.inset` in `app.module.css`). Do not apply that inset to the standard Windows title bar.
 
 ## Code shape
 
@@ -322,7 +326,16 @@ it also holds the `window.luna` bridge.
 - Keep dependencies few. Every prod dep ships to users and is attack surface — prefer the
   stdlib or 20 lines of our own code over a package.
 
-## macOS
+## Platform behavior
+
+Shared rules:
+
+- **Light is the default.** Main applies the persisted light / dark / system preference through
+  `nativeTheme`; do not make platform-specific theme branches in the renderer.
+- Use the cross-platform font stack in `tokens.css`; platform-native fonts should win naturally.
+- Persist and restore window bounds across launches on both operating systems.
+
+### macOS
 
 - Window: `titleBarStyle: 'hiddenInset'`, `trafficLightPosition` tuned to our chrome height,
   content drawn behind the title bar.
@@ -331,14 +344,21 @@ it also holds the `window.luna` bridge.
 - App stays alive on last window close; the dock icon stays put and `activate` recreates a
   window. Only `window-all-closed` → quit on non-darwin. Luna is an ordinary windowed app,
   not a menu bar app — don't hide the dock icon or add a tray.
-- **Light is the default.** Main sets `nativeTheme.themeSource = 'light'` at startup, so Luna
-  opens light whatever the system is set to. The dark tokens ship and stay maintained; this
-  becomes a light / dark / system preference once Settings exists. Don't change it back to
-  following the system without that setting.
-- System font stack: `-apple-system, BlinkMacSystemFont, 'SF Pro Text'`. 8px spacing grid.
-- Persist and restore window bounds across launches.
-- Universal binary (arm64 + x64), hardened runtime, notarized. Entitlements stay minimal —
+- Ship arm64 and x64 DMGs with hardened runtime and notarization. Entitlements stay minimal —
   add one only when a feature actually needs it, and note why in the entitlements file.
+
+### Windows
+
+- Use the standard Windows title bar and native minimize, maximize, and close controls. The
+  macOS `hiddenInset` and `trafficLightPosition` options must remain conditional on `darwin`.
+- Quit when the last window closes. Do not add a tray or background-app lifecycle unless the
+  product requirements explicitly change.
+- Package x64 with NSIS. The unpacked app lives under `release/win-unpacked/`; `npm run dist`
+  creates `release/Luna-Setup-<version>-x64.exe`.
+- Local builds are unsigned and may trigger SmartScreen. Public releases need Authenticode
+  signing credentials kept outside the repository.
+- Git hooks remain POSIX shell scripts. Git for Windows supplies their runtime; npm invokes the
+  cross-platform `scripts/setup-hooks.mjs` installer, so `sh` need not be on PowerShell's PATH.
 
 ## Errors and logging
 
@@ -364,11 +384,12 @@ it is a breach.
 - Real conversation data, chat exports, database files, or logs from a real session.
 - Screenshots containing a real conversation, a real name, or a real email address.
 
-**Where secrets live:** API keys go in the macOS Keychain via Electron's `safeStorage`, written
-and read **only** in main. They never enter `shared/`, never enter preload, never cross IPC to
-the renderer, and never land in a plain file under `userData`. The renderer asks main to make a
-request; it never sees the key. Settings UI writes a key by sending it to main once and shows a
-masked placeholder afterward, never the value.
+**Where secrets live:** API keys go into platform secure storage through Electron's
+`safeStorage` (Keychain on macOS, DPAPI-backed storage on Windows), written and read **only** in
+main. They never enter `shared/`, never enter preload, never cross IPC to the renderer, and never
+land in a plain file under `userData`. The renderer asks main to make a request; it never sees
+the key. Settings UI writes a key by sending it to main once and shows a masked placeholder
+afterward, never the value.
 
 **Logging:** never log message content, prompt text, completion text, file paths from the
 user's disk, or a key — not even a prefix of a key, not even in dev. Log channel names, error
@@ -473,7 +494,7 @@ personal or secret is staged.
 - Ship a setting that needs a reload or restart, or a control that changes nothing.
 - Let one window's copy of a setting drift from another's. Main broadcasts; every window listens.
 - `git add -A` / `git add .` without reading what it staged.
-- Put an API key anywhere outside main + Keychain.
+- Put an API key anywhere outside main + platform `safeStorage`.
 - Log prompt text, completion text, or a user file path.
 - Disable `contextIsolation` / `sandbox`, or enable `nodeIntegration`.
 - Import `electron` or any `node:` module in `src/renderer/`.
