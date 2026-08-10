@@ -20,6 +20,7 @@
   --text: #14161a;
   --text-muted: #6b7280;
   --text-faint: #9aa3af;
+  --danger: #c0362c;
 
   /* Lines and depth */
   --line: #e6e8ec;
@@ -81,6 +82,7 @@
     --text: #f2f4f7;
     --text-muted: #9aa3af;
     --text-faint: #6b7280;
+    --danger: #f28b82;
 
     --line: #262b34;
     --line-soft: #1e222a;

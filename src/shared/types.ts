@@ -3,6 +3,36 @@
 /** Per-conversation model choice. Shown as the Fast / Expert switch. */
 export type Mode = 'fast' | 'expert'
 
+/** The two OpenAI-compatible request surfaces Luna can target. */
+export type ApiKind = 'responses' | 'chat-completions'
+
+/** Non-secret provider configuration. Credentials never appear in this type. */
+export type Provider = {
+  id: string
+  name: string
+  baseUrl: string
+  api: ApiKind
+  organization: string
+  project: string
+  hasApiKey: boolean
+}
+
+export type ProviderDraft = Omit<Provider, 'id' | 'hasApiKey'>
+
+/** Basic model metadata returned by the OpenAI-compatible GET /models route. */
+export type ProviderModel = {
+  id: string
+  ownedBy?: string
+  created?: number
+}
+
+export type ModelSlot = {
+  providerId: string | null
+  model: string
+}
+
+export type ModelSlots = Record<Mode, ModelSlot>
+
 export type Role = 'user' | 'assistant'
 
 export type Message = {

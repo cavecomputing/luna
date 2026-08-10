@@ -6,6 +6,25 @@ A desktop AI chat assistant for macOS and Windows. Electron + TypeScript + React
 Talks to any OpenAI-compatible endpoint. Two configurable models: **Fast** for quick
 replies, **Expert** for harder work.
 
+## Configure a provider
+
+Open Settings with `CmdOrCtrl+,`, then:
+
+1. Under **Providers**, edit the preconfigured OpenAI endpoint or add another compatible
+   server. Choose Responses API for current OpenAI features or Chat Completions for servers
+   that implement only that compatibility surface.
+2. Enter an API key if the server requires one. Keyless local servers are supported. OpenAI
+   organization and project IDs are optional.
+3. Use **Save & test** to call the server's `GET /models` endpoint.
+4. Under **Models**, choose a provider separately for Fast and Expert, then select a returned
+   model or type an exact model ID. Both slots may use the same provider.
+
+Provider configuration and model assignments live in `luna.db` under Electron's `userData`
+directory. API keys do not: Electron encrypts them with the macOS Keychain or Windows DPAPI,
+and the Settings window can only see whether a key exists.
+
+Conversation storage and model response transport are not wired yet.
+
 ## Requirements
 
 - macOS or Windows

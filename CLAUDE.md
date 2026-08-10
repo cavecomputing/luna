@@ -246,6 +246,13 @@ Preferences live in the `prefs` table, one row per field, JSON-encoded so string
 both round-trip. There is no in-memory cache: a single-row read takes microseconds, and a cache
 is one more place a value can go stale.
 
+Provider metadata lives in `providers`; the exactly two rows in `model_slots` independently
+assign Fast and Expert to a provider and model ID. Provider `api` is either `responses` or
+`chat-completions`. Model discovery uses the provider's OpenAI-compatible `GET /models` route,
+but the UI must always accept a manually typed model ID because compatible servers may expose
+an incomplete catalog or no catalog at all. Optional OpenAI organization and project IDs are
+stored as provider metadata and sent as headers by main.
+
 `prefs.json` is gone. `adoptLegacy()` folds an existing file into the database on first launch
 and deletes it, so a setting never has two homes. Leave that function in place until the
 installed base has run it once; it is a no-op on every launch after the first.

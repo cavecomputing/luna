@@ -269,12 +269,24 @@ and the stack, never the conversation.
 
 ### API keys
 
-`safeStorage.encryptString` / `decryptString`, backed by the macOS Keychain. Written once from
-Settings, read only in main, held in memory for the process lifetime and never written to a
-plain file, a log, a preference JSON, or an IPC response.
+`safeStorage.encryptString` / `decryptString`, backed by the macOS Keychain or Windows DPAPI.
+Written once from Settings, read only in main, and never written to a plain file, a log, a
+preference JSON, or an IPC response. The encrypted bytes live under `userData/provider-keys`;
+SQLite stores only the provider's non-secret metadata and whether a Fast or Expert slot points
+to it.
 
-The renderer can ask `settings:hasKey` and get a boolean. It cannot ask for the key. Settings
-shows `••••••••` and a Replace button, never the value.
+Provider responses include only a `hasApiKey` boolean. The renderer cannot ask for the key;
+Settings shows a masked placeholder and a replace/remove action, never the value.
+
+### Providers and model slots
+
+`providers` stores a name, base URL, API surface (`responses` or `chat-completions`), and the
+optional OpenAI organization/project routing IDs. `model_slots` has exactly two rows, `fast`
+and `expert`; each row independently references a provider and stores a model ID.
+
+Model discovery calls the OpenAI-compatible `GET /models` route in main. The renderer receives
+only parsed model metadata. Discovery is a convenience, not a gate: compatible servers do not
+all expose the same catalog, so the model field always accepts a manually typed ID.
 
 ## Startup performance
 

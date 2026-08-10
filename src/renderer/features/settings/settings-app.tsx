@@ -33,7 +33,7 @@ export function SettingsApp(): React.JSX.Element {
         ))}
       </nav>
 
-      <main className={styles.panel}>
+      <main className={styles.panel} key={active}>
         <div className={styles.drag} />
         {active === 'providers' && <Providers />}
         {active === 'models' && <Models />}

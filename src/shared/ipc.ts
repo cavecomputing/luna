@@ -6,6 +6,7 @@
  */
 
 import type { Prefs } from './prefs.js'
+import type { ModelSlots, Mode, Provider, ProviderDraft, ProviderModel } from './types.js'
 
 export type AppInfo = {
   name: string
@@ -19,6 +20,17 @@ export type Invocations = {
   'app:info': { req: undefined; res: AppInfo }
   'prefs:get': { req: undefined; res: Prefs }
   'prefs:set': { req: Prefs; res: Prefs }
+  'providers:list': { req: undefined; res: Provider[] }
+  'providers:create': { req: ProviderDraft; res: Provider }
+  'providers:update': { req: { id: string; provider: ProviderDraft }; res: Provider }
+  'providers:delete': { req: { id: string }; res: undefined }
+  'providers:set-key': { req: { id: string; apiKey: string | null }; res: Provider }
+  'providers:models': { req: { id: string }; res: ProviderModel[] }
+  'models:get': { req: undefined; res: ModelSlots }
+  'models:set': {
+    req: { slot: Mode; providerId: string | null; model: string }
+    res: ModelSlots
+  }
   'settings:open': { req: undefined; res: undefined }
 }
 
@@ -27,6 +39,10 @@ export type Events = {
   'theme:changed': { dark: boolean }
   /** Sent to every window after a successful write. Carries the stored set. */
   'prefs:changed': Prefs
+  /** Non-secret provider configuration changed. */
+  'providers:changed': Provider[]
+  /** Fast or Expert was assigned to a different provider/model pair. */
+  'models:changed': ModelSlots
 }
 
 export type Channel = keyof Invocations

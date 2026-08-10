@@ -13,6 +13,26 @@ const steps: readonly string[] = [
      key   TEXT PRIMARY KEY,
      value TEXT NOT NULL
    ) STRICT;`,
+  `CREATE TABLE providers (
+     id           TEXT PRIMARY KEY,
+     name         TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
+     base_url     TEXT NOT NULL,
+     api          TEXT NOT NULL CHECK (api IN ('responses', 'chat-completions')),
+     organization TEXT NOT NULL DEFAULT '',
+     project      TEXT NOT NULL DEFAULT ''
+   ) STRICT;
+
+   CREATE TABLE model_slots (
+     slot        TEXT PRIMARY KEY CHECK (slot IN ('fast', 'expert')),
+     provider_id TEXT REFERENCES providers(id) ON DELETE SET NULL,
+     model       TEXT NOT NULL DEFAULT ''
+   ) STRICT;
+
+   INSERT INTO providers (id, name, base_url, api)
+   VALUES ('openai', 'OpenAI', 'https://api.openai.com/v1', 'responses');
+
+   INSERT INTO model_slots (slot, provider_id, model)
+   VALUES ('fast', 'openai', ''), ('expert', 'openai', '');`,
 ]
 
 /** The version a fully migrated database reports. */

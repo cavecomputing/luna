@@ -33,6 +33,21 @@ describe('migrate', () => {
     expect(tables(db)).toContain('prefs')
   })
 
+  it('creates provider configuration and both model slots', () => {
+    const db = fresh()
+    migrate(db)
+
+    expect(tables(db)).toEqual(expect.arrayContaining(['providers', 'model_slots']))
+    expect(db.prepare('SELECT id, api FROM providers').all()).toEqual([
+      { id: 'openai', api: 'responses' },
+    ])
+    expect(db.prepare('SELECT slot, provider_id, model FROM model_slots ORDER BY slot').all())
+      .toEqual([
+        { slot: 'expert', provider_id: 'openai', model: '' },
+        { slot: 'fast', provider_id: 'openai', model: '' },
+      ])
+  })
+
   it('does nothing to an already migrated database', () => {
     const db = fresh()
     migrate(db)
@@ -43,6 +58,20 @@ describe('migrate', () => {
     // A step re-run would have thrown on CREATE TABLE, and the row would be gone.
     expect(version(db)).toBe(latest)
     expect(db.prepare('SELECT count(*) AS n FROM prefs').get()).toEqual({ n: 1 })
+  })
+
+  it('upgrades a version 1 database without changing its preferences', () => {
+    const db = fresh()
+    db.exec(`CREATE TABLE prefs (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
+      INSERT INTO prefs (key, value) VALUES ('theme', '"dark"');
+      PRAGMA user_version = 1;`)
+
+    migrate(db)
+
+    expect(db.prepare("SELECT value FROM prefs WHERE key = 'theme'").get()).toEqual({
+      value: '"dark"',
+    })
+    expect(tables(db)).toEqual(expect.arrayContaining(['providers', 'model_slots']))
   })
 
   it('refuses a database written by a newer build', () => {
