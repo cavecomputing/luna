@@ -28,6 +28,18 @@ export function Composer({
   const composer = useComposer(onSend, initialDraft, onDraftChange)
   const box = useRef<HTMLTextAreaElement>(null)
 
+  useEffect(() => {
+    function focusComposer(): void {
+      box.current?.focus()
+    }
+
+    focusComposer()
+    window.addEventListener('focus', focusComposer)
+    return () => {
+      window.removeEventListener('focus', focusComposer)
+    }
+  }, [])
+
   // Grow with the text, then scroll rather than pushing the thread off screen.
   useEffect(() => {
     const el = box.current
