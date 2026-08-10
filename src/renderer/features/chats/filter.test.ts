@@ -7,6 +7,7 @@ const chat = (id: string, title: string, updatedAt: number): Conversation => ({
   title,
   icon: 'spark',
   mode: 'fast',
+  pinned: false,
   updatedAt,
   messages: [],
 })
@@ -40,16 +41,35 @@ describe('filterChats', () => {
 
   it('matches message text when the title does not match', () => {
     const withBody = [
-      { ...chat('d', 'Untitled', 1), messages: [{ id: 'm', role: 'user' as const, text: 'submarine', at: 1 }] },
+      { ...chat('d', 'Untitled', 1), messages: [{ id: 'm', role: 'user' as const, text: 'submarine', status: 'complete' as const, at: 1 }] },
     ]
     expect(filterChats(withBody, 'submarine').map((item) => item.id)).toEqual(['d'])
   })
 
   it('ignores case when matching message text', () => {
     const withBody = [
-      { ...chat('d', 'Untitled', 1), messages: [{ id: 'm', role: 'assistant' as const, text: 'Coastal route', at: 1 }] },
+      { ...chat('d', 'Untitled', 1), messages: [{ id: 'm', role: 'assistant' as const, text: 'Coastal route', status: 'complete' as const, at: 1 }] },
     ]
     expect(filterChats(withBody, 'COASTAL').map((item) => item.id)).toEqual(['d'])
+  })
+
+  it('matches separately stored thinking text', () => {
+    const withReasoning = [
+      {
+        ...chat('d', 'Untitled', 1),
+        messages: [
+          {
+            id: 'm',
+            role: 'assistant' as const,
+            text: 'Final answer',
+            reasoning: 'Checked the submarine route',
+            status: 'complete' as const,
+            at: 1,
+          },
+        ],
+      },
+    ]
+    expect(filterChats(withReasoning, 'submarine').map((item) => item.id)).toEqual(['d'])
   })
 })
 

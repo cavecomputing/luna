@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { Conversation } from '../../../shared/types.js'
 import { Greeting } from './greeting.js'
 import { Message } from './message.js'
@@ -11,11 +11,15 @@ type Props = {
 export function Thread({ chat }: Props): React.JSX.Element {
   const end = useRef<HTMLDivElement>(null)
   const count = chat?.messages.length ?? 0
+  const tail = chat?.messages.at(-1)?.text ?? ''
+  const scrollToEnd = useCallback(() => {
+    end.current?.scrollIntoView({ block: 'end' })
+  }, [])
 
   // Keep the newest message in view as the conversation grows.
   useEffect(() => {
-    end.current?.scrollIntoView({ block: 'end' })
-  }, [count, chat?.id])
+    scrollToEnd()
+  }, [count, tail, chat?.id, scrollToEnd])
 
   return (
     <div className={styles.scroll}>
@@ -23,7 +27,7 @@ export function Thread({ chat }: Props): React.JSX.Element {
         {count === 0 && <Greeting />}
 
         {chat?.messages.map((message) => (
-          <Message key={message.id} message={message} />
+          <Message key={message.id} message={message} onGrow={scrollToEnd} />
         ))}
 
         <div ref={end} />

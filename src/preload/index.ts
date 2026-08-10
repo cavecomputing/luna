@@ -52,6 +52,19 @@ const api = {
     set: (slot: Mode, providerId: string | null, model: string) =>
       invoke('models:set', { slot, providerId, model }),
   },
+  chats: {
+    list: () => invoke('chats:list', undefined),
+    create: (mode: Mode) => invoke('chats:create', { mode }),
+    setMode: (id: string, mode: Mode) => invoke('chats:set-mode', { id, mode }),
+    setPinned: (id: string, pinned: boolean) =>
+      invoke('chats:set-pinned', { id, pinned }),
+    delete: (id: string) => invoke('chats:delete', { id }),
+  },
+  chat: {
+    send: (conversationId: string, text: string) =>
+      invoke('chat:send', { conversationId, text }),
+    cancel: (messageId: string) => invoke('chat:cancel', { messageId }),
+  },
   settings: {
     open: () => invoke('settings:open', undefined),
   },
@@ -61,6 +74,14 @@ const api = {
     subscribe('providers:changed', fn),
   onModels: (fn: (data: EventData<'models:changed'>) => void) =>
     subscribe('models:changed', fn),
+  onChats: (fn: (data: EventData<'chats:changed'>) => void) =>
+    subscribe('chats:changed', fn),
+  onChatDelta: (fn: (data: EventData<'chat:delta'>) => void) =>
+    subscribe('chat:delta', fn),
+  onChatDone: (fn: (data: EventData<'chat:done'>) => void) =>
+    subscribe('chat:done', fn),
+  onChatError: (fn: (data: EventData<'chat:error'>) => void) =>
+    subscribe('chat:error', fn),
 }
 
 contextBridge.exposeInMainWorld('luna', api)

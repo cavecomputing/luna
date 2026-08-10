@@ -40,3 +40,11 @@
 .input::placeholder {
   color: var(--text-faint);
 }
+
+.notice {
+  max-width: 860px;
+  margin: var(--s-2) auto 0;
+  color: var(--danger, #b42318);
+  font-size: var(--t-sm);
+  text-align: center;
+}

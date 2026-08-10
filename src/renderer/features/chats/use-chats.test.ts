@@ -1,48 +1,127 @@
 // @vitest-environment jsdom
-import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import type { ChatDelta } from '../../../shared/ipc.js'
 import type { Conversation } from '../../../shared/types.js'
-import { useChats } from './use-chats.js'
+import { applyDelta, applyDeltas, applyFinal, mergeChats, queueDelta } from './use-chats.js'
 
-const chat = (id: string, updatedAt: number): Conversation => ({
-  id,
-  title: `Chat ${id}`,
-  icon: 'spark',
-  mode: 'fast',
-  updatedAt,
-  messages: [],
-})
+function chat(status: 'streaming' | 'complete' = 'streaming'): Conversation {
+  return {
+    id: 'chat-1',
+    title: 'Chat',
+    icon: 'spark',
+    mode: 'fast',
+    pinned: false,
+    updatedAt: 1,
+    messages: [
+      { id: 'assistant-1', role: 'assistant', text: '', status, at: 1 },
+    ],
+  }
+}
 
-describe('useChats conversation actions', () => {
-  it('moves a pinned conversation ahead of newer conversations', () => {
-    const { result } = renderHook(() => useChats([chat('new', 2), chat('old', 1)], 'fast'))
-
-    act(() => {
-      result.current.togglePinned('old')
+describe('stream event reducers', () => {
+  it('ignores an out-of-order delta', () => {
+    const current = applyDelta([chat()], {
+      conversationId: 'chat-1',
+      messageId: 'assistant-1',
+      text: 'Hello',
+      reasoning: 'Checked it',
+      seq: 2,
     })
-
-    expect(result.current.visible.map((item) => item.id)).toEqual(['old', 'new'])
+    expect(
+      applyDelta(current, {
+        conversationId: 'chat-1',
+        messageId: 'assistant-1',
+        text: 'Hel',
+        reasoning: 'Checking',
+        seq: 1,
+      })[0]?.messages[0],
+    ).toMatchObject({ text: 'Hello', reasoning: 'Checked it', streamSeq: 2 })
   })
 
-  it('selects the next conversation after deleting the open one', () => {
-    const { result } = renderHook(() => useChats([chat('open', 2), chat('next', 1)], 'fast'))
-
-    act(() => {
-      result.current.remove('open')
+  it('ignores a late delta after completion', () => {
+    const completed = applyFinal([chat()], {
+      conversationId: 'chat-1',
+      message: {
+        id: 'assistant-1',
+        role: 'assistant',
+        text: 'Done',
+        status: 'complete',
+        at: 1,
+      },
     })
-
-    expect(result.current.openId).toBe('next')
-    expect(result.current.open?.id).toBe('next')
+    expect(
+      applyDelta(completed, {
+        conversationId: 'chat-1',
+        messageId: 'assistant-1',
+        text: 'late',
+        reasoning: '',
+        seq: 3,
+      })[0]?.messages[0]?.text,
+    ).toBe('Done')
   })
 
-  it('keeps the open conversation when deleting another one', () => {
-    const { result } = renderHook(() => useChats([chat('open', 2), chat('other', 1)], 'fast'))
-
-    act(() => {
-      result.current.remove('other')
+  it('keeps streamed text through an unrelated full-list broadcast', () => {
+    const current = applyDelta([chat()], {
+      conversationId: 'chat-1',
+      messageId: 'assistant-1',
+      text: 'Partial',
+      reasoning: 'Working',
+      seq: 1,
     })
+    expect(mergeChats(current, [chat()])[0]?.messages[0]).toMatchObject({
+      text: 'Partial',
+      reasoning: 'Working',
+      streamSeq: 1,
+    })
+  })
 
-    expect(result.current.openId).toBe('open')
-    expect(result.current.visible.map((item) => item.id)).toEqual(['open'])
+  it('accepts persisted completion over local streaming state', () => {
+    const current = applyDelta([chat()], {
+      conversationId: 'chat-1',
+      messageId: 'assistant-1',
+      text: 'Partial',
+      reasoning: '',
+      seq: 1,
+    })
+    const incoming = chat('complete')
+    incoming.messages[0] = { ...incoming.messages[0]!, text: 'Complete' }
+    expect(mergeChats(current, [incoming])[0]?.messages[0]).toMatchObject({
+      text: 'Complete',
+      status: 'complete',
+    })
+  })
+
+  it('deduplicates the same conversation across an invoke and broadcast race', () => {
+    expect(mergeChats([chat()], [chat(), chat()])).toHaveLength(1)
+  })
+
+  it('coalesces uneven provider chunks to the newest update in a frame', () => {
+    const pending = new Map<string, ChatDelta>()
+    queueDelta(pending, {
+      conversationId: 'chat-1',
+      messageId: 'assistant-1',
+      text: 'H',
+      reasoning: '',
+      seq: 1,
+    })
+    queueDelta(pending, {
+      conversationId: 'chat-1',
+      messageId: 'assistant-1',
+      text: 'Hello',
+      reasoning: 'Done checking',
+      seq: 3,
+    })
+    queueDelta(pending, {
+      conversationId: 'chat-1',
+      messageId: 'assistant-1',
+      text: 'Hel',
+      reasoning: 'Checking',
+      seq: 2,
+    })
+    expect(applyDeltas([chat()], pending.values())[0]?.messages[0]).toMatchObject({
+      text: 'Hello',
+      reasoning: 'Done checking',
+      streamSeq: 3,
+    })
   })
 })

@@ -26,7 +26,7 @@ export function Sidebar({ chats, now, onSearchOpen, onSettings }: Props): React.
           <IconButton label="Search chats (Ctrl+F)" onClick={onSearchOpen}>
             <Search />
           </IconButton>
-          <IconButton label="New chat" variant="accent" onClick={chats.start}>
+          <IconButton label="New chat" variant="accent" onClick={() => { void chats.start() }}>
             <Plus />
           </IconButton>
         </div>

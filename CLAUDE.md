@@ -253,6 +253,14 @@ but the UI must always accept a manually typed model ID because compatible serve
 an incomplete catalog or no catalog at all. Optional OpenAI organization and project IDs are
 stored as provider metadata and sent as headers by main.
 
+Conversation metadata lives in `conversations`; ordered text messages live in `messages`.
+Assistant rows move from `streaming` to exactly one terminal state (`complete`, `cancelled`, or
+`error`). Responses output items used for local manual-history replay stay in main/SQLite and
+must never cross IPC. Both provider APIs use `store: false`; Luna is authoritative for history.
+Some compatible models emit `<think>…</think>` inside text deltas. Parse those incrementally
+across arbitrary chunk boundaries, persist them in `messages.reasoning`, and render them in the
+Thinking disclosure—not as raw tags or as part of the final answer/history text.
+
 `prefs.json` is gone. `adoptLegacy()` folds an existing file into the database on first launch
 and deletes it, so a setting never has two homes. Leave that function in place until the
 installed base has run it once; it is a no-op on every launch after the first.

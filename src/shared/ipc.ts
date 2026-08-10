@@ -6,7 +6,38 @@
  */
 
 import type { Prefs } from './prefs.js'
-import type { ModelSlots, Mode, Provider, ProviderDraft, ProviderModel } from './types.js'
+import type {
+  Conversation,
+  Message,
+  ModelSlots,
+  Mode,
+  Provider,
+  ProviderDraft,
+  ProviderModel,
+} from './types.js'
+
+export type ChatStart = {
+  conversation: Conversation
+  userMessageId: string
+  assistantMessageId: string
+}
+
+export type ChatDelta = {
+  conversationId: string
+  messageId: string
+  /** Full text accumulated so far, making reordered events safe to ignore. */
+  text: string
+  /** Full explicit <think> content accumulated so far. */
+  reasoning: string
+  seq: number
+}
+
+export type ChatFinal = {
+  conversationId: string
+  message: Message
+}
+
+export type ChatFailure = ChatFinal & { code: string }
 
 export type AppInfo = {
   name: string
@@ -31,6 +62,13 @@ export type Invocations = {
     req: { slot: Mode; providerId: string | null; model: string }
     res: ModelSlots
   }
+  'chats:list': { req: undefined; res: Conversation[] }
+  'chats:create': { req: { mode: Mode }; res: Conversation }
+  'chats:set-mode': { req: { id: string; mode: Mode }; res: Conversation }
+  'chats:set-pinned': { req: { id: string; pinned: boolean }; res: Conversation }
+  'chats:delete': { req: { id: string }; res: undefined }
+  'chat:send': { req: { conversationId: string; text: string }; res: ChatStart }
+  'chat:cancel': { req: { messageId: string }; res: undefined }
   'settings:open': { req: undefined; res: undefined }
 }
 
@@ -43,6 +81,10 @@ export type Events = {
   'providers:changed': Provider[]
   /** Fast or Expert was assigned to a different provider/model pair. */
   'models:changed': ModelSlots
+  'chats:changed': Conversation[]
+  'chat:delta': ChatDelta
+  'chat:done': ChatFinal
+  'chat:error': ChatFailure
 }
 
 export type Channel = keyof Invocations

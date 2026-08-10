@@ -7,14 +7,18 @@ export function filterChats(chats: Conversation[], query: string): Conversation[
   return chats.filter(
     (chat) =>
       chat.title.toLowerCase().includes(q) ||
-      chat.messages.some((message) => message.text.toLowerCase().includes(q)),
+      chat.messages.some(
+        (message) =>
+          message.text.toLowerCase().includes(q) ||
+          (message.reasoning?.toLowerCase().includes(q) ?? false),
+      ),
   )
 }
 
 /** Pinned first, then newest within each group. */
 export function byRecency(chats: Conversation[]): Conversation[] {
   return [...chats].sort((a, b) => {
-    const pinOrder = Number(b.pinned === true) - Number(a.pinned === true)
+    const pinOrder = Number(b.pinned) - Number(a.pinned)
     return pinOrder === 0 ? b.updatedAt - a.updatedAt : pinOrder
   })
 }

@@ -1,0 +1,241 @@
+import { err, ok, type Result } from '../shared/result.js'
+import type { ProviderConfig } from './providers.js'
+import type { StoredMessage } from './chats.js'
+import { SseParser, type SseEvent } from './sse.js'
+
+type Fetch = (input: string, init?: RequestInit) => Promise<Response>
+
+export type ChatRequest = {
+  provider: ProviderConfig
+  apiKey?: string
+  model: string
+  systemPrompt: string
+  history: StoredMessage[]
+}
+
+export type ChatCompletion = {
+  text: string
+  providerItems?: unknown[]
+}
+
+function object(input: unknown): Record<string, unknown> | undefined {
+  return typeof input === 'object' && input !== null ? { ...input } : undefined
+}
+
+function headers(request: ChatRequest): Record<string, string> {
+  const value: Record<string, string> = {
+    Accept: 'text/event-stream',
+    'Content-Type': 'application/json',
+  }
+  if (request.apiKey !== undefined && request.apiKey !== '') {
+    value.Authorization = `Bearer ${request.apiKey}`
+  }
+  if (request.provider.organization !== '') {
+    value['OpenAI-Organization'] = request.provider.organization
+  }
+  if (request.provider.project !== '') value['OpenAI-Project'] = request.provider.project
+  return value
+}
+
+export function requestBody(request: ChatRequest): Record<string, unknown> {
+  if (request.provider.api === 'chat-completions') {
+    const messages: Record<string, unknown>[] = []
+    if (request.systemPrompt !== '') {
+      messages.push({ role: 'system', content: request.systemPrompt })
+    }
+    for (const message of request.history) {
+      if (message.status !== 'complete') continue
+      messages.push({ role: message.role, content: message.text })
+    }
+    return { model: request.model, messages, stream: true, store: false }
+  }
+
+  const input: unknown[] = []
+  for (const message of request.history) {
+    if (message.status !== 'complete') continue
+    if (
+      message.role === 'assistant' &&
+      message.providerId === request.provider.id &&
+      message.providerApi === 'responses' &&
+      message.providerItems !== undefined
+    ) {
+      input.push(...message.providerItems)
+    } else {
+      input.push({ role: message.role, content: message.text })
+    }
+  }
+  return {
+    model: request.model,
+    ...(request.systemPrompt === '' ? {} : { instructions: request.systemPrompt }),
+    input,
+    stream: true,
+    store: false,
+    include: ['reasoning.encrypted_content'],
+  }
+}
+
+function outputText(items: unknown[]): string {
+  let text = ''
+  for (const item of items) {
+    const content = object(item)?.content
+    if (!Array.isArray(content)) continue
+    for (const part of content) {
+      const value = object(part)
+      if (typeof value?.text === 'string') text += value.text
+      else if (typeof value?.refusal === 'string') text += value.refusal
+    }
+  }
+  return text
+}
+
+function statusError(status: number): Result<never> {
+  if (status === 401 || status === 403) {
+    return err('chat/auth', 'provider rejected the credential')
+  }
+  if (status === 404) return err('chat/endpoint', 'provider endpoint was not found')
+  if (status === 429) return err('chat/rate-limit', 'provider rate limit reached')
+  return err('chat/http', `provider returned HTTP ${String(status)}`)
+}
+
+type StreamState = {
+  text: string
+  done: boolean
+  providerItems?: unknown[]
+}
+
+function parseJson(data: string): Record<string, unknown> | undefined {
+  try {
+    return object(JSON.parse(data))
+  } catch {
+    return undefined
+  }
+}
+
+function responseEvent(event: SseEvent, state: StreamState): Result<string | undefined> {
+  const body = parseJson(event.data)
+  if (body === undefined) return err('chat/bad-stream', 'provider sent invalid stream JSON')
+  const type = typeof body.type === 'string' ? body.type : event.event
+  if (type === 'response.output_text.delta') {
+    if (typeof body.delta !== 'string') {
+      return err('chat/bad-stream', 'response delta was not text')
+    }
+    return ok(body.delta)
+  }
+  if (type === 'response.refusal.delta') {
+    if (typeof body.delta !== 'string') {
+      return err('chat/bad-stream', 'response refusal delta was not text')
+    }
+    return ok(body.delta)
+  }
+  if (type === 'response.completed') {
+    const response = object(body.response)
+    if (Array.isArray(response?.output)) {
+      state.providerItems = response.output
+      const fallback = state.text === '' ? outputText(response.output) : ''
+      state.done = true
+      return ok(fallback === '' ? undefined : fallback)
+    }
+    state.done = true
+  }
+  if (type === 'response.failed' || type === 'error') {
+    return err('chat/provider', 'provider reported a response error')
+  }
+  return ok(undefined)
+}
+
+function chatEvent(event: SseEvent, state: StreamState): Result<string | undefined> {
+  if (event.data === '[DONE]') {
+    state.done = true
+    return ok(undefined)
+  }
+  const body = parseJson(event.data)
+  if (body === undefined) return err('chat/bad-stream', 'provider sent invalid stream JSON')
+  if (object(body.error) !== undefined) {
+    return err('chat/provider', 'provider reported a completion error')
+  }
+  if (!Array.isArray(body.choices)) return ok(undefined)
+  let delta = ''
+  for (const choice of body.choices) {
+    const item = object(object(choice)?.delta)
+    const content = item?.content
+    if (typeof content === 'string') delta += content
+    if (typeof item?.refusal === 'string') delta += item.refusal
+  }
+  return ok(delta === '' ? undefined : delta)
+}
+
+function isAbort(error: unknown): boolean {
+  return object(error)?.name === 'AbortError'
+}
+
+export async function streamChat(
+  request: ChatRequest,
+  signal: AbortSignal,
+  onDelta: (text: string) => void,
+  fetcher: Fetch,
+): Promise<Result<ChatCompletion>> {
+  let response: Response
+  const endpoint = request.provider.api === 'responses' ? 'responses' : 'chat/completions'
+  try {
+    response = await fetcher(`${request.provider.baseUrl}/${endpoint}`, {
+      method: 'POST',
+      headers: headers(request),
+      body: JSON.stringify(requestBody(request)),
+      signal,
+    })
+  } catch (error) {
+    return isAbort(error)
+      ? err('chat/cancelled', 'chat request was cancelled')
+      : err('chat/network', 'provider request failed')
+  }
+
+  if (!response.ok) return statusError(response.status)
+  if (response.body === null) return err('chat/bad-stream', 'provider returned no stream')
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  const parser = new SseParser()
+  const state: StreamState = { text: '', done: false }
+  const consume = (events: SseEvent[]): Result<undefined> => {
+    for (const event of events) {
+      const parsed =
+        request.provider.api === 'responses'
+          ? responseEvent(event, state)
+          : chatEvent(event, state)
+      if (!parsed.ok) return parsed
+      if (parsed.value !== undefined) {
+        state.text += parsed.value
+        onDelta(state.text)
+      }
+    }
+    return ok(undefined)
+  }
+
+  try {
+    while (true) {
+      const chunk = await reader.read()
+      if (chunk.done) break
+      if (!(chunk.value instanceof Uint8Array)) {
+        return err('chat/bad-stream', 'provider stream chunk was not bytes')
+      }
+      const consumed = consume(parser.push(decoder.decode(chunk.value, { stream: true })))
+      if (!consumed.ok) return consumed
+    }
+    const trailing = consume(parser.push(decoder.decode()))
+    if (!trailing.ok) return trailing
+    const finished = consume(parser.finish())
+    if (!finished.ok) return finished
+  } catch (error) {
+    return isAbort(error) || signal.aborted
+      ? err('chat/cancelled', 'chat request was cancelled')
+      : err('chat/network', 'provider stream failed')
+  } finally {
+    reader.releaseLock()
+  }
+
+  if (!state.done) return err('chat/stream-ended', 'provider stream ended before completion')
+  return ok({
+    text: state.text,
+    ...(state.providerItems === undefined ? {} : { providerItems: state.providerItems }),
+  })
+}

@@ -5,14 +5,17 @@ import { useState, type KeyboardEvent } from 'react'
  * Enter sends, Shift+Enter puts in a newline — the convention every chat
  * client uses, so getting it wrong is immediately felt.
  */
-export function useComposer(onSend: (text: string) => void) {
+export function useComposer(onSend: (text: string) => boolean | Promise<boolean>) {
   const [draft, setDraft] = useState('')
+  const [submitting, setSubmitting] = useState(false)
   const canSend = draft.trim() !== ''
 
-  function submit(): void {
-    if (!canSend) return
-    onSend(draft.trim())
-    setDraft('')
+  async function submit(): Promise<void> {
+    if (!canSend || submitting) return
+    setSubmitting(true)
+    const sent = await onSend(draft.trim())
+    if (sent) setDraft('')
+    setSubmitting(false)
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>): void {
@@ -20,8 +23,8 @@ export function useComposer(onSend: (text: string) => void) {
     // Also let IME composition finish before treating Enter as send.
     if (e.nativeEvent.isComposing) return
     e.preventDefault()
-    submit()
+    void submit()
   }
 
-  return { draft, setDraft, canSend, submit, onKeyDown }
+  return { draft, setDraft, canSend: canSend && !submitting, submitting, submit, onKeyDown }
 }

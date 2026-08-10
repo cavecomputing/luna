@@ -23,7 +23,16 @@ Provider configuration and model assignments live in `luna.db` under Electron's 
 directory. API keys do not: Electron encrypts them with the macOS Keychain or Windows DPAPI,
 and the Settings window can only see whether a key exists.
 
-Conversation storage and model response transport are not wired yet.
+Messages and conversations are stored in the same `luna.db` database. Assistant replies
+stream through main, can be stopped from the composer, and keep a defined complete, stopped,
+or interrupted state across reloads. Both the Responses API and Chat Completions are supported;
+Luna sends `store: false` and remains the source of truth for conversation history. When
+automatic naming is enabled, the Fast model names a new conversation after its first exchange.
+Compatible models that emit explicit `<think>…</think>` markup get a separate collapsible
+Thinking section instead of exposing tags in the answer.
+
+File attachments are not implemented yet. The disabled paperclip reserves their place in the
+composer without sending or storing attachment data prematurely.
 
 ## Requirements
 

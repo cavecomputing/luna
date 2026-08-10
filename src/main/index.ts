@@ -1,6 +1,8 @@
 import { BrowserWindow, app, nativeTheme } from 'electron'
 import { join } from 'node:path'
+import * as chats from './chats.js'
 import { registerAll } from './ipc/index.js'
+import { coordinator } from './ipc/chat.js'
 import { emit } from './ipc/bus.js'
 import * as db from './db.js'
 import * as dock from './dock.js'
@@ -21,6 +23,7 @@ app.whenReady().then(
     // to block, and a failure lands in the rejection handler below.
     const conn = db.handle()
     await prefs.adoptLegacy(conn, prefs.legacyPath())
+    chats.recoverInterrupted(conn)
 
     // Theme comes from prefs, which default to light. Applied before the first
     // window so there is no flash of the wrong appearance.
@@ -56,6 +59,7 @@ app.on('window-all-closed', () => {
 
 // Checkpoints the WAL, so the next launch doesn't replay one.
 app.on('will-quit', () => {
+  coordinator.stopAll()
   db.close()
 })
 

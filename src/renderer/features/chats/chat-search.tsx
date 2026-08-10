@@ -70,7 +70,7 @@ export function ChatSearch({ chats, now, onClose, onSelect }: Props): React.JSX.
                 <span className={styles.title}>{chat.title}</span>
                 <span className={styles.when}>{relative(chat.updatedAt, now)}</span>
               </span>
-              {chat.pinned === true && (
+              {chat.pinned && (
                 <span className={styles.pin} aria-label="Pinned">
                   <Pin size={14} />
                 </span>

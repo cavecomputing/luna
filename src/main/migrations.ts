@@ -33,6 +33,35 @@ const steps: readonly string[] = [
 
    INSERT INTO model_slots (slot, provider_id, model)
    VALUES ('fast', 'openai', ''), ('expert', 'openai', '');`,
+  `CREATE TABLE conversations (
+     id         TEXT PRIMARY KEY,
+     title      TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 200),
+     icon       TEXT NOT NULL CHECK (icon IN (
+                  'wave', 'bowl', 'book', 'dumbbell', 'leaf', 'gift', 'camera', 'spark'
+                )),
+     mode       TEXT NOT NULL CHECK (mode IN ('fast', 'expert')),
+     pinned     INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
+     created_at INTEGER NOT NULL,
+     updated_at INTEGER NOT NULL
+   ) STRICT;
+
+   CREATE TABLE messages (
+     id             TEXT PRIMARY KEY,
+     conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+     role           TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+     text           TEXT NOT NULL,
+     status         TEXT NOT NULL CHECK (status IN ('complete', 'streaming', 'error', 'cancelled')),
+     created_at     INTEGER NOT NULL,
+     ordinal        INTEGER NOT NULL,
+     provider_api   TEXT CHECK (provider_api IN ('responses', 'chat-completions')),
+     provider_items TEXT,
+     UNIQUE (conversation_id, ordinal)
+   ) STRICT;
+
+   CREATE INDEX messages_by_conversation
+   ON messages (conversation_id, ordinal);`,
+  `ALTER TABLE messages ADD COLUMN provider_id TEXT;`,
+  `ALTER TABLE messages ADD COLUMN reasoning TEXT NOT NULL DEFAULT '';`,
 ]
 
 /** The version a fully migrated database reports. */

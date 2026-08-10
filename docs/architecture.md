@@ -224,7 +224,7 @@ is a key inside a sandboxed web context, one XSS away from exfiltration.
 ```
 renderer                 main                      provider
    │ chat:send ────────────>│
-   │                        │ POST /messages ─────────>│
+   │                        │ POST /responses or /chat/completions ──>│
    │<── chat:delta ─────────│<──── token stream ───────│
    │<── chat:delta ─────────│
    │<── chat:done ──────────│
@@ -234,19 +234,21 @@ Channels:
 
 ```ts
 export type Invocations = {
-  'chat:send':   { req: { convoId: string; text: string; mode: Mode }; res: { msgId: string } }
-  'chat:cancel': { req: { msgId: string }; res: void }
+  'chat:send':   { req: { conversationId: string; text: string }; res: ChatStart }
+  'chat:cancel': { req: { messageId: string }; res: undefined }
 }
 
 export type Events = {
-  'chat:delta': { msgId: string; text: string }
-  'chat:done':  { msgId: string; usage: Usage }
-  'chat:error': { msgId: string; code: string }
+  'chat:delta': { conversationId: string; messageId: string; text: string; seq: number }
+  'chat:done':  { conversationId: string; message: Message }
+  'chat:error': { conversationId: string; message: Message; code: string }
 }
 ```
 
-`chat:send` returns immediately with an id. Tokens arrive as `chat:delta` events carrying that
-id. The renderer appends by id, so two conversations streaming at once don't interleave.
+`chat:send` first inserts the user message and an assistant placeholder in one SQLite
+transaction, then returns their ids. Delta events carry the full text accumulated so far and a
+monotonic sequence number. Replacing by id and ignoring older sequence numbers keeps delayed
+IPC events from corrupting the visible reply.
 
 Every stream must be cancellable. Main keeps an `AbortController` per `msgId`; `chat:cancel`
 aborts it. A stream that can't be stopped is a stuck UI and a wasted bill.
@@ -257,12 +259,20 @@ partial output. Each needs a defined end state, and each needs a test.
 
 ### Storage
 
-Conversations live under `app.getPath('userData')`. Main is the only reader and writer.
+Conversations and messages live in `luna.db` under `app.getPath('userData')`. Main is the only
+reader and writer. Foreign keys cascade message deletion with its conversation. A streaming
+assistant row is finalized exactly once as `complete`, `cancelled`, or `error`; an unfinished
+row found on the next launch is recovered as `error`.
 
-Write with an atomic replace — write to a temp file in the same directory, then `rename`. A
-half-written file after a crash or a force-quit must not be possible. On read, a corrupt file
-returns `Err('convo/corrupt')` and the UI offers to start fresh; it never throws into a blank
-window.
+Explicit `<think>…</think>` markup from compatible models is parsed from accumulated stream
+text, so either tag may be split across SSE chunks without flashing fragments. Reasoning is
+stored separately from the final answer and rendered in a collapsible disclosure. Chat
+Completions history receives only the answer text.
+
+Responses requests use local manual history with `store: false`. Along with visible assistant
+text, main stores the Responses output items needed to replay reasoning context on the next
+turn. Those provider items never cross IPC. Chat Completions history is rebuilt from the same
+visible user and assistant rows.
 
 Keep message content out of anything that leaves the machine. Crash reports get the error code
 and the stack, never the conversation.

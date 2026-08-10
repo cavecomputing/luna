@@ -6,7 +6,6 @@ import { ModeSwitch } from './features/mode/mode-switch.js'
 import { Thread } from './features/thread/thread.js'
 import { IconButton } from './ui/icon-button.js'
 import { Collapse } from './ui/icons/collapse.js'
-import { demoChats } from './data/demo.js'
 import styles from './app.module.css'
 import { useNow } from './lib/use-now.js'
 import { usePrefs } from './lib/use-prefs.js'
@@ -20,7 +19,7 @@ import { ChatSearch } from './features/chats/chat-search.js'
  */
 export function App(): React.JSX.Element {
   const { prefs } = usePrefs()
-  const chats = useChats(demoChats, prefs.defaultMode)
+  const chats = useChats(prefs.defaultMode)
   const [open, setOpen] = useState(true)
   const [searchOpen, setSearchOpen] = useState(false)
   const usesTrafficLights = window.luna.platform === 'darwin'
@@ -79,13 +78,18 @@ export function App(): React.JSX.Element {
           </div>
 
           <div className={styles.noDrag}>
-            <ModeSwitch value={chats.open?.mode ?? 'fast'} onChange={chats.setMode} />
+            <ModeSwitch value={chats.currentMode} onChange={chats.setMode} />
           </div>
         </header>
 
         <Thread chat={chats.open} />
 
-        <Composer onSend={chats.send} />
+        <Composer
+          onSend={chats.send}
+          onCancel={chats.cancel}
+          streaming={chats.streamingMessage !== undefined}
+          notice={chats.error}
+        />
       </main>
 
       {searchOpen && (

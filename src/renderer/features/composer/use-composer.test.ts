@@ -36,15 +36,15 @@ describe('useComposer', () => {
     expect(result.current.canSend).toBe(false)
   })
 
-  it('sends trimmed text and clears the draft', () => {
-    const onSend = vi.fn()
+  it('sends trimmed text and clears the draft', async () => {
+    const onSend = vi.fn(() => true)
     const { result } = renderHook(() => useComposer(onSend))
 
     act(() => {
       result.current.setDraft('  hello  ')
     })
-    act(() => {
-      result.current.submit()
+    await act(async () => {
+      await result.current.submit()
     })
 
     expect(onSend).toHaveBeenCalledWith('hello')
@@ -52,16 +52,16 @@ describe('useComposer', () => {
   })
 
   it('does nothing when submitting an empty draft', () => {
-    const onSend = vi.fn()
+    const onSend = vi.fn(() => true)
     const { result } = renderHook(() => useComposer(onSend))
     act(() => {
-      result.current.submit()
+      void result.current.submit()
     })
     expect(onSend).not.toHaveBeenCalled()
   })
 
-  it('sends on Enter', () => {
-    const onSend = vi.fn()
+  it('sends on Enter', async () => {
+    const onSend = vi.fn(() => true)
     const { result } = renderHook(() => useComposer(onSend))
     act(() => {
       result.current.setDraft('hi')
@@ -72,12 +72,14 @@ describe('useComposer', () => {
       result.current.onKeyDown(event)
     })
 
-    expect(onSend).toHaveBeenCalledWith('hi')
+    await vi.waitFor(() => {
+      expect(onSend).toHaveBeenCalledWith('hi')
+    })
     expect(preventDefault).toHaveBeenCalled()
   })
 
   it('adds a newline on Shift+Enter instead of sending', () => {
-    const onSend = vi.fn()
+    const onSend = vi.fn(() => true)
     const { result } = renderHook(() => useComposer(onSend))
     act(() => {
       result.current.setDraft('hi')
@@ -93,7 +95,7 @@ describe('useComposer', () => {
   })
 
   it('ignores Enter while an IME is composing', () => {
-    const onSend = vi.fn()
+    const onSend = vi.fn(() => true)
     const { result } = renderHook(() => useComposer(onSend))
     act(() => {
       result.current.setDraft('こんにちは')
@@ -109,7 +111,7 @@ describe('useComposer', () => {
   })
 
   it('leaves other keys alone', () => {
-    const onSend = vi.fn()
+    const onSend = vi.fn(() => true)
     const { result } = renderHook(() => useComposer(onSend))
     act(() => {
       result.current.setDraft('hi')
@@ -121,5 +123,16 @@ describe('useComposer', () => {
     })
 
     expect(onSend).not.toHaveBeenCalled()
+  })
+
+  it('keeps the draft when main rejects the send', async () => {
+    const { result } = renderHook(() => useComposer(() => false))
+    act(() => {
+      result.current.setDraft('hello')
+    })
+    await act(async () => {
+      await result.current.submit()
+    })
+    expect(result.current.draft).toBe('hello')
   })
 })

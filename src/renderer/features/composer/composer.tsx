@@ -2,16 +2,20 @@ import { useEffect, useRef } from 'react'
 import { IconButton } from '../../ui/icon-button.js'
 import { Paperclip } from '../../ui/icons/paperclip.js'
 import { Send } from '../../ui/icons/send.js'
+import { Stop } from '../../ui/icons/stop.js'
 import { useComposer } from './use-composer.js'
 import styles from './composer.module.css'
 
 const MAX_ROWS_PX = 160
 
 type Props = {
-  onSend: (text: string) => void
+  onSend: (text: string) => boolean | Promise<boolean>
+  onCancel: () => void | Promise<void>
+  streaming: boolean
+  notice?: string | undefined
 }
 
-export function Composer({ onSend }: Props): React.JSX.Element {
+export function Composer({ onSend, onCancel, streaming, notice }: Props): React.JSX.Element {
   const composer = useComposer(onSend)
   const box = useRef<HTMLTextAreaElement>(null)
 
@@ -26,7 +30,7 @@ export function Composer({ onSend }: Props): React.JSX.Element {
   return (
     <div className={styles.bar}>
       <div className={styles.box}>
-        <IconButton label="Attach a file">
+        <IconButton label="Attachments are coming later" disabled>
           <Paperclip />
         </IconButton>
 
@@ -44,15 +48,19 @@ export function Composer({ onSend }: Props): React.JSX.Element {
         />
 
         <IconButton
-          label="Send"
+          label={streaming ? 'Stop response' : 'Send'}
           variant="accent"
           size="lg"
-          disabled={!composer.canSend}
-          onClick={composer.submit}
+          disabled={streaming ? false : !composer.canSend}
+          onClick={() => {
+            if (streaming) void onCancel()
+            else void composer.submit()
+          }}
         >
-          <Send />
+          {streaming ? <Stop /> : <Send />}
         </IconButton>
       </div>
+      {notice !== undefined && <p className={styles.notice}>{notice}</p>}
     </div>
   )
 }

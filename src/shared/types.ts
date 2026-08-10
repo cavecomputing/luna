@@ -35,10 +35,17 @@ export type ModelSlots = Record<Mode, ModelSlot>
 
 export type Role = 'user' | 'assistant'
 
+export type MessageStatus = 'complete' | 'streaming' | 'error' | 'cancelled'
+
 export type Message = {
   id: string
   role: Role
   text: string
+  /** Explicit <think> content from compatible models, separate from the answer. */
+  reasoning?: string
+  status: MessageStatus
+  /** Renderer-only ordering guard for streamed updates. Never persisted. */
+  streamSeq?: number
   /** Epoch milliseconds. Formatting is the renderer's job. */
   at: number
 }
@@ -63,7 +70,7 @@ export type Conversation = {
   icon: ChatIcon
   mode: Mode
   /** Pinned conversations sort ahead of unpinned conversations. */
-  pinned?: boolean
+  pinned: boolean
   /** Epoch milliseconds of the most recent message. */
   updatedAt: number
   messages: Message[]

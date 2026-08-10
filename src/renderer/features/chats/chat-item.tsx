@@ -45,7 +45,7 @@ export function ChatItem({
 
       <span className={styles.actions}>
         <IconButton
-          label={chat.pinned === true ? `Unpin ${chat.title}` : `Pin ${chat.title}`}
+          label={chat.pinned ? `Unpin ${chat.title}` : `Pin ${chat.title}`}
           size="sm"
           onClick={() => {
             onTogglePinned(chat.id)
