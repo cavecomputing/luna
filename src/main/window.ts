@@ -4,6 +4,7 @@ import { APP_ORIGIN } from './protocol.js'
 import { background, chromeOptions, overlay } from './window-chrome.js'
 import { canFrameLoad } from './navigation.js'
 import { matchesShortcut } from './shortcut-input.js'
+import { emit } from './ipc/bus.js'
 
 const MIN_WIDTH = 720
 const MIN_HEIGHT = 480
@@ -14,10 +15,17 @@ const SHORTCUTS_WIDTH = 520
 const SHORTCUTS_HEIGHT = 500
 
 /** Only ever one Settings window; a second ⌘, focuses the existing one. */
+let main: BrowserWindow | undefined
 let settings: BrowserWindow | undefined
 let shortcuts: BrowserWindow | undefined
 
 export function create(): BrowserWindow {
+  if (main !== undefined && !main.isDestroyed()) {
+    main.show()
+    main.focus()
+    return main
+  }
+
   const win = build({
     width: 1100,
     height: 720,
@@ -25,8 +33,32 @@ export function create(): BrowserWindow {
     minHeight: MIN_HEIGHT,
   })
 
+  win.on('closed', () => {
+    main = undefined
+  })
+
   load(win, 'index.html')
+  main = win
   return win
+}
+
+function notifyMain(event: 'shortcut:new-chat' | 'shortcut:command-palette'): void {
+  const win = create()
+  const notify = (): void => {
+    win.show()
+    win.focus()
+    emit(win.webContents, event, undefined)
+  }
+  if (win.webContents.isLoadingMainFrame()) win.once('ready-to-show', notify)
+  else notify()
+}
+
+export function newChat(): void {
+  notifyMain('shortcut:new-chat')
+}
+
+export function openCommandPalette(): void {
+  notifyMain('shortcut:command-palette')
 }
 
 export function openSettings(): BrowserWindow {
@@ -113,7 +145,13 @@ function build(shape: Shape): BrowserWindow {
 
 function bindShortcuts(win: BrowserWindow): void {
   win.webContents.on('before-input-event', (event, input) => {
-    if (matchesShortcut(input, 'settings', process.platform)) {
+    if (matchesShortcut(input, 'newChat', process.platform)) {
+      event.preventDefault()
+      newChat()
+    } else if (matchesShortcut(input, 'commandPalette', process.platform)) {
+      event.preventDefault()
+      openCommandPalette()
+    } else if (matchesShortcut(input, 'settings', process.platform)) {
       event.preventDefault()
       openSettings()
     } else if (matchesShortcut(input, 'shortcuts', process.platform)) {

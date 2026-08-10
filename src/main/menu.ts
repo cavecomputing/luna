@@ -1,6 +1,11 @@
 import { Menu, app } from 'electron'
 import { keyboardShortcuts } from '../shared/keyboard-shortcuts.js'
-import { openSettings, openShortcuts } from './window.js'
+import {
+  newChat,
+  openCommandPalette,
+  openSettings,
+  openShortcuts,
+} from './window.js'
 
 /**
  * macOS needs a real menu with standard roles. Without the edit roles,
@@ -32,7 +37,17 @@ export function build(): void {
     },
     {
       label: 'File',
-      submenu: [{ role: 'close' }],
+      submenu: [
+        {
+          label: 'New Chat',
+          accelerator: keyboardShortcuts.newChat.accelerator,
+          click: () => {
+            newChat()
+          },
+        },
+        { type: 'separator' },
+        { role: 'close' },
+      ],
     },
     {
       label: 'Edit',
@@ -49,6 +64,14 @@ export function build(): void {
     {
       label: 'View',
       submenu: [
+        {
+          label: 'Command Palette (WIP)',
+          accelerator: keyboardShortcuts.commandPalette.accelerator,
+          click: () => {
+            openCommandPalette()
+          },
+        },
+        { type: 'separator' },
         { role: 'reload' },
         { role: 'toggleDevTools' },
         { type: 'separator' },

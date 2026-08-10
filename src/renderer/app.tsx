@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Sidebar } from './features/chats/sidebar.js'
 import { useChats } from './features/chats/use-chats.js'
 import { Composer } from './features/composer/composer.js'
@@ -12,6 +12,7 @@ import { usePrefs } from './lib/use-prefs.js'
 import { cx } from './lib/cx.js'
 import { isSearchShortcut } from './features/chats/search-shortcut.js'
 import { ChatSearch } from './features/chats/chat-search.js'
+import { CommandPalette } from './features/commands/command-palette.js'
 
 /**
  * Layout only. Every pane owns its own state; the shell just decides where
@@ -22,15 +23,39 @@ export function App(): React.JSX.Element {
   const chats = useChats(prefs.defaultMode)
   const [open, setOpen] = useState(true)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const usesTrafficLights = window.luna.platform === 'darwin'
+  const startChat = useRef(chats.start)
+
+  useEffect(() => {
+    startChat.current = chats.start
+  }, [chats.start])
+
+  useEffect(() => {
+    const offNewChat = window.luna.onNewChat(() => {
+      setSearchOpen(false)
+      setPaletteOpen(false)
+      void startChat.current()
+    })
+    const offPalette = window.luna.onCommandPalette(() => {
+      setSearchOpen(false)
+      setPaletteOpen(true)
+    })
+    return () => {
+      offNewChat()
+      offPalette()
+    }
+  }, [])
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
       if (isSearchShortcut(event)) {
         event.preventDefault()
+        setPaletteOpen(false)
         setSearchOpen(true)
-      } else if (event.key === 'Escape' && searchOpen) {
+      } else if (event.key === 'Escape' && (searchOpen || paletteOpen)) {
         setSearchOpen(false)
+        setPaletteOpen(false)
       }
     }
 
@@ -38,7 +63,7 @@ export function App(): React.JSX.Element {
     return () => {
       window.removeEventListener('keydown', onKeyDown)
     }
-  }, [searchOpen])
+  }, [paletteOpen, searchOpen])
 
   function closeSearch(): void {
     setSearchOpen(false)
@@ -104,6 +129,14 @@ export function App(): React.JSX.Element {
           onSelect={(id) => {
             chats.setOpenId(id)
             closeSearch()
+          }}
+        />
+      )}
+
+      {paletteOpen && (
+        <CommandPalette
+          onClose={() => {
+            setPaletteOpen(false)
           }}
         />
       )}

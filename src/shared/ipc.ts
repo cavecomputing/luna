@@ -74,6 +74,8 @@ export type Invocations = {
 
 /** One-way, main -> renderer. webContents.send / ipcRenderer.on. */
 export type Events = {
+  'shortcut:new-chat': undefined
+  'shortcut:command-palette': undefined
   'theme:changed': { dark: boolean }
   /** Sent to every window after a successful write. Carries the stored set. */
   'prefs:changed': Prefs

@@ -8,7 +8,7 @@ export type ShortcutInput = {
   shift: boolean
 }
 
-export type WindowShortcut = 'settings' | 'shortcuts'
+export type WindowShortcut = 'newChat' | 'commandPalette' | 'settings' | 'shortcuts'
 
 export function matchesShortcut(
   input: ShortcutInput,
@@ -18,9 +18,17 @@ export function matchesShortcut(
   const primary = platform === 'darwin' ? input.meta : input.control
   if (input.type !== 'keyDown' || !primary || input.alt) return false
 
-  if (shortcut === 'settings') {
-    return !input.shift && (input.key === ',' || input.code === 'Comma')
-  }
+  const expected = {
+    newChat: { key: 'n', code: 'KeyN', shift: false },
+    commandPalette: { key: 'p', code: 'KeyP', shift: false },
+    settings: { key: ',', code: 'Comma', shift: false },
+    shortcuts: { key: '?', code: 'Slash', shift: true },
+  }[shortcut]
 
-  return input.shift && (input.key === '?' || input.code === 'Slash')
+  if (input.shift !== expected.shift) return false
+  if (input.code === expected.code) return true
+  if (expected.key.length === 1 && expected.key !== '?') {
+    return input.key.toLowerCase() === expected.key
+  }
+  return input.key === expected.key
 }

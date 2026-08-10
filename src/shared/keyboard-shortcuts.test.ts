@@ -11,8 +11,12 @@ describe('keyboard shortcuts', () => {
   })
 
   it('uses the requested Cmd shortcuts on macOS', () => {
+    expect(keyboardShortcuts.newChat.accelerator).toBe('CmdOrCtrl+N')
+    expect(keyboardShortcuts.commandPalette.accelerator).toBe('CmdOrCtrl+P')
     expect(keyboardShortcuts.settings.accelerator).toBe('CmdOrCtrl+,')
     expect(keyboardShortcuts.shortcuts.accelerator).toBe('CmdOrCtrl+?')
+    expect(shortcutKeys('newChat', 'darwin')).toEqual(['⌘', 'N'])
+    expect(shortcutKeys('commandPalette', 'darwin')).toEqual(['⌘', 'P'])
     expect(shortcutKeys('settings', 'darwin')).toEqual(['⌘', ','])
     expect(shortcutKeys('shortcuts', 'darwin')).toEqual(['⌘', '?'])
   })

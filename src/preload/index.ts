@@ -68,6 +68,8 @@ const api = {
   settings: {
     open: () => invoke('settings:open', undefined),
   },
+  onNewChat: (fn: () => void) => subscribe('shortcut:new-chat', fn),
+  onCommandPalette: (fn: () => void) => subscribe('shortcut:command-palette', fn),
   onTheme: (fn: (data: EventData<'theme:changed'>) => void) => subscribe('theme:changed', fn),
   onPrefs: (fn: (data: EventData<'prefs:changed'>) => void) => subscribe('prefs:changed', fn),
   onProviders: (fn: (data: EventData<'providers:changed'>) => void) =>

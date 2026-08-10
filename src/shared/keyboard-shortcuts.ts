@@ -1,4 +1,16 @@
 export const keyboardShortcuts = {
+  newChat: {
+    label: 'New chat',
+    accelerator: 'CmdOrCtrl+N',
+    macKeys: ['⌘', 'N'],
+    otherKeys: ['Ctrl', 'N'],
+  },
+  commandPalette: {
+    label: 'Command palette (WIP)',
+    accelerator: 'CmdOrCtrl+P',
+    macKeys: ['⌘', 'P'],
+    otherKeys: ['Ctrl', 'P'],
+  },
   search: {
     label: 'Search conversations',
     accelerator: 'CmdOrCtrl+F',
@@ -37,6 +49,8 @@ export const keyboardShortcuts = {
 export type KeyboardShortcutId = keyof typeof keyboardShortcuts
 
 export const keyboardShortcutOrder: KeyboardShortcutId[] = [
+  'newChat',
+  'commandPalette',
   'search',
   'settings',
   'shortcuts',
