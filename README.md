@@ -1,16 +1,16 @@
 # WIP, not useable software yet
 # Luna
 
-A macOS desktop AI chat assistant. Electron + TypeScript + React.
+A desktop AI chat assistant for macOS and Windows. Electron + TypeScript + React.
 
 Talks to any OpenAI-compatible endpoint. Two configurable models: **Fast** for quick
 replies, **Expert** for harder work.
 
 ## Requirements
 
-- macOS
+- macOS or Windows
 - Node 22 or newer (`node -v`)
-- Xcode Command Line Tools, only if you plan to sign a build
+- Xcode Command Line Tools, only if you plan to sign a macOS build
 
 ## Setup
 
@@ -20,6 +20,9 @@ npm install
 
 That also downloads the Electron binary and enables the git hooks in `.githooks/`.
 Both run from lifecycle scripts, so there is no second step.
+
+If PowerShell blocks the `npm.ps1` shim under your local execution policy, use `npm.cmd`
+in the commands below or run them from Command Prompt/Git Bash.
 
 ## Develop
 
@@ -50,14 +53,17 @@ npm run test -- src/shared/prefs.test.ts
 
 ```bash
 npm run build       # typecheck + lint + bundle to out/
-npm run package     # unsigned release/mac-arm64/Luna.app, for local testing
-npm run dist        # DMG in release/
+npm run package     # unpacked app for local testing
+npm run dist        # DMG on macOS; NSIS installer on Windows
 ```
 
-`release/` is gitignored and large (~286 MB unpacked); delete it freely.
+`npm run package` creates an unpacked app for the current operating system.
+`npm run dist` creates a DMG on macOS or an NSIS installer on Windows.
 
-`npm run dist` produces an unsigned DMG unless signing credentials are in the
-environment. To sign and notarize, set these before running it:
+`release/` is gitignored and large; delete it freely.
+
+On macOS, `npm run dist` produces an unsigned DMG unless signing credentials are
+in the environment. To sign and notarize that build, set these before running it:
 
 ```
 APPLE_ID
@@ -80,6 +86,8 @@ src/
 
 Conventions, security rules and the IPC contract are in [CLAUDE.md](CLAUDE.md).
 Deeper architecture notes are in [docs/architecture.md](docs/architecture.md).
+Windows-specific setup, packaging, and troubleshooting are in
+[docs/windows.md](docs/windows.md).
 
 ## Git hooks
 

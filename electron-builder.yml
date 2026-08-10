@@ -28,5 +28,17 @@ mac:
   #   APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
   notarize: false
 
+win:
+  icon: assets/LunaAppIcon/icon.png
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  artifactName: ${productName}-Setup-${version}-${arch}.${ext}
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
 dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Luna pre-commit hook — blocks secrets and personal data from entering git.
 #
-# Enable:      npm run setup      (or: sh scripts/setup-hooks.sh)
+# Enable:      npm run setup
 # Bypass once: git commit --no-verify
 #
 # This catches accidents, not intent. It is not a security boundary.

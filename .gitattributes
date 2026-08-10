@@ -1,0 +1,2 @@
+# Git for Windows executes hooks through its bundled POSIX shell.
+.githooks/* text eol=lf

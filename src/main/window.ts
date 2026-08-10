@@ -59,8 +59,12 @@ function build(shape: Shape): BrowserWindow {
   const win = new BrowserWindow({
     ...shape,
     show: false,
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 16, y: 18 },
+    ...(process.platform === 'darwin'
+      ? {
+          titleBarStyle: 'hiddenInset' as const,
+          trafficLightPosition: { x: 16, y: 18 },
+        }
+      : {}),
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#16181d' : '#f5f6f8',
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.cjs'),

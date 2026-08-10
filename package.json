@@ -2,7 +2,7 @@
   "name": "luna",
   "version": "0.1.0",
   "private": true,
-  "description": "A macOS desktop AI chat assistant",
+  "description": "A desktop AI chat assistant for macOS and Windows",
   "license": "Apache-2.0",
   "author": "Matt Haney",
   "type": "module",
@@ -11,8 +11,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "setup": "sh scripts/setup-hooks.sh",
-    "prepare": "sh scripts/setup-hooks.sh",
+    "setup": "node scripts/setup-hooks.mjs",
+    "prepare": "node scripts/setup-hooks.mjs",
     "postinstall": "install-electron",
     "dev": "electron-vite dev",
     "start": "electron-vite preview",

@@ -388,13 +388,13 @@ rotated at the provider. Rewriting git history does not undo the exposure.
 
 **Git hooks.** `.githooks/pre-commit` blocks credential files, user data, oversized blobs, and
 key-shaped strings. `.githooks/pre-push` runs typecheck, lint, and test. Both are committed and
-enabled by `sh scripts/setup-hooks.sh`, which `package.json` must run from `prepare` so a fresh
+enabled by `node scripts/setup-hooks.mjs`, which `package.json` must run from `prepare` so a fresh
 clone gets them on `npm install`:
 
 ```json
 "scripts": {
-  "prepare": "sh scripts/setup-hooks.sh",
-  "setup":   "sh scripts/setup-hooks.sh"
+  "prepare": "node scripts/setup-hooks.mjs",
+  "setup":   "node scripts/setup-hooks.mjs"
 }
 ```
 
