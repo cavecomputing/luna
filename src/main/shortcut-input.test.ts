@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matchesShortcut, type ShortcutInput } from './shortcut-input.js'
+import { closesAuxiliary, matchesShortcut, type ShortcutInput } from './shortcut-input.js'
 
 function input(overrides: Partial<ShortcutInput> = {}): ShortcutInput {
   return {
@@ -46,5 +46,11 @@ describe('window shortcuts', () => {
         'win32',
       ),
     ).toBe(false)
+  })
+
+  it('closes an auxiliary window with Cmd+, or plain Escape', () => {
+    expect(closesAuxiliary(input({ key: ',', meta: true }), 'darwin')).toBe(true)
+    expect(closesAuxiliary(input({ key: 'Escape' }), 'darwin')).toBe(true)
+    expect(closesAuxiliary(input({ key: 'Escape', shift: true }), 'darwin')).toBe(false)
   })
 })

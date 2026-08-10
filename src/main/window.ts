@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { APP_ORIGIN } from './protocol.js'
 import { background, chromeOptions, overlay } from './window-chrome.js'
 import { canFrameLoad } from './navigation.js'
-import { matchesShortcut } from './shortcut-input.js'
+import { closesAuxiliary, matchesShortcut } from './shortcut-input.js'
 import { emit } from './ipc/bus.js'
 
 const MIN_WIDTH = 720
@@ -26,12 +26,15 @@ export function create(): BrowserWindow {
     return main
   }
 
-  const win = build({
-    width: 1100,
-    height: 720,
-    minWidth: MIN_WIDTH,
-    minHeight: MIN_HEIGHT,
-  })
+  const win = build(
+    {
+      width: 1100,
+      height: 720,
+      minWidth: MIN_WIDTH,
+      minHeight: MIN_HEIGHT,
+    },
+    'main',
+  )
 
   win.on('closed', () => {
     main = undefined
@@ -68,13 +71,16 @@ export function openSettings(): BrowserWindow {
     return settings
   }
 
-  const win = build({
-    width: SETTINGS_WIDTH,
-    height: SETTINGS_HEIGHT,
-    minWidth: 640,
-    minHeight: 460,
-    title: 'Settings',
-  })
+  const win = build(
+    {
+      width: SETTINGS_WIDTH,
+      height: SETTINGS_HEIGHT,
+      minWidth: 640,
+      minHeight: 460,
+      title: 'Settings',
+    },
+    'auxiliary',
+  )
 
   win.on('closed', () => {
     settings = undefined
@@ -92,13 +98,16 @@ export function openShortcuts(): BrowserWindow {
     return shortcuts
   }
 
-  const win = build({
-    width: SHORTCUTS_WIDTH,
-    height: SHORTCUTS_HEIGHT,
-    minWidth: 420,
-    minHeight: 420,
-    title: 'Keyboard Shortcuts',
-  })
+  const win = build(
+    {
+      width: SHORTCUTS_WIDTH,
+      height: SHORTCUTS_HEIGHT,
+      minWidth: 420,
+      minHeight: 420,
+      title: 'Keyboard Shortcuts',
+    },
+    'auxiliary',
+  )
 
   win.on('closed', () => {
     shortcuts = undefined
@@ -117,7 +126,9 @@ type Shape = {
   title?: string
 }
 
-function build(shape: Shape): BrowserWindow {
+type WindowKind = 'main' | 'auxiliary'
+
+function build(shape: Shape, kind: WindowKind): BrowserWindow {
   const dark = nativeTheme.shouldUseDarkColors
   const win = new BrowserWindow({
     ...shape,
@@ -139,13 +150,16 @@ function build(shape: Shape): BrowserWindow {
   })
 
   lockNavigation(win)
-  bindShortcuts(win)
+  bindShortcuts(win, kind)
   return win
 }
 
-function bindShortcuts(win: BrowserWindow): void {
+function bindShortcuts(win: BrowserWindow, kind: WindowKind): void {
   win.webContents.on('before-input-event', (event, input) => {
-    if (matchesShortcut(input, 'newChat', process.platform)) {
+    if (kind === 'auxiliary' && closesAuxiliary(input, process.platform)) {
+      event.preventDefault()
+      win.close()
+    } else if (matchesShortcut(input, 'newChat', process.platform)) {
       event.preventDefault()
       newChat()
     } else if (matchesShortcut(input, 'commandPalette', process.platform)) {

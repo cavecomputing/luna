@@ -32,3 +32,15 @@ export function matchesShortcut(
   }
   return input.key === expected.key
 }
+
+export function closesAuxiliary(input: ShortcutInput, platform: NodeJS.Platform): boolean {
+  if (matchesShortcut(input, 'settings', platform)) return true
+  return (
+    input.type === 'keyDown' &&
+    !input.alt &&
+    !input.control &&
+    !input.meta &&
+    !input.shift &&
+    (input.key === 'Escape' || input.code === 'Escape')
+  )
+}
