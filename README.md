@@ -1,131 +1,60 @@
-# WIP, not useable software yet
-# Luna
+<p align="center">
+  <img src="assets/readme-mascot.png" alt="Luna, a blue and white moon-fox mascot, working at a laptop" width="420">
+</p>
 
-A desktop AI chat assistant for macOS and Windows. Electron + TypeScript + React.
+<h1 align="center">Luna</h1>
 
-Talks to any OpenAI-compatible endpoint. Two configurable models: **Fast** for quick
-replies, **Expert** for harder work.
+<p align="center">
+  A friendly desktop client for chatting with OpenAI-compatible models on macOS and Windows.
+  Bring your own provider, switch between Fast and Expert models, and keep your conversations
+  organized in one focused app.
+</p>
 
-## Configure a provider
+## Screenshots
 
-Open Settings with `CmdOrCtrl+,`, then:
+![A conversation in Luna with the sidebar, Fast and Expert mode switch, and composer](assets/screenshots/luna-chat.png)
 
-1. Under **Providers**, edit the preconfigured OpenAI endpoint or add another compatible
-   server. Choose Responses API for current OpenAI features or Chat Completions for servers
-   that implement only that compatibility surface.
-2. Enter an API key if the server requires one. Keyless local servers are supported. OpenAI
-   organization and project IDs are optional.
-3. Use **Save & test** to call the server's `GET /models` endpoint.
-4. Under **Models**, choose a provider separately for Fast and Expert, then select a returned
-   model or type an exact model ID. Both slots may use the same provider.
+![Luna's conversation search dialog](assets/screenshots/luna-search.png)
 
-Provider configuration and model assignments live in `luna.db` under Electron's `userData`
-directory. API keys do not: Electron encrypts them with the macOS Keychain or Windows DPAPI,
-and the Settings window can only see whether a key exists.
+> [!WARNING]
+> Luna is early, unstable software. Features, storage formats, and behavior may change, and
+> unreleased builds may lose data. Keep anything important somewhere else and avoid relying on
+> Luna as your only copy of a conversation.
 
-Messages and conversations are stored in the same `luna.db` database. Assistant replies
-stream through main, can be stopped from the composer, and keep a defined complete, stopped,
-or interrupted state across reloads. Both the Responses API and Chat Completions are supported;
-Luna sends `store: false` and remains the source of truth for conversation history. When
-automatic naming is enabled, the Fast model names a new conversation after its first exchange.
-Compatible models that emit explicit `<think>…</think>` markup get a separate collapsible
-Thinking section instead of exposing tags in the answer.
+## Quick start
 
-File attachments are not implemented yet. The disabled paperclip reserves their place in the
-composer without sending or storing attachment data prematurely.
-
-## Requirements
-
-- macOS or Windows
-- Node 22 or newer (`node -v`)
-- Xcode Command Line Tools, only if you plan to sign a macOS build
-
-## Setup
+Luna currently runs from source. Install [Node.js 22 or newer](https://nodejs.org/), then:
 
 ```bash
+git clone https://github.com/cavecomputing/luna.git
+cd luna
 npm install
-```
-
-That also downloads the Electron binary and enables the git hooks in `.githooks/`.
-Both run from lifecycle scripts, so there is no second step.
-
-If PowerShell blocks the `npm.ps1` shim under your local execution policy, use `npm.cmd`
-in the commands below or run them from Command Prompt/Git Bash.
-
-## Develop
-
-```bash
 npm run dev
 ```
 
-Launches the app with hot reload on the main, preload and renderer processes.
-Editing a renderer file updates in place; editing a main file restarts the app.
+Open Settings with `CmdOrCtrl+,`, add or edit an OpenAI-compatible provider, and use
+**Save & test**. Then assign models to the **Fast** and **Expert** slots and start a chat.
 
-## Checks
+For provider options, keyless local servers, and data-storage details, see
+[Getting started](docs/getting-started.md).
 
-```bash
-npm run typecheck   # tsc against the node and web configs
-npm run lint        # eslint, zero warnings allowed
-npm run test        # vitest
-```
+## Highlights
 
-All three must pass before a change is done. While iterating, a single file is faster:
+- OpenAI Responses API and Chat Completions-compatible providers
+- Separate Fast and Expert model assignments for everyday and demanding tasks
+- Streaming replies with Markdown, code blocks, and collapsible reasoning
+- Searchable, pinnable, persistent conversation history
+- Image, PDF, and text attachments
+- Light and dark appearance on macOS and Windows
+- API keys protected by macOS Keychain or Windows DPAPI
 
-```bash
-npm run test -- src/shared/prefs.test.ts
-```
+## Documentation
 
-`npm run test:watch` reruns on save.
-
-## Build
-
-```bash
-npm run build       # typecheck + lint + bundle to out/
-npm run package     # unpacked app for local testing
-npm run dist        # DMG on macOS; NSIS installer on Windows
-```
-
-`npm run package` creates an unpacked app for the current operating system.
-`npm run dist` creates a DMG on macOS or an NSIS installer on Windows.
-
-`release/` is gitignored and large; delete it freely.
-
-On macOS, `npm run dist` produces an unsigned DMG unless signing credentials are
-in the environment. To sign and notarize that build, set these before running it:
-
-```
-APPLE_ID
-APPLE_APP_SPECIFIC_PASSWORD
-APPLE_TEAM_ID
-```
-
-Then set `notarize: true` in [electron-builder.yml](electron-builder.yml). Never commit
-these values — see the privacy rules in [CLAUDE.md](CLAUDE.md).
-
-## Layout
-
-```
-src/
-  main/       Node context. Windows, menus, IPC handlers, privileged work.
-  preload/    The contextBridge surface. The only renderer↔main door.
-  renderer/   Browser context. React. No Node, no Electron imports.
-  shared/     Imported by all three. Pure TypeScript, no runtime deps.
-```
-
-Conventions, security rules and the IPC contract are in [CLAUDE.md](CLAUDE.md).
-Deeper architecture notes are in [docs/architecture.md](docs/architecture.md).
-Windows-specific setup, packaging, and troubleshooting are in
-[docs/windows.md](docs/windows.md).
-
-## Git hooks
-
-`npm install` points git at `.githooks/`:
-
-- **pre-commit** blocks credential files, user data, oversized blobs and key-shaped strings
-- **pre-push** runs typecheck, lint and test
-
-Re-enable them by hand with `npm run setup`. If a hook fires on something legitimate,
-fix the rule in `.githooks/pre-commit` rather than passing `--no-verify`.
+- [Getting started](docs/getting-started.md)
+- [Development](docs/development.md)
+- [Architecture](docs/architecture.md)
+- [Windows development and packaging](docs/windows.md)
+- [Project contribution and security contract](CLAUDE.md)
 
 ## License
 
