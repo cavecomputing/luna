@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CommandPalette } from './command-palette.js'
+
+afterEach(cleanup)
 
 describe('CommandPalette', () => {
   it('shows its WIP state and closes from its button', () => {
@@ -14,5 +16,25 @@ describe('CommandPalette', () => {
     expect(closeButton.textContent).toBe('Esc')
     fireEvent.click(closeButton)
     expect(close).toHaveBeenCalledOnce()
+  })
+
+  it('contains focus and restores it after closing', () => {
+    const outside = document.createElement('button')
+    document.body.append(outside)
+    outside.focus()
+    const view = render(<CommandPalette onClose={() => undefined} />)
+    const input = screen.getByRole('textbox', { name: 'Command' })
+    const close = screen.getByRole('button', { name: 'Close command palette' })
+
+    expect(document.activeElement).toBe(input)
+    close.focus()
+    fireEvent.keyDown(close, { key: 'Tab' })
+    expect(document.activeElement).toBe(input)
+    fireEvent.keyDown(input, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(close)
+
+    view.unmount()
+    expect(document.activeElement).toBe(outside)
+    outside.remove()
   })
 })

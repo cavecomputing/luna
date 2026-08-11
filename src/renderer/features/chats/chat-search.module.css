@@ -20,6 +20,7 @@
 }
 
 .result:hover,
+.result[aria-selected='true'],
 .result:focus-visible {
   background: var(--surface-hover);
 }

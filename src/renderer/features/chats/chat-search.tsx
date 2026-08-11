@@ -6,7 +6,7 @@ import { Dialog, DialogClose, DialogHead } from '../../ui/dialog.js'
 import { Pin } from '../../ui/icons/pin.js'
 import { SearchInput } from '../../ui/search-input.js'
 import { byRecency, filterChats, messageExcerpt } from './filter.js'
-import { useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import styles from './chat-search.module.css'
 
 const SEARCH_DELAY = 150
@@ -20,12 +20,26 @@ type Props = {
 
 export function ChatSearch({ chats, now, onClose, onSelect }: Props): React.JSX.Element {
   const [draft, setDraft] = useState('')
+  const [activeId, setActiveId] = useState<string>()
+  const options = useRef(new Map<string, HTMLButtonElement>())
+  const listId = useId()
   const query = useDebouncedValue(draft, SEARCH_DELAY)
   const results = byRecency(filterChats(chats, query))
+  const activeIndex = Math.max(0, results.findIndex((chat) => chat.id === activeId))
+  const active = results[activeIndex]
 
-  function selectFirst(): void {
-    const first = results[0]
-    if (first !== undefined) onSelect(first.id)
+  useEffect(() => {
+    if (active !== undefined) options.current.get(active.id)?.scrollIntoView?.({ block: 'nearest' })
+  }, [active])
+
+  function selectActive(): void {
+    if (active !== undefined) onSelect(active.id)
+  }
+
+  function move(step: -1 | 1): void {
+    if (results.length === 0) return
+    const next = (activeIndex + step + results.length) % results.length
+    setActiveId(results[next]?.id)
   }
 
   return (
@@ -36,12 +50,21 @@ export function ChatSearch({ chats, now, onClose, onSelect }: Props): React.JSX.
           onChange={setDraft}
           placeholder="Search chats"
           autoFocus
-          onEnter={selectFirst}
+          controls={listId}
+          activeDescendant={active === undefined ? undefined : `${listId}-${active.id}`}
+          onEnter={selectActive}
+          onMove={move}
         />
         <DialogClose label="Close search" onClick={onClose} />
       </DialogHead>
 
-      <div className={styles.results} role="listbox" aria-label="Matching conversations">
+      <div
+        id={listId}
+        className={styles.results}
+        role="listbox"
+        aria-label="Matching conversations"
+        tabIndex={-1}
+      >
         {results.map((chat) => {
           const excerpt = messageExcerpt(chat, query)
           return (
@@ -50,7 +73,16 @@ export function ChatSearch({ chats, now, onClose, onSelect }: Props): React.JSX.
               type="button"
               className={styles.result}
               role="option"
-              aria-selected="false"
+              id={`${listId}-${chat.id}`}
+              aria-selected={chat.id === active?.id}
+              tabIndex={-1}
+              ref={(element) => {
+                if (element === null) options.current.delete(chat.id)
+                else options.current.set(chat.id, element)
+              }}
+              onMouseEnter={() => {
+                setActiveId(chat.id)
+              }}
               onClick={() => {
                 onSelect(chat.id)
               }}
