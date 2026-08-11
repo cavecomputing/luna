@@ -2,6 +2,7 @@ import type { Conversation } from '../../../shared/types.js'
 import { relative } from '../../lib/time.js'
 import { useDebouncedValue } from '../../lib/use-debounced-value.js'
 import { ChatGlyph } from '../../ui/chat-glyph.js'
+import { Dialog, DialogHead } from '../../ui/dialog.js'
 import { IconButton } from '../../ui/icon-button.js'
 import { Pin } from '../../ui/icons/pin.js'
 import { X } from '../../ui/icons/x.js'
@@ -30,61 +31,53 @@ export function ChatSearch({ chats, now, onClose, onSelect }: Props): React.JSX.
   }
 
   return (
-    <div
-      className={styles.backdrop}
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.currentTarget === event.target) onClose()
-      }}
-    >
-      <section className={styles.dialog} role="dialog" aria-modal="true" aria-label="Search chats">
-        <header className={styles.head}>
-          <SearchInput
-            value={draft}
-            onChange={setDraft}
-            placeholder="Search chats"
-            autoFocus
-            onEnter={selectFirst}
-          />
-          <IconButton label="Close search" onClick={onClose}>
-            <X />
-          </IconButton>
-        </header>
+    <Dialog label="Search chats" placement="center" onClose={onClose} frameClassName={styles.frame}>
+      <DialogHead>
+        <SearchInput
+          value={draft}
+          onChange={setDraft}
+          placeholder="Search chats"
+          autoFocus
+          onEnter={selectFirst}
+        />
+        <IconButton label="Close search" onClick={onClose}>
+          <X />
+        </IconButton>
+      </DialogHead>
 
-        <div className={styles.results} role="listbox" aria-label="Matching conversations">
-          {results.map((chat) => {
-            const excerpt = messageExcerpt(chat, query)
-            return (
-              <button
-                key={chat.id}
-                type="button"
-                className={styles.result}
-                role="option"
-                aria-selected="false"
-                onClick={() => {
-                  onSelect(chat.id)
-                }}
-              >
-                <span className={styles.glyph}>
-                  <ChatGlyph icon={chat.icon} />
+      <div className={styles.results} role="listbox" aria-label="Matching conversations">
+        {results.map((chat) => {
+          const excerpt = messageExcerpt(chat, query)
+          return (
+            <button
+              key={chat.id}
+              type="button"
+              className={styles.result}
+              role="option"
+              aria-selected="false"
+              onClick={() => {
+                onSelect(chat.id)
+              }}
+            >
+              <span className={styles.glyph}>
+                <ChatGlyph icon={chat.icon} />
+              </span>
+              <span className={styles.resultText}>
+                <span className={styles.title}>{chat.title}</span>
+                {excerpt !== undefined && <span className={styles.excerpt}>{excerpt}</span>}
+                <span className={styles.when}>{relative(chat.updatedAt, now)}</span>
+              </span>
+              {chat.pinned && (
+                <span className={styles.pin} aria-label="Pinned">
+                  <Pin size={14} />
                 </span>
-                <span className={styles.resultText}>
-                  <span className={styles.title}>{chat.title}</span>
-                  {excerpt !== undefined && <span className={styles.excerpt}>{excerpt}</span>}
-                  <span className={styles.when}>{relative(chat.updatedAt, now)}</span>
-                </span>
-                {chat.pinned && (
-                  <span className={styles.pin} aria-label="Pinned">
-                    <Pin size={14} />
-                  </span>
-                )}
-              </button>
-            )
-          })}
+              )}
+            </button>
+          )
+        })}
 
-          {results.length === 0 && <p className={styles.empty}>No matching chats</p>}
-        </div>
-      </section>
-    </div>
+        {results.length === 0 && <p className={styles.empty}>No matching chats</p>}
+      </div>
+    </Dialog>
   )
 }

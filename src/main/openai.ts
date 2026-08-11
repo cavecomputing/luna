@@ -1,13 +1,13 @@
 import { err, ok, type Result } from '../shared/result.js'
 import type { ProviderModel } from '../shared/types.js'
+import { object } from './parse.js'
 import type { ProviderConfig } from './providers.js'
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>
 
 function model(row: unknown): ProviderModel | undefined {
-  if (typeof row !== 'object' || row === null) return undefined
-  const cell: Record<string, unknown> = { ...row }
-  if (typeof cell.id !== 'string' || cell.id.trim() === '') return undefined
+  const cell = object(row)
+  if (cell === undefined || typeof cell.id !== 'string' || cell.id.trim() === '') return undefined
 
   const value: ProviderModel = { id: cell.id }
   if (typeof cell.owned_by === 'string') value.ownedBy = cell.owned_by
@@ -18,10 +18,10 @@ function model(row: unknown): ProviderModel | undefined {
 }
 
 export function parseModels(input: unknown): Result<ProviderModel[]> {
-  if (typeof input !== 'object' || input === null) {
+  const root = object(input)
+  if (root === undefined) {
     return err('provider/bad-response', 'model list was not an object')
   }
-  const root: Record<string, unknown> = { ...input }
   if (!Array.isArray(root.data)) {
     return err('provider/bad-response', 'model list had no data array')
   }
@@ -48,21 +48,29 @@ function statusError(status: number): Result<never> {
   return err('provider/http', `provider returned HTTP ${String(status)}`)
 }
 
+/** Headers every OpenAI-compatible request carries, keyed by provider config. */
+export function providerHeaders(
+  provider: ProviderConfig,
+  apiKey: string | undefined,
+  accept: string,
+): Record<string, string> {
+  const headers: Record<string, string> = { Accept: accept }
+  if (apiKey !== undefined && apiKey !== '') headers.Authorization = `Bearer ${apiKey}`
+  if (provider.organization !== '') headers['OpenAI-Organization'] = provider.organization
+  if (provider.project !== '') headers['OpenAI-Project'] = provider.project
+  return headers
+}
+
 export async function discoverModels(
   provider: ProviderConfig,
   apiKey: string | undefined,
   fetcher: Fetch,
 ): Promise<Result<ProviderModel[]>> {
-  const headers: Record<string, string> = { Accept: 'application/json' }
-  if (apiKey !== undefined && apiKey !== '') headers.Authorization = `Bearer ${apiKey}`
-  if (provider.organization !== '') headers['OpenAI-Organization'] = provider.organization
-  if (provider.project !== '') headers['OpenAI-Project'] = provider.project
-
   let response: Response
   try {
     response = await fetcher(`${provider.baseUrl}/models`, {
       method: 'GET',
-      headers,
+      headers: providerHeaders(provider, apiKey, 'application/json'),
       signal: AbortSignal.timeout(15_000),
     })
   } catch {

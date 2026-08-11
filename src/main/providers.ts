@@ -7,6 +7,7 @@ import type {
   ProviderDraft,
 } from '../shared/types.js'
 import * as db from './db.js'
+import { object } from './parse.js'
 
 export type ProviderConfig = Omit<Provider, 'hasApiKey'>
 
@@ -15,10 +16,10 @@ function api(value: unknown): ApiKind | undefined {
 }
 
 function providerRow(row: unknown): ProviderConfig | undefined {
-  if (typeof row !== 'object' || row === null) return undefined
-  const cell: Record<string, unknown> = { ...row }
-  const kind = api(cell.api)
+  const cell = object(row)
+  const kind = api(cell?.api)
   if (
+    cell === undefined ||
     typeof cell.id !== 'string' ||
     typeof cell.name !== 'string' ||
     typeof cell.base_url !== 'string' ||
@@ -114,8 +115,8 @@ export function remove(conn: DatabaseSync, id: string): boolean {
 }
 
 function slotRow(row: unknown): [Mode, { providerId: string | null; model: string }] | undefined {
-  if (typeof row !== 'object' || row === null) return undefined
-  const cell: Record<string, unknown> = { ...row }
+  const cell = object(row)
+  if (cell === undefined) return undefined
   if (
     (cell.slot !== 'fast' && cell.slot !== 'expert') ||
     (typeof cell.provider_id !== 'string' && cell.provider_id !== null) ||

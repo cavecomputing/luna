@@ -11,6 +11,7 @@ import { err, ok, type Result } from '../../shared/result.js'
 import type { Conversation, Mode } from '../../shared/types.js'
 import * as chats from '../chats.js'
 import * as db from '../db.js'
+import { id, object, text } from '../parse.js'
 import { broadcast, emit, handle } from './bus.js'
 
 type Deps = {
@@ -80,16 +81,6 @@ const deps: Deps = {
   confirmDelete,
 }
 
-function object(input: unknown): Record<string, unknown> | undefined {
-  return typeof input === 'object' && input !== null ? { ...input } : undefined
-}
-
-function id(input: unknown): string | undefined {
-  return typeof input === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(input)
-    ? input
-    : undefined
-}
-
 function announce(d: Deps): void {
   d.notify(d.list())
 }
@@ -146,8 +137,8 @@ export function updateChatPinned(input: unknown, d: Deps): Result<Conversation> 
 export function updateChatTitle(input: unknown, d: Deps): Result<Conversation> {
   const req = object(input)
   const chatId = id(req?.id)
-  const title = typeof req?.title === 'string' ? req.title.trim() : ''
-  if (chatId === undefined || title === '' || title.length > 200) {
+  const title = text(req?.title, 200)
+  if (chatId === undefined || title === undefined || title === '') {
     return err('chat/invalid', 'conversation title was invalid')
   }
   const value = d.setTitle(chatId, title)

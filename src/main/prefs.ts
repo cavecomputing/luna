@@ -13,15 +13,17 @@ import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { parsePrefs, type Prefs } from '../shared/prefs.js'
 import * as db from './db.js'
+import { object } from './parse.js'
 
 /**
  * A row is unknown until proven otherwise. One we can't read is dropped, which
  * leaves that field at its default — the same result as a missing row.
  */
 function entry(row: unknown): [string, unknown] | undefined {
-  if (typeof row !== 'object' || row === null) return undefined
-  const cell: Record<string, unknown> = { ...row }
-  if (typeof cell.key !== 'string' || typeof cell.value !== 'string') return undefined
+  const cell = object(row)
+  if (cell === undefined || typeof cell.key !== 'string' || typeof cell.value !== 'string') {
+    return undefined
+  }
 
   try {
     return [cell.key, JSON.parse(cell.value)]
@@ -62,10 +64,8 @@ export function write(conn: DatabaseSync, prefs: Prefs): Prefs {
 }
 
 function count(conn: DatabaseSync): number {
-  const row = conn.prepare('SELECT count(*) AS n FROM prefs').get()
-  if (typeof row !== 'object' || row === null) return 0
-  const cell: Record<string, unknown> = { ...row }
-  return typeof cell.n === 'number' ? cell.n : 0
+  const cell = object(conn.prepare('SELECT count(*) AS n FROM prefs').get())
+  return typeof cell?.n === 'number' ? cell.n : 0
 }
 
 /**

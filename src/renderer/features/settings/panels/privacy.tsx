@@ -9,8 +9,8 @@ export function Privacy(): React.JSX.Element {
         there is no telemetry.
       </p>
       <NotYet>
-        Conversation storage, export and delete-all arrive with persistence. Key removal
-        arrives with the Keychain work.
+        Conversations live in a local database on this computer. Export and delete-all are
+        coming; API keys can already be removed under Providers.
       </NotYet>
     </Panel>
   )

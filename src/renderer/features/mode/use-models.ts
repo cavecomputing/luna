@@ -1,14 +1,9 @@
 import { useEffect, useState } from 'react'
-import type { ModelSlots } from '../../../shared/types.js'
-
-const empty: ModelSlots = {
-  fast: { providerId: null, model: '' },
-  expert: { providerId: null, model: '' },
-}
+import { emptyModelSlots, type ModelSlots } from '../../../shared/types.js'
 
 /** Mirrors the two model slots owned by main and follows Settings changes live. */
 export function useModels(): ModelSlots {
-  const [models, setModels] = useState<ModelSlots>(empty)
+  const [models, setModels] = useState<ModelSlots>(emptyModelSlots)
 
   useEffect(() => {
     let live = true

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { open } from './db.js'
-import { addFiles } from './attachments.js'
+import type { StoredAttachment } from './attachments.js'
 import {
   beginTurn,
   create,
@@ -9,7 +9,6 @@ import {
   history,
   list,
   messageAction,
-  messageText,
   recoverInterrupted,
   remove,
   restartMessage,
@@ -69,8 +68,7 @@ describe('chat storage', () => {
       attachments: [],
     })
     expect(find(db, 'chat-1')).toMatchObject({ updatedAt: 30 })
-    expect(messageText(db, 'assistant-1')).toBe('Hi there')
-    expect(history(db, 'chat-1')[1]).toMatchObject({
+    expect(history(db, 'chat-1', new Map())[1]).toMatchObject({
       providerApi: 'responses',
       providerId: 'openai',
       providerItems: [{ type: 'message', role: 'assistant' }],
@@ -81,13 +79,12 @@ describe('chat storage', () => {
   it('associates draft attachments and seeds an attachment-only title', () => {
     const db = open(':memory:')
     create(db, 'chat-1', 'fast', 10)
-    addFiles(
-      db,
-      'chat-1',
-      [{ name: 'project-notes.pdf', mediaType: 'application/pdf', data: new TextEncoder().encode('%PDF-1.7') }],
-      () => 'file-1',
-      15,
-    )
+    const bytes = new TextEncoder().encode('%PDF-1.7')
+    db.prepare(
+      `INSERT INTO attachments
+         (id, conversation_id, message_id, name, kind, media_type, byte_size, content, ordinal, created_at)
+       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run('file-1', 'chat-1', 'project-notes.pdf', 'pdf', 'application/pdf', bytes.byteLength, bytes, 0, 15)
 
     const turn = beginTurn(db, 'chat-1', '', 'user-1', 'assistant-1', 20, ['file-1'])
 
@@ -101,9 +98,13 @@ describe('chat storage', () => {
         size: 8,
       },
     ])
-    expect(history(db, 'chat-1')[0]?.attachments[0]?.data).toEqual(
-      new TextEncoder().encode('%PDF-1.7'),
-    )
+    const attachmentMap = new Map<string, StoredAttachment[]>([
+      [
+        'user-1',
+        [{ id: 'file-1', name: 'project-notes.pdf', kind: 'pdf', mediaType: 'application/pdf', size: 8, data: bytes }],
+      ],
+    ])
+    expect(history(db, 'chat-1', attachmentMap)[0]?.attachments[0]?.data).toEqual(bytes)
   })
 
   it('does not finish the same streaming message twice', () => {

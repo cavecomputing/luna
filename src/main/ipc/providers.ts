@@ -9,6 +9,7 @@ import type {
   ProviderModel,
 } from '../../shared/types.js'
 import { discoverModels } from '../openai.js'
+import { id, object, text } from '../parse.js'
 import * as providers from '../providers.js'
 import type { ProviderConfig } from '../providers.js'
 import * as secrets from '../secrets.js'
@@ -56,22 +57,6 @@ const deps: Deps = {
   notifyModels: (value) => {
     broadcast('models:changed', value)
   },
-}
-
-function object(input: unknown): Record<string, unknown> | undefined {
-  return typeof input === 'object' && input !== null ? { ...input } : undefined
-}
-
-function id(input: unknown): string | undefined {
-  return typeof input === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(input)
-    ? input
-    : undefined
-}
-
-function text(input: unknown, max: number): string | undefined {
-  if (typeof input !== 'string') return undefined
-  const value = input.trim()
-  return value.length <= max ? value : undefined
 }
 
 function baseUrl(input: unknown): string | undefined {

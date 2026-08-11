@@ -279,7 +279,7 @@ export function Providers(): React.JSX.Element {
               <option value="responses">Responses API (recommended)</option>
               <option value="chat-completions">Chat Completions (compatibility)</option>
             </select>
-            <small>This is saved now and will govern requests when chat transport is added.</small>
+            <small>Chat requests to this server use the selected API.</small>
           </label>
 
           <div className={styles.columns}>

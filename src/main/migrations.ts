@@ -7,6 +7,7 @@
  */
 
 import type { DatabaseSync } from 'node:sqlite'
+import { object } from './parse.js'
 
 const steps: readonly string[] = [
   `CREATE TABLE prefs (
@@ -93,10 +94,8 @@ const steps: readonly string[] = [
 export const latest = steps.length
 
 export function version(db: DatabaseSync): number {
-  const row = db.prepare('PRAGMA user_version').get()
-  if (typeof row !== 'object' || row === null) return 0
-  const cell: Record<string, unknown> = { ...row }
-  return typeof cell.user_version === 'number' ? cell.user_version : 0
+  const cell = object(db.prepare('PRAGMA user_version').get())
+  return typeof cell?.user_version === 'number' ? cell.user_version : 0
 }
 
 /**

@@ -1,51 +1,8 @@
-.backdrop {
-  position: absolute;
-  z-index: 30;
-  inset: 0;
-  display: grid;
-  place-items: start center;
-  padding: calc(var(--titlebar) + var(--s-5)) var(--s-5) var(--s-5);
-  background: var(--backdrop);
-  backdrop-filter: blur(4px);
-  -webkit-app-region: no-drag;
-  animation: fade-in 140ms var(--ease) backwards;
-}
-
-.dialog {
-  display: flex;
-  flex-direction: column;
+.frame {
   width: min(560px, 100%);
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--r-xl);
-  background: var(--surface);
-  box-shadow: var(--shadow-pop);
-  animation: dialog-in 180ms var(--ease) backwards;
 }
 
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes dialog-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.98);
-  }
-}
-
-.head {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: var(--s-2);
-  padding: var(--s-3);
-  border-bottom: 1px solid var(--line-soft);
-}
-
-.head input {
+.input {
   width: 100%;
   min-width: 0;
   padding: var(--s-2) var(--s-3);
@@ -55,7 +12,7 @@
   font-size: var(--t-lg);
 }
 
-.head input::placeholder {
+.input::placeholder {
   color: var(--text-faint);
 }
 

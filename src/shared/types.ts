@@ -33,6 +33,12 @@ export type ModelSlot = {
 
 export type ModelSlots = Record<Mode, ModelSlot>
 
+/** Both slots unassigned — the shape a fresh install starts from. */
+export const emptyModelSlots: ModelSlots = {
+  fast: { providerId: null, model: '' },
+  expert: { providerId: null, model: '' },
+}
+
 export type Role = 'user' | 'assistant'
 
 export type MessageStatus = 'complete' | 'streaming' | 'error' | 'cancelled'

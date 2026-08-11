@@ -2,6 +2,7 @@ import type { MenuItemConstructorOptions, WebContents } from 'electron'
 import { err, ok, type Result } from '../../shared/result.js'
 import * as chats from '../chats.js'
 import type { MessageAction } from '../chats.js'
+import { id, object } from '../parse.js'
 import { coordinator } from './chat.js'
 import { handle } from './bus.js'
 
@@ -9,16 +10,6 @@ type Deps = {
   getMessage: (id: string) => MessageAction | undefined
   retry: (id: string) => void
   show: (message: MessageAction, retry: () => void) => void
-}
-
-function object(input: unknown): Record<string, unknown> | undefined {
-  return typeof input === 'object' && input !== null ? { ...input } : undefined
-}
-
-function id(input: unknown): string | undefined {
-  return typeof input === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(input)
-    ? input
-    : undefined
 }
 
 export function showMessageMenu(input: unknown, d: Deps): Result<undefined> {

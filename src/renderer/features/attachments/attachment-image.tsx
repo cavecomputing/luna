@@ -38,7 +38,6 @@ export function AttachmentImage({
       className={compact ? styles.compact : styles.image}
       src={source}
       alt={attachment.name}
-      onLoad={() => undefined}
     />
   )
 }

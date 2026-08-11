@@ -12,6 +12,7 @@ import type {
 import * as db from './db.js'
 import * as attachments from './attachments.js'
 import type { StoredAttachment } from './attachments.js'
+import { object } from './parse.js'
 
 export type StoredMessage = Omit<Message, 'attachments'> & {
   attachments: StoredAttachment[]
@@ -41,9 +42,9 @@ const icons: readonly ChatIcon[] = [
   'spark',
 ]
 
-function object(input: unknown): Record<string, unknown> | undefined {
-  return typeof input === 'object' && input !== null ? { ...input } : undefined
-}
+/** What a rendered message needs. history() adds the provider columns on top. */
+const MESSAGE_COLUMNS = 'id, conversation_id, role, text, reasoning, status, created_at'
+const CONVERSATION_COLUMNS = 'id, title, draft, icon, mode, pinned, updated_at'
 
 function mode(input: unknown): Mode | undefined {
   return input === 'fast' || input === 'expert' ? input : undefined
@@ -167,11 +168,7 @@ export function list(conn: DatabaseSync): Conversation[] {
   const grouped = new Map<string, Message[]>()
   const attachmentMap = attachments.messageMap(conn)
   for (const row of conn
-    .prepare(
-      `SELECT id, conversation_id, role, text, reasoning, status, created_at,
-              provider_id, provider_api, provider_items
-       FROM messages ORDER BY conversation_id, ordinal`,
-    )
+    .prepare(`SELECT ${MESSAGE_COLUMNS} FROM messages ORDER BY conversation_id, ordinal`)
     .all()) {
     const parsed = messageRow(row)
     if (parsed === undefined) continue
@@ -182,7 +179,7 @@ export function list(conn: DatabaseSync): Conversation[] {
 
   return conn
     .prepare(
-      `SELECT id, title, draft, icon, mode, pinned, updated_at
+      `SELECT ${CONVERSATION_COLUMNS}
        FROM conversations ORDER BY pinned DESC, updated_at DESC, id`,
     )
     .all()
@@ -195,38 +192,39 @@ export function list(conn: DatabaseSync): Conversation[] {
 }
 
 export function find(conn: DatabaseSync, id: string): Conversation | undefined {
-  return list(conn).find((conversation) => conversation.id === id)
+  const attachmentMap = attachments.messageMap(conn, id)
+  const messages = conn
+    .prepare(`SELECT ${MESSAGE_COLUMNS} FROM messages WHERE conversation_id = ? ORDER BY ordinal`)
+    .all(id)
+    .flatMap((row) => {
+      const parsed = messageRow(row)
+      if (parsed === undefined) return []
+      return [visibleMessage({ ...parsed, attachments: attachmentMap.get(parsed.id) ?? [] })]
+    })
+  return conversationRow(
+    conn
+      .prepare(`SELECT ${CONVERSATION_COLUMNS} FROM conversations WHERE id = ?`)
+      .get(id),
+    messages,
+  )
 }
 
 export function history(
   conn: DatabaseSync,
   conversationId: string,
-  attachmentMap = attachments.historyMap(conn, conversationId),
+  attachmentMap: Map<string, StoredAttachment[]>,
 ): StoredMessage[] {
   return conn
     .prepare(
-      `SELECT id, conversation_id, role, text, reasoning, status, created_at,
-              provider_id, provider_api, provider_items
+      `SELECT ${MESSAGE_COLUMNS}, provider_id, provider_api, provider_items
        FROM messages WHERE conversation_id = ? ORDER BY ordinal`,
     )
     .all(conversationId)
     .flatMap((row) => {
       const parsed = messageRow(row)
       if (parsed === undefined) return []
-      return [{
-        ...parsed,
-        attachments: attachmentMap.get(parsed.id) ?? [],
-        ...(parsed.providerApi === undefined ? {} : { providerApi: parsed.providerApi }),
-        ...(parsed.providerId === undefined ? {} : { providerId: parsed.providerId }),
-        ...(parsed.providerItems === undefined ? {} : { providerItems: parsed.providerItems }),
-      }]
+      return [{ ...parsed, attachments: attachmentMap.get(parsed.id) ?? [] }]
     })
-}
-
-export function messageText(conn: DatabaseSync, id: string): string | undefined {
-  const row = conn.prepare('SELECT text FROM messages WHERE id = ?').get(id)
-  const cell = object(row)
-  return typeof cell?.text === 'string' ? cell.text : undefined
 }
 
 export function messageAction(conn: DatabaseSync, id: string): MessageAction | undefined {
@@ -487,8 +485,7 @@ export function finishMessage(
   const parsed = messageRow(
     conn
       .prepare(
-        `SELECT id, conversation_id, role, text, reasoning, status, created_at,
-                provider_id, provider_api, provider_items
+        `SELECT ${MESSAGE_COLUMNS}, provider_id, provider_api, provider_items
          FROM messages WHERE id = ?`,
       )
       .get(id),
@@ -512,19 +509,11 @@ export function get(id: string): Conversation | undefined {
   return find(db.handle(), id)
 }
 
-export function transcript(id: string): StoredMessage[] {
-  return history(db.handle(), id)
-}
-
 export function transcriptWith(
   id: string,
   attachmentMap: Map<string, StoredAttachment[]>,
 ): StoredMessage[] {
   return history(db.handle(), id, attachmentMap)
-}
-
-export function text(id: string): string | undefined {
-  return messageText(db.handle(), id)
 }
 
 export function action(id: string): MessageAction | undefined {

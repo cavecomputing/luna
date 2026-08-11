@@ -3,7 +3,7 @@
  * whatever is on disk into a value we can trust.
  *
  * Secrets never live here. API keys go to the Keychain via safeStorage in main
- * and are not part of prefs, which is a plain JSON file under userData.
+ * and are not part of prefs, which is a set of rows in the SQLite database.
  */
 
 export type Theme = 'light' | 'dark' | 'system'
@@ -31,6 +31,10 @@ export const defaultPrefs: Prefs = {
   sidebarWidth: 264,
 }
 
+/** Bounds for the resizable conversation sidebar, shared with its parser. */
+export const SIDEBAR_MIN_WIDTH = 200
+export const SIDEBAR_MAX_WIDTH = 420
+
 const themes: Theme[] = ['light', 'dark', 'system']
 const modes: Prefs['defaultMode'][] = ['fast', 'expert']
 
@@ -48,7 +52,12 @@ export function parsePrefs(input: unknown): Prefs {
     autoTitle: bool(raw.autoTitle, defaultPrefs.autoTitle),
     stream: bool(raw.stream, defaultPrefs.stream),
     systemPrompt: str(raw.systemPrompt, defaultPrefs.systemPrompt),
-    sidebarWidth: range(raw.sidebarWidth, 200, 420, defaultPrefs.sidebarWidth),
+    sidebarWidth: range(
+      raw.sidebarWidth,
+      SIDEBAR_MIN_WIDTH,
+      SIDEBAR_MAX_WIDTH,
+      defaultPrefs.sidebarWidth,
+    ),
   }
 }
 

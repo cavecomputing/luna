@@ -1,6 +1,8 @@
 import { err, ok, type Result } from '../shared/result.js'
+import { providerHeaders } from './openai.js'
 import type { ProviderConfig } from './providers.js'
 import type { StoredMessage } from './chats.js'
+import { object } from './parse.js'
 import { SseParser, type SseEvent } from './sse.js'
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>
@@ -64,25 +66,6 @@ function responseContent(message: StoredMessage): string | Record<string, unknow
     }
   }
   return content
-}
-
-function object(input: unknown): Record<string, unknown> | undefined {
-  return typeof input === 'object' && input !== null ? { ...input } : undefined
-}
-
-function headers(request: ChatRequest): Record<string, string> {
-  const value: Record<string, string> = {
-    Accept: 'text/event-stream',
-    'Content-Type': 'application/json',
-  }
-  if (request.apiKey !== undefined && request.apiKey !== '') {
-    value.Authorization = `Bearer ${request.apiKey}`
-  }
-  if (request.provider.organization !== '') {
-    value['OpenAI-Organization'] = request.provider.organization
-  }
-  if (request.provider.project !== '') value['OpenAI-Project'] = request.provider.project
-  return value
 }
 
 export function requestBody(request: ChatRequest): Record<string, unknown> {
@@ -326,7 +309,10 @@ export async function streamChat(
   try {
     response = await fetcher(`${request.provider.baseUrl}/${endpoint}`, {
       method: 'POST',
-      headers: headers(request),
+      headers: {
+        'Content-Type': 'application/json',
+        ...providerHeaders(request.provider, request.apiKey, 'text/event-stream'),
+      },
       body: JSON.stringify(requestBody(request)),
       signal,
     })

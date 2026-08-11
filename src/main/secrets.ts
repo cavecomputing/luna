@@ -1,6 +1,7 @@
 import { app, safeStorage } from 'electron'
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { id } from './parse.js'
 
 type Cipher = {
   available: () => boolean
@@ -24,13 +25,9 @@ const cipher: Cipher = {
   decrypt: (value) => safeStorage.decryptString(value),
 }
 
-function validId(id: string): boolean {
-  return /^[a-zA-Z0-9_-]{1,64}$/.test(id)
-}
-
-function file(dir: string, id: string): string {
-  if (!validId(id)) throw new Error('invalid provider id')
-  return join(dir, `${id}.key`)
+function file(dir: string, providerId: string): string {
+  if (id(providerId) === undefined) throw new Error('invalid provider id')
+  return join(dir, `${providerId}.key`)
 }
 
 export async function hasAt(dir: string, id: string, fs: Files = files): Promise<boolean> {

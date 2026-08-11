@@ -1,6 +1,8 @@
-export const DEFAULT_SIDEBAR_WIDTH = 264
-export const MIN_SIDEBAR_WIDTH = 200
-export const MAX_SIDEBAR_WIDTH = 420
+import { defaultPrefs, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from '../../../shared/prefs.js'
+
+export const DEFAULT_SIDEBAR_WIDTH = defaultPrefs.sidebarWidth
+export const MIN_SIDEBAR_WIDTH = SIDEBAR_MIN_WIDTH
+export const MAX_SIDEBAR_WIDTH = SIDEBAR_MAX_WIDTH
 
 const SNAP_DISTANCE = 10
 

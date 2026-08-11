@@ -1,6 +1,6 @@
 /**
- * The one database. Everything persistent lives here: preferences now,
- * conversations and provider configuration next.
+ * The one database. Everything persistent lives here: preferences,
+ * conversations, attachments, and provider configuration.
  *
  * Opened in main and nowhere else. Preload and the renderer never see it.
  */

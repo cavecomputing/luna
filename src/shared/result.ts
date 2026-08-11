@@ -19,7 +19,3 @@ export function ok<T>(value: T): Ok<T> {
 export function err(code: string, message: string): Err {
   return { ok: false, code, message }
 }
-
-export function isOk<T>(r: Result<T>): r is Ok<T> {
-  return r.ok
-}

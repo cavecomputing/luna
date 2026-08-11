@@ -1,6 +1,13 @@
 import { Worker } from 'node:worker_threads'
+import {
+  MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENTS,
+  MAX_CONVERSATION_ATTACHMENT_BYTES,
+  MAX_MESSAGE_ATTACHMENT_BYTES,
+} from '../shared/attachments.js'
 import type { AttachmentInput, AttachmentImport } from '../shared/ipc.js'
-import type { AttachmentMeta } from '../shared/types.js'
+import type { AttachmentKind, AttachmentMeta } from '../shared/types.js'
+import { object } from './parse.js'
 
 type AddJob = {
   operation: 'add'
@@ -18,6 +25,12 @@ type ReadJob = {
   id: string
 }
 
+export type FileContent = {
+  kind: AttachmentKind
+  mediaType: string
+  data: Uint8Array
+}
+
 type HistoryJob = {
   operation: 'history'
   database: string
@@ -25,12 +38,6 @@ type HistoryJob = {
 }
 
 type Job = AddJob | ReadJob | HistoryJob
-
-type ReadResult = {
-  kind: 'image' | 'text' | 'pdf'
-  mediaType: string
-  data: Uint8Array
-}
 
 export type HistoryAttachment = AttachmentMeta & {
   messageId: string
@@ -45,10 +52,12 @@ const source = String.raw`
 const { parentPort, workerData } = require('node:worker_threads')
 const { DatabaseSync } = require('node:sqlite')
 
-const MAX_FILES = 5
-const MAX_FILE = 10 * 1024 * 1024
-const MAX_MESSAGE = 20 * 1024 * 1024
-const MAX_CONVERSATION = 50 * 1024 * 1024
+// Limits come from shared/attachments.js at bundle time, so the worker and
+// the rest of the app cannot drift apart.
+const MAX_FILES = ${MAX_ATTACHMENTS}
+const MAX_FILE = ${MAX_ATTACHMENT_BYTES}
+const MAX_MESSAGE = ${MAX_MESSAGE_ATTACHMENT_BYTES}
+const MAX_CONVERSATION = ${MAX_CONVERSATION_ATTACHMENT_BYTES}
 
 function cleanName(input) {
   const parts = input.split(/[\\/]/)
@@ -168,11 +177,11 @@ function run(job: Job): Promise<JobResult> {
     let settled = false
     worker.once('message', (value: unknown) => {
       settled = true
-      if (typeof value !== 'object' || value === null) {
+      const cell = object(value)
+      if (cell === undefined) {
         resolve({ ok: false })
         return
       }
-      const cell: Record<string, unknown> = { ...value }
       resolve(cell.ok === true ? { ok: true, value: cell.value } : { ok: false })
     })
     worker.once('error', () => {
@@ -182,10 +191,6 @@ function run(job: Job): Promise<JobResult> {
       if (!settled) resolve({ ok: false })
     })
   })
-}
-
-function object(input: unknown): Record<string, unknown> | undefined {
-  return typeof input === 'object' && input !== null ? { ...input } : undefined
 }
 
 function meta(input: unknown): AttachmentMeta | undefined {
@@ -244,7 +249,7 @@ export async function readFile(
   database: string,
   conversationId: string,
   id: string,
-): Promise<ReadResult | null | undefined> {
+): Promise<FileContent | null | undefined> {
   const result = await run({ operation: 'read', database, conversationId, id })
   if (!result.ok) return undefined
   const value = result.value

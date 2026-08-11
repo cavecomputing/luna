@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
+import { object } from './parse.js'
 
 export type Bounds = {
   x: number
@@ -15,9 +16,9 @@ const MIN_VISIBLE_WIDTH = 120
 const MIN_VISIBLE_HEIGHT = 80
 
 export function parseBounds(row: unknown): Bounds | undefined {
-  if (typeof row !== 'object' || row === null) return undefined
-  const value: Record<string, unknown> = { ...row }
+  const value = object(row)
   if (
+    value === undefined ||
     !isInteger(value.x) ||
     !isInteger(value.y) ||
     !isInteger(value.width) ||

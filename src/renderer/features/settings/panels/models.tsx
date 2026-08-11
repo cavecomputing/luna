@@ -1,20 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type {
-  ModelSlots,
-  Mode,
-  Provider,
-  ProviderModel,
+import {
+  emptyModelSlots,
+  type ModelSlots,
+  type Mode,
+  type Provider,
+  type ProviderModel,
 } from '../../../../shared/types.js'
 import { useDebouncedValue } from '../../../lib/use-debounced-value.js'
 import { Bolt } from '../../../ui/icons/bolt.js'
 import { Crescent } from '../../../ui/icons/crescent.js'
 import { Panel } from '../panel.js'
 import styles from './models.module.css'
-
-const empty: ModelSlots = {
-  fast: { providerId: null, model: '' },
-  expert: { providerId: null, model: '' },
-}
 
 function errorMessage(code: string): string {
   switch (code) {
@@ -160,14 +156,17 @@ type ModelsProps = {
 
 export function Models({ registerFlush }: ModelsProps = {}): React.JSX.Element {
   const [providers, setProviders] = useState<Provider[]>([])
-  const [slots, setSlots] = useState<ModelSlots>(empty)
+  const [slots, setSlots] = useState<ModelSlots>(emptyModelSlots)
   const [drafts, setDrafts] = useState<ModelDrafts>({ fast: '', expert: '' })
   const [available, setAvailable] = useState<Record<string, ProviderModel[]>>({})
   const [status, setStatus] = useState({ fast: '', expert: '' })
   const [ready, setReady] = useState(false)
   // The value each slot was last saved with from this window. Lets the
   // broadcast handler tell its own round trips apart from outside changes.
-  const saved = useRef<ModelSlots>({ fast: { ...empty.fast }, expert: { ...empty.expert } })
+  const saved = useRef<ModelSlots>({
+    fast: { ...emptyModelSlots.fast },
+    expert: { ...emptyModelSlots.expert },
+  })
   const latest = useRef({ drafts, slots, ready })
   latest.current = { drafts, slots, ready }
   const fast = useDebouncedValue(drafts.fast, 300)
@@ -233,24 +232,18 @@ export function Models({ registerFlush }: ModelsProps = {}): React.JSX.Element {
   }, [])
 
   useEffect(() => {
-    if (!ready || fast !== drafts.fast || fast === slots.fast.model) return
-    saved.current.fast = { providerId: slots.fast.providerId, model: fast }
-    void window.luna.models
-      .set('fast', slots.fast.providerId, fast)
-      .then((result) => {
-        if (!result.ok) setStatus((current) => ({ ...current, fast: 'Model choice could not be saved.' }))
+    if (!ready) return
+    for (const slot of ['fast', 'expert'] as const) {
+      const debounced = slot === 'fast' ? fast : expert
+      if (debounced !== drafts[slot] || debounced === slots[slot].model) continue
+      saved.current[slot] = { providerId: slots[slot].providerId, model: debounced }
+      void window.luna.models.set(slot, slots[slot].providerId, debounced).then((result) => {
+        if (!result.ok) {
+          setStatus((current) => ({ ...current, [slot]: 'Model choice could not be saved.' }))
+        }
       })
-  }, [drafts.fast, fast, ready, slots.fast.model, slots.fast.providerId])
-
-  useEffect(() => {
-    if (!ready || expert !== drafts.expert || expert === slots.expert.model) return
-    saved.current.expert = { providerId: slots.expert.providerId, model: expert }
-    void window.luna.models
-      .set('expert', slots.expert.providerId, expert)
-      .then((result) => {
-        if (!result.ok) setStatus((current) => ({ ...current, expert: 'Model choice could not be saved.' }))
-      })
-  }, [drafts.expert, expert, ready, slots.expert.model, slots.expert.providerId])
+    }
+  }, [drafts, expert, fast, ready, slots])
 
   async function choose(slot: Mode, providerId: string | null): Promise<void> {
     setDrafts((current) => ({ ...current, [slot]: '' }))

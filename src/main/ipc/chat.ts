@@ -11,6 +11,7 @@ import * as attachmentJobs from '../attachment-jobs.js'
 import type { StoredAttachment } from '../attachments.js'
 import type { StoredMessage, Turn } from '../chats.js'
 import * as db from '../db.js'
+import { id, object, text } from '../parse.js'
 import * as prefs from '../prefs.js'
 import * as providers from '../providers.js'
 import type { ProviderConfig } from '../providers.js'
@@ -80,16 +81,10 @@ const deps: Deps = {
     if (loaded === undefined) throw new Error('attachment history read failed')
     const grouped = new Map<string, StoredAttachment[]>()
     for (const item of loaded) {
-      const existing = grouped.get(item.messageId) ?? []
-      existing.push({
-        id: item.id,
-        name: item.name,
-        kind: item.kind,
-        mediaType: item.mediaType,
-        size: item.size,
-        data: item.data,
-      })
-      grouped.set(item.messageId, existing)
+      const { messageId, ...stored } = item
+      const existing = grouped.get(messageId) ?? []
+      existing.push(stored)
+      grouped.set(messageId, existing)
     }
     return chats.transcriptWith(conversationId, grouped)
   },
@@ -113,22 +108,6 @@ const deps: Deps = {
   notifyError: (conversationId, message, code) => {
     broadcast('chat:error', { conversationId, message, code })
   },
-}
-
-function object(input: unknown): Record<string, unknown> | undefined {
-  return typeof input === 'object' && input !== null ? { ...input } : undefined
-}
-
-function id(input: unknown): string | undefined {
-  return typeof input === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(input)
-    ? input
-    : undefined
-}
-
-function messageText(input: unknown): string | undefined {
-  if (typeof input !== 'string') return undefined
-  const value = input.trim()
-  return value.length <= 100_000 ? value : undefined
 }
 
 function attachmentIds(input: unknown): string[] | undefined {
@@ -179,13 +158,13 @@ export class ChatCoordinator {
   async send(input: unknown): Promise<Result<ChatStart>> {
     const req = object(input)
     const conversationId = id(req?.conversationId)
-    const text = messageText(req?.text)
+    const message = text(req?.text, 100_000)
     const selectedAttachments = attachmentIds(req?.attachmentIds)
     if (
       conversationId === undefined ||
-      text === undefined ||
+      message === undefined ||
       selectedAttachments === undefined ||
-      (text === '' && selectedAttachments.length === 0)
+      (message === '' && selectedAttachments.length === 0)
     ) {
       return err('chat/invalid', 'chat message was invalid')
     }
@@ -211,7 +190,7 @@ export class ChatCoordinator {
     try {
       turn = this.d.begin(
         conversationId,
-        text,
+        message,
         userMessageId,
         assistantMessageId,
         this.d.now(),

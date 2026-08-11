@@ -4,14 +4,16 @@ import { err, ok, type Result } from '../../shared/result.js'
 import type { AttachmentMeta } from '../../shared/types.js'
 import * as attachments from '../attachments.js'
 import * as jobs from '../attachment-jobs.js'
+import type { FileContent } from '../attachment-jobs.js'
 import * as db from '../db.js'
+import { id, object } from '../parse.js'
 import { broadcast, handle } from './bus.js'
 
 type Deps = {
   add: (conversationId: string, files: AttachmentInput[]) => Promise<AttachmentImport | null | undefined>
   list: (conversationId: string) => AttachmentMeta[]
   remove: (conversationId: string, id: string) => boolean
-  read: (conversationId: string, id: string) => Promise<attachments.StoredAttachment | null | undefined>
+  read: (conversationId: string, id: string) => Promise<FileContent | null | undefined>
 }
 
 const deps: Deps = {
@@ -19,28 +21,7 @@ const deps: Deps = {
     jobs.addFiles(db.filePath(), conversationId, files, files.map(() => randomUUID()), Date.now()),
   list: (conversationId) => attachments.listDrafts(db.handle(), conversationId),
   remove: (conversationId, id) => attachments.removeDraft(db.handle(), conversationId, id),
-  read: async (conversationId, id) => {
-    const value = await jobs.readFile(db.filePath(), conversationId, id)
-    if (value === undefined || value === null) return value
-    return {
-      id,
-      name: '',
-      size: value.data.byteLength,
-      kind: value.kind,
-      mediaType: value.mediaType,
-      data: value.data,
-    }
-  },
-}
-
-function object(input: unknown): Record<string, unknown> | undefined {
-  return typeof input === 'object' && input !== null ? { ...input } : undefined
-}
-
-function id(input: unknown): string | undefined {
-  return typeof input === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(input)
-    ? input
-    : undefined
+  read: (conversationId, id) => jobs.readFile(db.filePath(), conversationId, id),
 }
 
 function inputFile(input: unknown): AttachmentInput | undefined {
