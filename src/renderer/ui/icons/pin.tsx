@@ -4,8 +4,7 @@ export function Pin({ size = 16 }: IconProps): React.JSX.Element {
   return (
     <svg {...svgBase} viewBox="0 0 24 24" width={size} height={size} strokeWidth={2}>
       <path d="M12 17v5" />
-      <path d="M5 17h14" />
-      <path d="M17 17v-6a4 4 0 0 0-4-4V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v2a4 4 0 0 0-4 4v6" />
+      <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1Z" />
     </svg>
   )
 }
