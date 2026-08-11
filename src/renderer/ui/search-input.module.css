@@ -1,26 +1,23 @@
 .wrap {
-  position: relative;
   display: flex;
   align-items: center;
+  min-width: 0;
 }
 
 .icon {
-  position: absolute;
-  left: var(--s-3);
   display: flex;
-  color: var(--text-faint);
+  flex: none;
+  color: var(--accent);
   pointer-events: none;
 }
 
 .input {
   width: 100%;
-  height: 32px;
-  padding: 0 var(--s-3) 0 32px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--surface-sunken);
-  font-size: var(--t-md);
-  transition: border-color var(--fast) var(--ease);
+  min-width: 0;
+  padding: var(--s-2);
+  border: 0;
+  background: transparent;
+  font-size: var(--t-lg);
 }
 
 .input::placeholder {
@@ -29,7 +26,6 @@
 
 .input:focus {
   outline: none;
-  border-color: var(--accent);
 }
 
 /* The native clear affordance clashes with the custom chrome. */

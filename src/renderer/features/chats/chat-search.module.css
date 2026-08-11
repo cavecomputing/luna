@@ -1,5 +1,5 @@
 .frame {
-  width: min(520px, 100%);
+  width: min(560px, 100%);
   max-height: min(520px, calc(100% - var(--s-7)));
 }
 

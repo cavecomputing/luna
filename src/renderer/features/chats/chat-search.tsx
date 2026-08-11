@@ -2,10 +2,8 @@ import type { Conversation } from '../../../shared/types.js'
 import { relative } from '../../lib/time.js'
 import { useDebouncedValue } from '../../lib/use-debounced-value.js'
 import { ChatGlyph } from '../../ui/chat-glyph.js'
-import { Dialog, DialogHead } from '../../ui/dialog.js'
-import { IconButton } from '../../ui/icon-button.js'
+import { Dialog, DialogClose, DialogHead } from '../../ui/dialog.js'
 import { Pin } from '../../ui/icons/pin.js'
-import { X } from '../../ui/icons/x.js'
 import { SearchInput } from '../../ui/search-input.js'
 import { byRecency, filterChats, messageExcerpt } from './filter.js'
 import { useState } from 'react'
@@ -40,9 +38,7 @@ export function ChatSearch({ chats, now, onClose, onSelect }: Props): React.JSX.
           autoFocus
           onEnter={selectFirst}
         />
-        <IconButton label="Close search" onClick={onClose}>
-          <X />
-        </IconButton>
+        <DialogClose label="Close search" onClick={onClose} />
       </DialogHead>
 
       <div className={styles.results} role="listbox" aria-label="Matching conversations">

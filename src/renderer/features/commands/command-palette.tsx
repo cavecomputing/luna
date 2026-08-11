@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Dialog, DialogHead } from '../../ui/dialog.js'
+import { Dialog, DialogClose, DialogHead } from '../../ui/dialog.js'
 import { Bolt } from '../../ui/icons/bolt.js'
 import styles from './command-palette.module.css'
 
@@ -28,15 +28,7 @@ export function CommandPalette({ onClose }: Props): React.JSX.Element {
             }}
           />
         </div>
-        <button
-          type="button"
-          className={styles.close}
-          aria-label="Close command palette"
-          title="Close command palette"
-          onClick={onClose}
-        >
-          Esc
-        </button>
+        <DialogClose label="Close command palette" onClick={onClose} />
       </DialogHead>
       <div className={styles.empty}>
         <span className={styles.badge}>WIP</span>

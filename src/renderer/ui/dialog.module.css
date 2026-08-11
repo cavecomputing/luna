@@ -39,6 +39,28 @@
   border-bottom: 1px solid var(--line-soft);
 }
 
+.close {
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-sunken);
+  color: var(--text-faint);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  line-height: 1.2;
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.close:hover,
+.close:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;

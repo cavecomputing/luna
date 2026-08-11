@@ -44,3 +44,18 @@ export function Dialog({
 export function DialogHead({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <header className={styles.head}>{children}</header>
 }
+
+/** Compact pointer and keyboard affordance for dismissing a dialog. */
+export function DialogClose({ label, onClick }: { label: string; onClick: () => void }): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className={styles.close}
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+    >
+      Esc
+    </button>
+  )
+}
