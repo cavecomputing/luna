@@ -18,6 +18,8 @@ export type Prefs = {
   stream: boolean
   /** Prepended to every conversation. Empty means none. */
   systemPrompt: string
+  /** Last expanded width of the conversation sidebar, in CSS pixels. */
+  sidebarWidth: number
 }
 
 export const defaultPrefs: Prefs = {
@@ -26,6 +28,7 @@ export const defaultPrefs: Prefs = {
   autoTitle: true,
   stream: true,
   systemPrompt: '',
+  sidebarWidth: 264,
 }
 
 const themes: Theme[] = ['light', 'dark', 'system']
@@ -45,6 +48,7 @@ export function parsePrefs(input: unknown): Prefs {
     autoTitle: bool(raw.autoTitle, defaultPrefs.autoTitle),
     stream: bool(raw.stream, defaultPrefs.stream),
     systemPrompt: str(raw.systemPrompt, defaultPrefs.systemPrompt),
+    sidebarWidth: range(raw.sidebarWidth, 200, 420, defaultPrefs.sidebarWidth),
   }
 }
 
@@ -58,4 +62,10 @@ function bool(value: unknown, fallback: boolean): boolean {
 
 function str(value: unknown, fallback: string): string {
   return typeof value === 'string' ? value : fallback
+}
+
+function range(value: unknown, min: number, max: number, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
+    ? value
+    : fallback
 }

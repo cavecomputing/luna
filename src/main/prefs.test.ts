@@ -75,6 +75,7 @@ describe('write', () => {
       autoTitle: false,
       stream: false,
       systemPrompt: 'Be brief.',
+      sidebarWidth: 320,
     }
 
     write(conn, prefs)

@@ -22,6 +22,7 @@ describe('parsePrefs', () => {
       autoTitle: false,
       stream: false,
       systemPrompt: 'Be brief.',
+      sidebarWidth: 320,
     }
     expect(parsePrefs(prefs)).toEqual(prefs)
   })
@@ -42,6 +43,12 @@ describe('parsePrefs', () => {
 
   it('rejects a system prompt that is not a string', () => {
     expect(parsePrefs({ systemPrompt: { evil: true } }).systemPrompt).toBe('')
+  })
+
+  it('keeps a valid sidebar width and rejects values outside its range', () => {
+    expect(parsePrefs({ sidebarWidth: 320 }).sidebarWidth).toBe(320)
+    expect(parsePrefs({ sidebarWidth: 120 }).sidebarWidth).toBe(defaultPrefs.sidebarWidth)
+    expect(parsePrefs({ sidebarWidth: 421 }).sidebarWidth).toBe(defaultPrefs.sidebarWidth)
   })
 
   it('ignores unknown fields', () => {

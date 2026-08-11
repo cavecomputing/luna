@@ -32,6 +32,7 @@ const preferences: Prefs = {
   autoTitle: false,
   stream: true,
   systemPrompt: 'Be helpful.',
+  sidebarWidth: 264,
 }
 
 type TestDeps = ConstructorParameters<typeof ChatCoordinator>[0]

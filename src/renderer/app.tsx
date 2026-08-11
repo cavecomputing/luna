@@ -50,10 +50,10 @@ export function ConversationSurface({ chats }: ConversationSurfaceProps): React.
  * things sit and passes the conversation store down.
  */
 export function App(): React.JSX.Element {
-  const { prefs } = usePrefs()
+  const { prefs, set: setPref } = usePrefs()
   const chats = useChats(prefs.defaultMode)
   const [open, setOpen] = useState(true)
-  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
+  const [resizeWidth, setResizeWidth] = useState<number>()
   const [isResizing, setIsResizing] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -61,6 +61,8 @@ export function App(): React.JSX.Element {
   const startChat = useRef(chats.start)
   const currentMode = useRef(chats.currentMode)
   const changeMode = useRef(chats.setMode)
+  const widthRef = useRef(DEFAULT_SIDEBAR_WIDTH)
+  const sidebarWidth = resizeWidth ?? clampSidebarWidth(prefs.sidebarWidth)
 
   useEffect(() => {
     startChat.current = chats.start
@@ -122,13 +124,16 @@ export function App(): React.JSX.Element {
 
   function startResize(event: React.PointerEvent<HTMLDivElement>): void {
     event.preventDefault()
+    widthRef.current = sidebarWidth
     event.currentTarget.setPointerCapture(event.pointerId)
     setIsResizing(true)
   }
 
   function resize(event: React.PointerEvent<HTMLDivElement>): void {
     if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
-    setSidebarWidth(clampSidebarWidth(event.clientX))
+    const width = clampSidebarWidth(event.clientX)
+    widthRef.current = width
+    setResizeWidth(width)
   }
 
   function stopResize(event: React.PointerEvent<HTMLDivElement>): void {
@@ -136,13 +141,15 @@ export function App(): React.JSX.Element {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
     setIsResizing(false)
+    setPref('sidebarWidth', widthRef.current)
+    setResizeWidth(undefined)
   }
 
   function resizeWithKeys(event: React.KeyboardEvent<HTMLDivElement>): void {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
     event.preventDefault()
-    const change = event.key === 'ArrowLeft' ? -8 : 8
-    setSidebarWidth((width) => clampSidebarWidth(width + change))
+    const width = clampSidebarWidth(sidebarWidth + (event.key === 'ArrowLeft' ? -8 : 8))
+    setPref('sidebarWidth', width)
   }
 
   // One ticking clock for the whole shell, so every row agrees.
@@ -195,7 +202,7 @@ export function App(): React.JSX.Element {
           aria-valuenow={sidebarWidth}
           tabIndex={0}
           onDoubleClick={() => {
-            setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)
+            setPref('sidebarWidth', DEFAULT_SIDEBAR_WIDTH)
           }}
           onPointerDown={startResize}
           onPointerMove={resize}
