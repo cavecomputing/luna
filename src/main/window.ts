@@ -1,4 +1,4 @@
-import { BrowserWindow, nativeTheme, screen, shell } from 'electron'
+import { BrowserWindow, nativeTheme, screen, shell, type WebContents } from 'electron'
 import { join } from 'node:path'
 import * as db from './db.js'
 import { APP_ORIGIN } from './protocol.js'
@@ -20,6 +20,8 @@ const SHORTCUTS_HEIGHT = 500
 let main: BrowserWindow | undefined
 let settings: BrowserWindow | undefined
 let shortcuts: BrowserWindow | undefined
+let settingsCanClose = false
+let settingsCloseTimer: ReturnType<typeof setTimeout> | undefined
 
 export function create(): BrowserWindow {
   if (main !== undefined && !main.isDestroyed()) {
@@ -101,13 +103,43 @@ export function openSettings(): BrowserWindow {
     'settings',
   )
 
+  settingsCanClose = false
+  win.on('close', (event) => {
+    if (settingsCanClose || win.webContents.isDestroyed()) return
+    event.preventDefault()
+    emit(win.webContents, 'settings:close-requested', undefined)
+    settingsCloseTimer ??= setTimeout(() => {
+      settingsCanClose = true
+      if (!win.isDestroyed()) win.close()
+    }, 2_000)
+  })
+
   win.on('closed', () => {
+    if (settingsCloseTimer !== undefined) clearTimeout(settingsCloseTimer)
+    settingsCloseTimer = undefined
+    settingsCanClose = false
     settings = undefined
   })
 
   load(win, 'settings.html')
   settings = win
   return win
+}
+
+/** Completes a close only after the Settings renderer flushes pending fields. */
+export function closeSettings(sender: WebContents): boolean {
+  if (
+    settings === undefined ||
+    settings.isDestroyed() ||
+    settings.webContents !== sender
+  ) {
+    return false
+  }
+  if (settingsCloseTimer !== undefined) clearTimeout(settingsCloseTimer)
+  settingsCloseTimer = undefined
+  settingsCanClose = true
+  settings.close()
+  return true
 }
 
 export function openShortcuts(): BrowserWindow {

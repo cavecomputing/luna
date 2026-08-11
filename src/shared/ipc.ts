@@ -109,6 +109,7 @@ export type Invocations = {
   'chat:cancel': { req: { messageId: string }; res: undefined }
   'messages:menu': { req: { id: string }; res: undefined }
   'settings:open': { req: undefined; res: undefined }
+  'settings:close': { req: undefined; res: undefined }
 }
 
 /** One-way, main -> renderer. webContents.send / ipcRenderer.on. */
@@ -117,6 +118,8 @@ export type Events = {
   'shortcut:command-palette': undefined
   'shortcut:toggle-sidebar': undefined
   'shortcut:toggle-mode': undefined
+  /** Gives Settings a chance to persist debounced fields before destruction. */
+  'settings:close-requested': undefined
   'chats:rename-requested': { id: string }
   'theme:changed': { dark: boolean }
   /** Sent to every window after a successful write. Carries the stored set. */

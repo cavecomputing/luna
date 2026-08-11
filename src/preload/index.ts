@@ -83,11 +83,13 @@ const api = {
   },
   settings: {
     open: () => invoke('settings:open', undefined),
+    close: () => invoke('settings:close', undefined),
   },
   onNewChat: (fn: () => void) => subscribe('shortcut:new-chat', fn),
   onCommandPalette: (fn: () => void) => subscribe('shortcut:command-palette', fn),
   onToggleSidebar: (fn: () => void) => subscribe('shortcut:toggle-sidebar', fn),
   onToggleMode: (fn: () => void) => subscribe('shortcut:toggle-mode', fn),
+  onSettingsClose: (fn: () => void) => subscribe('settings:close-requested', fn),
   onRenameChat: (fn: (data: EventData<'chats:rename-requested'>) => void) =>
     subscribe('chats:rename-requested', fn),
   onTheme: (fn: (data: EventData<'theme:changed'>) => void) => subscribe('theme:changed', fn),

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   ModelSlots,
   Mode,
@@ -36,6 +36,8 @@ function errorMessage(code: string): string {
 }
 
 type ModelDrafts = { fast: string; expert: string }
+export type FlushModels = () => Promise<void>
+export type RegisterFlush = (flush: FlushModels) => () => void
 
 /**
  * Decides what the model inputs show after a `models:changed` broadcast.
@@ -152,7 +154,11 @@ function ModelCard({
   )
 }
 
-export function Models(): React.JSX.Element {
+type ModelsProps = {
+  registerFlush?: RegisterFlush
+}
+
+export function Models({ registerFlush }: ModelsProps = {}): React.JSX.Element {
   const [providers, setProviders] = useState<Provider[]>([])
   const [slots, setSlots] = useState<ModelSlots>(empty)
   const [drafts, setDrafts] = useState<ModelDrafts>({ fast: '', expert: '' })
@@ -162,8 +168,25 @@ export function Models(): React.JSX.Element {
   // The value each slot was last saved with from this window. Lets the
   // broadcast handler tell its own round trips apart from outside changes.
   const saved = useRef<ModelSlots>({ fast: { ...empty.fast }, expert: { ...empty.expert } })
+  const latest = useRef({ drafts, slots, ready })
+  latest.current = { drafts, slots, ready }
   const fast = useDebouncedValue(drafts.fast, 300)
   const expert = useDebouncedValue(drafts.expert, 300)
+
+  const flush = useCallback(async (): Promise<void> => {
+    const current = latest.current
+    if (!current.ready) return
+    const pending = (['fast', 'expert'] as const).flatMap((slot) => {
+      const model = current.drafts[slot]
+      const value = current.slots[slot]
+      if (model === value.model) return []
+      saved.current[slot] = { providerId: value.providerId, model }
+      return [window.luna.models.set(slot, value.providerId, model)]
+    })
+    await Promise.all(pending)
+  }, [])
+
+  useEffect(() => registerFlush?.(flush), [flush, registerFlush])
 
   useEffect(() => {
     let live = true
