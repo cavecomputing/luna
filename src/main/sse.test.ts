@@ -27,4 +27,18 @@ describe('SseParser', () => {
     parser.push('data: [DONE]')
     expect(parser.finish()).toEqual([{ data: '[DONE]' }])
   })
+
+  it('accepts streams that use bare CR line endings', () => {
+    const parser = new SseParser()
+    expect(parser.push('data: first\r\rdata: second\r\r')).toEqual([{ data: 'first' }])
+    expect(parser.finish()).toEqual([{ data: 'second' }])
+  })
+
+  it('treats CRLF split across chunks as one line ending', () => {
+    const parser = new SseParser()
+    expect(parser.push('data: split\r')).toEqual([])
+    expect(parser.push('')).toEqual([])
+    expect(parser.push('\n\r')).toEqual([])
+    expect(parser.push('\n')).toEqual([{ data: 'split' }])
+  })
 })

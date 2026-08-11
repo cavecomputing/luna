@@ -1,3 +1,5 @@
+import { matchesShortcutKey } from '../shared/keyboard-shortcuts.js'
+
 export type ShortcutInput = {
   type: string
   key: string
@@ -18,19 +20,7 @@ export function matchesShortcut(
   const primary = platform === 'darwin' ? input.meta : input.control
   if (input.type !== 'keyDown' || !primary || input.alt) return false
 
-  const expected = {
-    newChat: { key: 'n', code: 'KeyN', shift: false },
-    commandPalette: { key: 'p', code: 'KeyP', shift: false },
-    settings: { key: ',', code: 'Comma', shift: false },
-    shortcuts: { key: '?', code: 'Slash', shift: true },
-  }[shortcut]
-
-  if (input.shift !== expected.shift) return false
-  if (input.code === expected.code) return true
-  if (expected.key.length === 1 && expected.key !== '?') {
-    return input.key.toLowerCase() === expected.key
-  }
-  return input.key === expected.key
+  return matchesShortcutKey(shortcut, input.key, input.code, input.shift)
 }
 
 export function closesAuxiliary(input: ShortcutInput, platform: NodeJS.Platform): boolean {
@@ -40,7 +30,6 @@ export function closesAuxiliary(input: ShortcutInput, platform: NodeJS.Platform)
     !input.alt &&
     !input.control &&
     !input.meta &&
-    !input.shift &&
-    (input.key === 'Escape' || input.code === 'Escape')
+    matchesShortcutKey('close', input.key, input.code, input.shift)
   )
 }

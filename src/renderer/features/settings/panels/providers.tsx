@@ -45,6 +45,18 @@ function edit(provider: Provider): Editor {
   return { id, provider: draft, hasApiKey }
 }
 
+export function plainRemoteUrl(input: string): boolean {
+  let url: URL
+  try {
+    url = new URL(input)
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'http:') return false
+  const host = url.hostname.toLowerCase().replace(/\.$/, '')
+  return host !== 'localhost' && host !== '::1' && host !== '[::1]' && !host.startsWith('127.')
+}
+
 export function Providers(): React.JSX.Element {
   const [providers, setProviders] = useState<Provider[]>([])
   const [editor, setEditor] = useState<Editor | null>(null)
@@ -250,7 +262,7 @@ export function Providers(): React.JSX.Element {
                 field('baseUrl', event.target.value)
               }}
             />
-            <small>Luna appends /models for discovery. HTTP is allowed for local servers but is not encrypted.</small>
+            <small>Luna appends /models for discovery. HTTP is allowed but is not encrypted.</small>
           </label>
 
           <label className={styles.field}>
@@ -311,6 +323,12 @@ export function Providers(): React.JSX.Element {
               }}
             />
           </label>
+
+          {editor.hasApiKey && plainRemoteUrl(editor.provider.baseUrl) && (
+            <p className={styles.warning} role="alert">
+              This API key will be sent over an unencrypted HTTP connection. Use HTTPS when the server supports it.
+            </p>
+          )}
 
           {status !== '' && <p className={styles.status}>{status}</p>}
 

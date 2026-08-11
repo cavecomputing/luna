@@ -64,6 +64,13 @@ const steps: readonly string[] = [
   `ALTER TABLE messages ADD COLUMN reasoning TEXT NOT NULL DEFAULT '';`,
   `ALTER TABLE conversations
    ADD COLUMN draft TEXT NOT NULL DEFAULT '' CHECK (length(draft) <= 100000);`,
+  `CREATE TABLE window_state (
+     name   TEXT PRIMARY KEY CHECK (name IN ('main', 'settings', 'shortcuts')),
+     x      INTEGER NOT NULL,
+     y      INTEGER NOT NULL,
+     width  INTEGER NOT NULL CHECK (width > 0),
+     height INTEGER NOT NULL CHECK (height > 0)
+   ) STRICT;`,
 ]
 
 /** The version a fully migrated database reports. */

@@ -90,7 +90,7 @@ describe('stream event reducers', () => {
       seq: 1,
     })
     const incoming = chat('complete')
-    incoming.messages[0] = { ...incoming.messages[0]!, text: 'Complete' }
+    incoming.messages = incoming.messages.map((message) => ({ ...message, text: 'Complete' }))
     expect(mergeChats(current, [incoming])[0]?.messages[0]).toMatchObject({
       text: 'Complete',
       status: 'complete',

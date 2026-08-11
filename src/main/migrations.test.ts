@@ -112,6 +112,7 @@ describe('migrate', () => {
     const db = fresh()
     migrate(db)
     db.exec(`PRAGMA user_version = 3;
+      DROP TABLE window_state;
       ALTER TABLE messages DROP COLUMN reasoning;
       ALTER TABLE messages DROP COLUMN provider_id;
       ALTER TABLE conversations DROP COLUMN draft;`)
@@ -134,6 +135,7 @@ describe('migrate', () => {
       (id, conversation_id, role, text, status, created_at, ordinal)
       VALUES ('message-1', 'chat-1', 'assistant', 'Answer', 'complete', 1, 0);
       PRAGMA user_version = 4;
+      DROP TABLE window_state;
       ALTER TABLE messages DROP COLUMN reasoning;
       ALTER TABLE conversations DROP COLUMN draft;`)
 
@@ -152,6 +154,7 @@ describe('migrate', () => {
       (id, title, icon, mode, pinned, created_at, updated_at, draft)
       VALUES ('chat-1', 'Chat', 'spark', 'fast', 0, 1, 1, 'temporary');
       PRAGMA user_version = 5;
+      DROP TABLE window_state;
       ALTER TABLE conversations DROP COLUMN draft;`)
 
     migrate(db)
@@ -160,6 +163,20 @@ describe('migrate', () => {
       title: 'Chat',
       draft: '',
     })
+  })
+
+  it('creates storage for each window\'s normal bounds', () => {
+    const db = fresh()
+    migrate(db)
+
+    expect(tables(db)).toContain('window_state')
+    expect(db.prepare('PRAGMA table_info(window_state)').all()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'name', type: 'TEXT', pk: 1 }),
+        expect.objectContaining({ name: 'width', type: 'INTEGER', notnull: 1 }),
+        expect.objectContaining({ name: 'height', type: 'INTEGER', notnull: 1 }),
+      ]),
+    )
   })
 
   it('refuses a database written by a newer build', () => {

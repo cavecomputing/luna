@@ -8,7 +8,7 @@ export const APP_ORIGIN = `${SCHEME}://luna`
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
+  "style-src 'self'",
   "img-src 'self' data:",
   "connect-src 'self'",
   "object-src 'none'",

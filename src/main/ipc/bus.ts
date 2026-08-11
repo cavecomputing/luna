@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import { BrowserWindow, app, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import type { Channel, Req, Res } from '../../shared/ipc.js'
 import type { EventData, EventName } from '../../shared/ipc.js'
 import { err, type Result } from '../../shared/result.js'
@@ -12,18 +12,16 @@ type Handler<C extends Channel> = (
 /**
  * Treat the renderer as an untrusted client. A compromised page can send any
  * message on any channel, so every privileged handler checks where it came from.
+ *
+ * Plain function of its inputs so tests don't boot Electron. `packaged` comes
+ * from `app.isPackaged` at the call site — never from the environment, which a
+ * packaged app does not set and an attacker could.
  */
-function fromTrustedFrame(event: IpcMainInvokeEvent): boolean {
-  const url = event.senderFrame?.url
+export function trustedSender(url: string | undefined, packaged: boolean): boolean {
   if (url === undefined) return false
   if (url.startsWith(`${APP_ORIGIN}/`) || url === APP_ORIGIN) return true
   // Vite dev server, dev builds only.
-  return !app_isPackaged() && url.startsWith('http://localhost:')
-}
-
-// Indirection keeps this module importable in tests without booting Electron.
-function app_isPackaged(): boolean {
-  return process.env.NODE_ENV === 'production'
+  return !packaged && url.startsWith('http://localhost:')
 }
 
 /**
@@ -32,7 +30,7 @@ function app_isPackaged(): boolean {
  */
 export function handle<C extends Channel>(channel: C, fn: Handler<C>): void {
   ipcMain.handle(channel, async (event, req: Req<C>) => {
-    if (!fromTrustedFrame(event)) {
+    if (!trustedSender(event.senderFrame?.url, app.isPackaged)) {
       return err('ipc/untrusted-sender', `rejected ${channel}`)
     }
     try {

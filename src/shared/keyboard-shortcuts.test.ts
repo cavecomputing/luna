@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   keyboardShortcutOrder,
   keyboardShortcuts,
+  matchesShortcutKey,
   shortcutKeys,
 } from './keyboard-shortcuts.js'
 
@@ -24,5 +25,13 @@ describe('keyboard shortcuts', () => {
   it('shows cross-platform equivalents elsewhere', () => {
     expect(shortcutKeys('settings', 'win32')).toEqual(['Ctrl', ','])
     expect(shortcutKeys('shortcuts', 'linux')).toEqual(['Ctrl', '?'])
+  })
+
+  it('keeps machine-readable matching beside displayed shortcuts', () => {
+    expect(keyboardShortcuts.search.match).toEqual({ key: 'f', code: 'KeyF', shift: false })
+    expect(matchesShortcutKey('search', 'F', '', false)).toBe(true)
+    expect(matchesShortcutKey('shortcuts', '?', '', true)).toBe(true)
+    expect(matchesShortcutKey('shortcuts', '/', 'Slash', false)).toBe(false)
+    expect(matchesShortcutKey('close', 'Escape', '', false)).toBe(true)
   })
 })

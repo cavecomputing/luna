@@ -168,6 +168,13 @@
   margin: 0;
 }
 
+.warning {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+
 .actions {
   flex-wrap: wrap;
   gap: var(--s-2);

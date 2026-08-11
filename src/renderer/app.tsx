@@ -13,6 +13,7 @@ import { cx } from './lib/cx.js'
 import { isSearchShortcut } from './features/chats/search-shortcut.js'
 import { ChatSearch } from './features/chats/chat-search.js'
 import { CommandPalette } from './features/commands/command-palette.js'
+import { matchesShortcutKey } from '../shared/keyboard-shortcuts.js'
 
 /**
  * Layout only. Every pane owns its own state; the shell just decides where
@@ -53,7 +54,13 @@ export function App(): React.JSX.Element {
         event.preventDefault()
         setPaletteOpen(false)
         setSearchOpen(true)
-      } else if (event.key === 'Escape' && (searchOpen || paletteOpen)) {
+      } else if (
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        matchesShortcutKey('close', event.key, event.code, event.shiftKey) &&
+        (searchOpen || paletteOpen)
+      ) {
         setSearchOpen(false)
         setPaletteOpen(false)
       }

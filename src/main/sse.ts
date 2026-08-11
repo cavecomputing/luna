@@ -6,9 +6,50 @@ export type SseEvent = {
 /** Incremental parser for the text/event-stream wire format. */
 export class SseParser {
   private buffer = ''
+  private trailingCr = false
 
   push(chunk: string): SseEvent[] {
-    this.buffer = (this.buffer + chunk).replace(/\r\n/g, '\n')
+    this.append(chunk)
+    return this.takeEvents()
+  }
+
+  finish(): SseEvent[] {
+    if (this.trailingCr) {
+      this.buffer += '\n'
+      this.trailingCr = false
+    }
+    const events = this.takeEvents()
+    const parsed = parseBlock(this.buffer)
+    this.buffer = ''
+    if (parsed !== undefined) events.push(parsed)
+    return events
+  }
+
+  private append(chunk: string): void {
+    if (chunk === '') return
+    let offset = 0
+    if (this.trailingCr) {
+      this.buffer += '\n'
+      this.trailingCr = false
+      if (chunk.startsWith('\n')) offset = 1
+    }
+
+    for (let i = offset; i < chunk.length; i += 1) {
+      const char = chunk.charAt(i)
+      if (char !== '\r') {
+        this.buffer += char
+        continue
+      }
+      if (i + 1 >= chunk.length) {
+        this.trailingCr = true
+      } else {
+        this.buffer += '\n'
+        if (chunk.charAt(i + 1) === '\n') i += 1
+      }
+    }
+  }
+
+  private takeEvents(): SseEvent[] {
     const events: SseEvent[] = []
     let boundary = this.buffer.indexOf('\n\n')
     while (boundary >= 0) {
@@ -19,13 +60,6 @@ export class SseParser {
       boundary = this.buffer.indexOf('\n\n')
     }
     return events
-  }
-
-  finish(): SseEvent[] {
-    const block = this.buffer.replace(/\r$/, '')
-    this.buffer = ''
-    const parsed = parseBlock(block)
-    return parsed === undefined ? [] : [parsed]
   }
 }
 

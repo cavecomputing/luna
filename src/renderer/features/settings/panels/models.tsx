@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   ModelSlots,
   Mode,
@@ -33,6 +33,25 @@ function errorMessage(code: string): string {
     default:
       return 'Model discovery failed. You can still type a model ID.'
   }
+}
+
+type ModelDrafts = { fast: string; expert: string }
+
+/**
+ * Decides what the model inputs show after a `models:changed` broadcast.
+ * A slot whose incoming value matches what this window last saved keeps its
+ * local draft — the save round trip must not truncate what is being typed.
+ * A different value came from somewhere else, so it wins.
+ */
+export function mergeDrafts(drafts: ModelDrafts, incoming: ModelSlots, saved: ModelSlots): ModelDrafts {
+  return {
+    fast: sameSlot(incoming.fast, saved.fast) ? drafts.fast : incoming.fast.model,
+    expert: sameSlot(incoming.expert, saved.expert) ? drafts.expert : incoming.expert.model,
+  }
+}
+
+function sameSlot(incoming: ModelSlots[Mode], saved: ModelSlots[Mode]): boolean {
+  return incoming.providerId === saved.providerId && incoming.model === saved.model
 }
 
 type CardProps = {
@@ -136,10 +155,13 @@ function ModelCard({
 export function Models(): React.JSX.Element {
   const [providers, setProviders] = useState<Provider[]>([])
   const [slots, setSlots] = useState<ModelSlots>(empty)
-  const [drafts, setDrafts] = useState({ fast: '', expert: '' })
+  const [drafts, setDrafts] = useState<ModelDrafts>({ fast: '', expert: '' })
   const [available, setAvailable] = useState<Record<string, ProviderModel[]>>({})
   const [status, setStatus] = useState({ fast: '', expert: '' })
   const [ready, setReady] = useState(false)
+  // The value each slot was last saved with from this window. Lets the
+  // broadcast handler tell its own round trips apart from outside changes.
+  const saved = useRef<ModelSlots>({ fast: { ...empty.fast }, expert: { ...empty.expert } })
   const fast = useDebouncedValue(drafts.fast, 300)
   const expert = useDebouncedValue(drafts.expert, 300)
 
@@ -152,6 +174,10 @@ export function Models(): React.JSX.Element {
         if (slotResult.ok) {
           setSlots(slotResult.value)
           setDrafts({ fast: slotResult.value.fast.model, expert: slotResult.value.expert.model })
+          saved.current = {
+            fast: { ...slotResult.value.fast },
+            expert: { ...slotResult.value.expert },
+          }
           setReady(true)
 
           const ids = new Set(
@@ -173,7 +199,7 @@ export function Models(): React.JSX.Element {
     const offProviders = window.luna.onProviders(setProviders)
     const offModels = window.luna.onModels((value) => {
       setSlots(value)
-      setDrafts({ fast: value.fast.model, expert: value.expert.model })
+      setDrafts((current) => mergeDrafts(current, value, saved.current))
       setReady(true)
     })
     return () => {
@@ -185,6 +211,7 @@ export function Models(): React.JSX.Element {
 
   useEffect(() => {
     if (!ready || fast === slots.fast.model) return
+    saved.current.fast = { providerId: slots.fast.providerId, model: fast }
     void window.luna.models
       .set('fast', slots.fast.providerId, fast)
       .then((result) => {
@@ -194,6 +221,7 @@ export function Models(): React.JSX.Element {
 
   useEffect(() => {
     if (!ready || expert === slots.expert.model) return
+    saved.current.expert = { providerId: slots.expert.providerId, model: expert }
     void window.luna.models
       .set('expert', slots.expert.providerId, expert)
       .then((result) => {
@@ -204,6 +232,7 @@ export function Models(): React.JSX.Element {
   async function choose(slot: Mode, providerId: string | null): Promise<void> {
     setDrafts((current) => ({ ...current, [slot]: '' }))
     setStatus((current) => ({ ...current, [slot]: '' }))
+    saved.current[slot] = { providerId, model: '' }
     const result = await window.luna.models.set(slot, providerId, '')
     if (!result.ok) {
       setStatus((current) => ({ ...current, [slot]: 'Provider choice could not be saved.' }))

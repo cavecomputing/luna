@@ -1,4 +1,5 @@
 import type { Chats } from './use-chats.js'
+import { shortcutKeys } from '../../../shared/keyboard-shortcuts.js'
 import { ChatItem } from './chat-item.js'
 import { IconButton } from '../../ui/icon-button.js'
 import { Gear } from '../../ui/icons/gear.js'
@@ -22,12 +23,15 @@ export function Sidebar({
   onSearchOpen,
   onSettings,
 }: Props): React.JSX.Element {
+  const searchKeys = shortcutKeys('search', window.luna.platform)
+  const searchLabel = searchKeys.join(window.luna.platform === 'darwin' ? '' : '+')
+
   return (
     <aside className={styles.sidebar}>
       <header className={styles.head}>
         {collapse !== null && <div className={styles.collapse}>{collapse}</div>}
         <div className={styles.actions}>
-          <IconButton label="Search chats (Ctrl+F)" onClick={onSearchOpen}>
+          <IconButton label={`Search chats (${searchLabel})`} onClick={onSearchOpen}>
             <Search />
           </IconButton>
           <IconButton label="New chat" variant="accent" onClick={() => { void chats.start() }}>

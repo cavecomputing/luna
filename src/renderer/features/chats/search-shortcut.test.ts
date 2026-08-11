@@ -3,9 +3,11 @@ import { isSearchShortcut } from './search-shortcut.js'
 
 const key = (overrides: Partial<Parameters<typeof isSearchShortcut>[0]> = {}) => ({
   key: 'f',
+  code: '',
   ctrlKey: false,
   metaKey: false,
   altKey: false,
+  shiftKey: false,
   ...overrides,
 })
 
@@ -21,5 +23,6 @@ describe('isSearchShortcut', () => {
   it('rejects unmodified and Alt-modified F', () => {
     expect(isSearchShortcut(key())).toBe(false)
     expect(isSearchShortcut(key({ ctrlKey: true, altKey: true }))).toBe(false)
+    expect(isSearchShortcut(key({ ctrlKey: true, shiftKey: true }))).toBe(false)
   })
 })

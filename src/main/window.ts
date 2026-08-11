@@ -1,10 +1,12 @@
-import { BrowserWindow, nativeTheme, shell } from 'electron'
+import { BrowserWindow, nativeTheme, screen, shell } from 'electron'
 import { join } from 'node:path'
+import * as db from './db.js'
 import { APP_ORIGIN } from './protocol.js'
 import { background, chromeOptions, overlay } from './window-chrome.js'
 import { canFrameLoad } from './navigation.js'
 import { closesAuxiliary, matchesShortcut } from './shortcut-input.js'
 import { emit } from './ipc/bus.js'
+import * as windowState from './window-state.js'
 
 const MIN_WIDTH = 720
 const MIN_HEIGHT = 480
@@ -33,6 +35,7 @@ export function create(): BrowserWindow {
       minWidth: MIN_WIDTH,
       minHeight: MIN_HEIGHT,
     },
+    'main',
     'main',
   )
 
@@ -80,6 +83,7 @@ export function openSettings(): BrowserWindow {
       title: 'Settings',
     },
     'auxiliary',
+    'settings',
   )
 
   win.on('closed', () => {
@@ -107,6 +111,7 @@ export function openShortcuts(): BrowserWindow {
       title: 'Keyboard Shortcuts',
     },
     'auxiliary',
+    'shortcuts',
   )
 
   win.on('closed', () => {
@@ -128,10 +133,17 @@ type Shape = {
 
 type WindowKind = 'main' | 'auxiliary'
 
-function build(shape: Shape, kind: WindowKind): BrowserWindow {
+function build(shape: Shape, kind: WindowKind, stateName: windowState.WindowName): BrowserWindow {
   const dark = nativeTheme.shouldUseDarkColors
+  const bounds = windowState.load(
+    db.handle(),
+    stateName,
+    screen.getAllDisplays().map((display) => display.workArea),
+    { width: shape.minWidth, height: shape.minHeight },
+  )
   const win = new BrowserWindow({
     ...shape,
+    ...bounds,
     show: false,
     ...chromeOptions(process.platform, dark),
     backgroundColor: background(dark),
@@ -147,6 +159,10 @@ function build(shape: Shape, kind: WindowKind): BrowserWindow {
   // Avoids a white flash before the first paint.
   win.once('ready-to-show', () => {
     win.show()
+  })
+
+  win.on('close', () => {
+    windowState.save(db.handle(), stateName, win.getNormalBounds())
   })
 
   lockNavigation(win)
