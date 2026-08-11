@@ -18,6 +18,9 @@ import { matchesShortcutKey } from '../shared/keyboard-shortcuts.js'
 import {
   clampSidebarWidth,
   DEFAULT_SIDEBAR_WIDTH,
+  MAX_SIDEBAR_WIDTH,
+  MIN_SIDEBAR_WIDTH,
+  snapSidebarWidth,
 } from './features/chats/sidebar-width.js'
 
 type ConversationSurfaceProps = {
@@ -133,7 +136,7 @@ export function App(): React.JSX.Element {
 
   function resize(event: React.PointerEvent<HTMLDivElement>): void {
     if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
-    const width = clampSidebarWidth(event.clientX)
+    const width = snapSidebarWidth(event.clientX)
     widthRef.current = width
     setResizeWidth(width)
   }
@@ -148,9 +151,15 @@ export function App(): React.JSX.Element {
   }
 
   function resizeWithKeys(event: React.KeyboardEvent<HTMLDivElement>): void {
+    if (event.key === 'Home') {
+      event.preventDefault()
+      setPref('sidebarWidth', DEFAULT_SIDEBAR_WIDTH)
+      return
+    }
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
     event.preventDefault()
-    const width = clampSidebarWidth(sidebarWidth + (event.key === 'ArrowLeft' ? -8 : 8))
+    const step = event.shiftKey ? 24 : 8
+    const width = clampSidebarWidth(sidebarWidth + (event.key === 'ArrowLeft' ? -step : step))
     setPref('sidebarWidth', width)
   }
 
@@ -199,9 +208,16 @@ export function App(): React.JSX.Element {
           role="separator"
           aria-label="Resize sidebar"
           aria-orientation="vertical"
-          aria-valuemin={200}
-          aria-valuemax={420}
+          aria-valuemin={MIN_SIDEBAR_WIDTH}
+          aria-valuemax={MAX_SIDEBAR_WIDTH}
           aria-valuenow={sidebarWidth}
+          aria-valuetext={
+            sidebarWidth === DEFAULT_SIDEBAR_WIDTH
+              ? `${String(DEFAULT_SIDEBAR_WIDTH)} pixels, default width`
+              : `${String(Math.round(sidebarWidth))} pixels`
+          }
+          data-snapped={sidebarWidth === DEFAULT_SIDEBAR_WIDTH ? 'true' : undefined}
+          title="Drag to resize; double-click or press Home to reset"
           tabIndex={0}
           onDoubleClick={() => {
             setPref('sidebarWidth', DEFAULT_SIDEBAR_WIDTH)
