@@ -36,6 +36,7 @@ const recoveryWindows = new WeakSet<BrowserWindow>()
 
 export function create(): BrowserWindow {
   if (main !== undefined && !main.isDestroyed()) {
+    if (main.isMinimized()) main.restore()
     main.show()
     main.focus()
     return main

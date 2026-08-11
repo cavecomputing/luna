@@ -11,45 +11,55 @@ import * as prefs from './prefs.js'
 import { registerScheme, serveRenderer } from './protocol.js'
 import * as window from './window.js'
 
-// Must happen before 'ready'.
-registerScheme()
+let quitting = false
 
-app.whenReady().then(
-  async () => {
-    serveRenderer(join(import.meta.dirname, '../renderer'))
-    dock.setIcon()
+async function ready(): Promise<void> {
+  serveRenderer(join(import.meta.dirname, '../renderer'))
+  dock.setIcon()
 
-    // Opens and migrates. No window exists yet, so a slow migration has nothing
-    // to block, and a failure lands in the rejection handler below.
-    const conn = db.handle()
-    await prefs.adoptLegacy(conn, prefs.legacyPath())
-    chats.recoverInterrupted(conn)
+  // Opens and migrates. No window exists yet, so a slow migration has nothing
+  // to block, and a failure lands in the rejection handler below.
+  const conn = db.handle()
+  await prefs.adoptLegacy(conn, prefs.legacyPath())
+  chats.recoverInterrupted(conn)
 
-    // Theme comes from prefs, which default to light. Applied before the first
-    // window so there is no flash of the wrong appearance.
-    prefs.applyTheme(prefs.load())
+  // Theme comes from prefs, which default to light. Applied before the first
+  // window so there is no flash of the wrong appearance.
+  prefs.applyTheme(prefs.load())
 
-    menu.build()
-    registerAll()
-    window.create()
+  menu.build()
+  registerAll()
+  window.create()
 
-    nativeTheme.on('updated', () => {
-      for (const win of BrowserWindow.getAllWindows()) {
-        window.updateChrome(win)
-        emit(win.webContents, 'theme:changed', { dark: nativeTheme.shouldUseDarkColors })
-      }
-    })
+  nativeTheme.on('updated', () => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      window.updateChrome(win)
+      emit(win.webContents, 'theme:changed', { dark: nativeTheme.shouldUseDarkColors })
+    }
+  })
 
-    // macOS: clicking the dock icon with no windows open reopens one.
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) window.create()
-    })
-  },
-  (error: unknown) => {
-    console.error('failed to start', error)
-    app.quit()
-  },
-)
+  // macOS: clicking the dock icon with no windows open reopens one.
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) window.create()
+  })
+}
+
+function failed(error: unknown): void {
+  console.error('failed to start', error)
+  app.quit()
+}
+
+function start(): void {
+  // Must happen before 'ready'.
+  registerScheme()
+  app.on('second-instance', () => {
+    if (!quitting && app.isReady()) window.create()
+  })
+  void app.whenReady().then(ready, failed)
+}
+
+if (app.requestSingleInstanceLock()) start()
+else app.quit()
 
 // macOS keeps the app running with no windows; the dock icon stays put and
 // reopens one. Every other platform treats the app as its window and quits.
@@ -58,6 +68,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  quitting = true
   window.beginQuit()
 })
 
