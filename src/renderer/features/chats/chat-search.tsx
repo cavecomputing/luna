@@ -6,7 +6,7 @@ import { IconButton } from '../../ui/icon-button.js'
 import { Pin } from '../../ui/icons/pin.js'
 import { X } from '../../ui/icons/x.js'
 import { SearchInput } from '../../ui/search-input.js'
-import { byRecency, filterChats } from './filter.js'
+import { byRecency, filterChats, messageExcerpt } from './filter.js'
 import { useState } from 'react'
 import styles from './chat-search.module.css'
 
@@ -52,31 +52,35 @@ export function ChatSearch({ chats, now, onClose, onSelect }: Props): React.JSX.
         </header>
 
         <div className={styles.results} role="listbox" aria-label="Matching conversations">
-          {results.map((chat) => (
-            <button
-              key={chat.id}
-              type="button"
-              className={styles.result}
-              role="option"
-              aria-selected="false"
-              onClick={() => {
-                onSelect(chat.id)
-              }}
-            >
-              <span className={styles.glyph}>
-                <ChatGlyph icon={chat.icon} />
-              </span>
-              <span className={styles.resultText}>
-                <span className={styles.title}>{chat.title}</span>
-                <span className={styles.when}>{relative(chat.updatedAt, now)}</span>
-              </span>
-              {chat.pinned && (
-                <span className={styles.pin} aria-label="Pinned">
-                  <Pin size={14} />
+          {results.map((chat) => {
+            const excerpt = messageExcerpt(chat, query)
+            return (
+              <button
+                key={chat.id}
+                type="button"
+                className={styles.result}
+                role="option"
+                aria-selected="false"
+                onClick={() => {
+                  onSelect(chat.id)
+                }}
+              >
+                <span className={styles.glyph}>
+                  <ChatGlyph icon={chat.icon} />
                 </span>
-              )}
-            </button>
-          ))}
+                <span className={styles.resultText}>
+                  <span className={styles.title}>{chat.title}</span>
+                  {excerpt !== undefined && <span className={styles.excerpt}>{excerpt}</span>}
+                  <span className={styles.when}>{relative(chat.updatedAt, now)}</span>
+                </span>
+                {chat.pinned && (
+                  <span className={styles.pin} aria-label="Pinned">
+                    <Pin size={14} />
+                  </span>
+                )}
+              </button>
+            )
+          })}
 
           {results.length === 0 && <p className={styles.empty}>No matching chats</p>}
         </div>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Conversation } from '../../../shared/types.js'
-import { byRecency, filterChats } from './filter.js'
+import { byRecency, filterChats, messageExcerpt } from './filter.js'
 
 const chat = (id: string, title: string, updatedAt: number): Conversation => ({
   id,
@@ -72,6 +72,55 @@ describe('filterChats', () => {
       },
     ]
     expect(filterChats(withReasoning, 'submarine').map((item) => item.id)).toEqual(['d'])
+  })
+})
+
+describe('messageExcerpt', () => {
+  it('returns matching message text without surrounding whitespace', () => {
+    const withBody = {
+      ...chat('d', 'Untitled', 1),
+      messages: [
+        {
+          id: 'm',
+          role: 'assistant' as const,
+          text: '  The   synthetic submarine route is ready.  ',
+          status: 'complete' as const,
+          at: 1,
+          attachments: [],
+        },
+      ],
+    }
+
+    expect(messageExcerpt(withBody, 'submarine')).toBe(
+      'The synthetic submarine route is ready.',
+    )
+  })
+
+  it('returns a bounded excerpt around a match in a long message', () => {
+    const text = `${'Before '.repeat(20)}submarine ${'after '.repeat(20)}`
+    const withBody = {
+      ...chat('d', 'Untitled', 1),
+      messages: [
+        {
+          id: 'm',
+          role: 'user' as const,
+          text,
+          status: 'complete' as const,
+          at: 1,
+          attachments: [],
+        },
+      ],
+    }
+    const excerpt = messageExcerpt(withBody, 'submarine')
+
+    expect(excerpt).toContain('submarine')
+    expect(excerpt?.startsWith('…')).toBe(true)
+    expect(excerpt?.endsWith('…')).toBe(true)
+    expect(excerpt?.length).toBeLessThanOrEqual(112)
+  })
+
+  it('does not return an excerpt for a title-only match', () => {
+    expect(messageExcerpt(chat('d', 'Synthetic submarine', 1), 'submarine')).toBeUndefined()
   })
 })
 
