@@ -61,6 +61,7 @@ const api = {
     setPinned: (id: string, pinned: boolean) =>
       invoke('chats:set-pinned', { id, pinned }),
     delete: (id: string) => invoke('chats:delete', { id }),
+    menu: (id: string) => invoke('chats:menu', { id }),
   },
   attachments: {
     add: (conversationId: string, files: AttachmentInput[]) =>

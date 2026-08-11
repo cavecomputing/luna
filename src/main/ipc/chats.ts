@@ -1,5 +1,12 @@
 import { randomUUID } from 'node:crypto'
-import { BrowserWindow, dialog, type MessageBoxOptions } from 'electron'
+import {
+  BrowserWindow,
+  dialog,
+  Menu,
+  type MenuItemConstructorOptions,
+  type MessageBoxOptions,
+  type WebContents,
+} from 'electron'
 import { err, ok, type Result } from '../../shared/result.js'
 import type { Conversation, Mode } from '../../shared/types.js'
 import * as chats from '../chats.js'
@@ -19,6 +26,13 @@ type Deps = {
   notify: (value: Conversation[]) => void
   cancelConversation: (id: string) => void
   confirmDelete: () => Promise<boolean>
+}
+
+type MenuDeps = {
+  get: (id: string) => Conversation | undefined
+  togglePinned: (id: string, pinned: boolean) => void
+  remove: (id: string) => void
+  show: (chat: Conversation, togglePinned: () => void, remove: () => void) => void
 }
 
 async function confirmDelete(): Promise<boolean> {
@@ -133,6 +147,39 @@ export async function deleteChat(input: unknown, d: Deps): Promise<Result<undefi
   return ok(undefined)
 }
 
+export function showChatMenu(input: unknown, d: MenuDeps): Result<undefined> {
+  const chatId = id(object(input)?.id)
+  if (chatId === undefined) return err('chat/invalid', 'conversation id was invalid')
+  const chat = d.get(chatId)
+  if (chat === undefined) return err('chat/missing', 'conversation was not found')
+  d.show(
+    chat,
+    () => {
+      d.togglePinned(chat.id, !chat.pinned)
+    },
+    () => {
+      d.remove(chat.id)
+    },
+  )
+  return ok(undefined)
+}
+
+function popup(
+  sender: WebContents,
+  chat: Conversation,
+  togglePinned: () => void,
+  remove: () => void,
+): void {
+  const template: MenuItemConstructorOptions[] = [
+    { label: chat.pinned ? 'Unpin Conversation' : 'Pin Conversation', click: togglePinned },
+    { type: 'separator' },
+    { label: 'Delete Conversation', click: remove },
+  ]
+  const menu = Menu.buildFromTemplate(template)
+  const window = BrowserWindow.fromWebContents(sender)
+  menu.popup(window === null ? {} : { window })
+}
+
 export function setCancelConversation(fn: (id: string) => void): void {
   deps.cancelConversation = fn
 }
@@ -144,4 +191,18 @@ export function register(): void {
   handle('chats:set-draft', (_event, req) => updateChatDraft(req, deps))
   handle('chats:set-pinned', (_event, req) => updateChatPinned(req, deps))
   handle('chats:delete', (_event, req) => deleteChat(req, deps))
+  handle('chats:menu', (event, req) =>
+    showChatMenu(req, {
+      get: deps.get,
+      togglePinned: (id, pinned) => {
+        updateChatPinned({ id, pinned }, deps)
+      },
+      remove: (id) => {
+        void deleteChat({ id }, deps).catch(() => undefined)
+      },
+      show: (chat, togglePinned, remove) => {
+        popup(event.sender, chat, togglePinned, remove)
+      },
+    }),
+  )
 }

@@ -46,8 +46,6 @@ export function Sidebar({
             chat={chat}
             active={chat.id === chats.openId}
             onSelect={chats.setOpenId}
-            onTogglePinned={chats.togglePinned}
-            onDelete={chats.remove}
           />
         ))}
 

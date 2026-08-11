@@ -90,6 +90,7 @@ export type Invocations = {
   'chats:set-draft': { req: { id: string; draft: string }; res: undefined }
   'chats:set-pinned': { req: { id: string; pinned: boolean }; res: Conversation }
   'chats:delete': { req: { id: string }; res: undefined }
+  'chats:menu': { req: { id: string }; res: undefined }
   'attachments:add': {
     req: { conversationId: string; files: AttachmentInput[] }
     res: AttachmentImport

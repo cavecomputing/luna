@@ -4,6 +4,7 @@ import {
   createChat,
   deleteChat,
   listChats,
+  showChatMenu,
   updateChatMode,
   updateChatDraft,
   updateChatPinned,
@@ -68,6 +69,37 @@ function makeDeps(): TestDeps {
 }
 
 describe('conversation IPC actions', () => {
+  it('opens a conversation menu wired to pin and delete actions', () => {
+    const togglePinned = vi.fn()
+    const remove = vi.fn()
+    const show = vi.fn((_chat: Conversation, pin: () => void, deleteChat: () => void) => {
+      pin()
+      deleteChat()
+    })
+
+    expect(showChatMenu({ id: 'chat-1' }, {
+      get: (id) => id === 'chat-1' ? chat() : undefined,
+      togglePinned,
+      remove,
+      show,
+    })).toEqual({ ok: true, value: undefined })
+    expect(togglePinned).toHaveBeenCalledWith('chat-1', true)
+    expect(remove).toHaveBeenCalledWith('chat-1')
+  })
+
+  it('rejects invalid and missing conversations before opening a menu', () => {
+    const d = {
+      get: vi.fn(() => undefined),
+      togglePinned: vi.fn(),
+      remove: vi.fn(),
+      show: vi.fn(),
+    }
+
+    expect(showChatMenu({ id: '../bad' }, d)).toMatchObject({ ok: false, code: 'chat/invalid' })
+    expect(showChatMenu({ id: 'missing' }, d)).toMatchObject({ ok: false, code: 'chat/missing' })
+    expect(d.show).not.toHaveBeenCalled()
+  })
+
   it('lists and creates conversations', () => {
     const d = makeDeps()
     expect(listChats(d)).toEqual({ ok: true, value: [chat()] })

@@ -30,7 +30,7 @@
 
 .item:hover .title,
 .item:focus-within .title {
-  padding-right: 40px;
+  padding-right: 20px;
 }
 
 .title {
@@ -64,21 +64,4 @@
 .item:focus-within .actions {
   opacity: 1;
   pointer-events: auto;
-}
-
-.pinned:not(:hover, :focus-within) .actions > :first-child {
-  opacity: 0.65;
-}
-
-.pinned:not(:hover, :focus-within) .actions {
-  opacity: 1;
-  background: linear-gradient(90deg, transparent, var(--surface) 18%);
-}
-
-.active.pinned:not(:hover, :focus-within) .actions {
-  background: linear-gradient(90deg, transparent, var(--accent-soft) 18%);
-}
-
-.pinned:not(:hover, :focus-within) .actions > :last-child {
-  display: none;
 }
