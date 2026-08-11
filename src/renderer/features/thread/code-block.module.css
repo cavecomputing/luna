@@ -41,3 +41,55 @@
   tab-size: 2;
   white-space: pre;
 }
+
+/*
+ * Highlight classes come from lowlight at render time, so they're globals on
+ * purpose. The colours themselves are theme tokens — dark mode swaps them in
+ * tokens.css like every other colour.
+ */
+.source code :global(.hljs-keyword),
+.source code :global(.hljs-selector-tag),
+.source code :global(.hljs-literal) {
+  color: var(--code-keyword);
+}
+
+.source code :global(.hljs-string),
+.source code :global(.hljs-regexp),
+.source code :global(.hljs-addition) {
+  color: var(--code-string);
+}
+
+.source code :global(.hljs-number),
+.source code :global(.hljs-symbol),
+.source code :global(.hljs-bullet) {
+  color: var(--code-number);
+}
+
+.source code :global(.hljs-comment),
+.source code :global(.hljs-quote) {
+  color: var(--code-comment);
+}
+
+.source code :global(.hljs-title),
+.source code :global(.hljs-name),
+.source code :global(.hljs-section) {
+  color: var(--code-title);
+}
+
+.source code :global(.hljs-attr),
+.source code :global(.hljs-attribute),
+.source code :global(.hljs-variable),
+.source code :global(.hljs-template-variable),
+.source code :global(.hljs-type),
+.source code :global(.hljs-built_in),
+.source code :global(.hljs-deletion) {
+  color: var(--code-attr);
+}
+
+.source code :global(.hljs-emphasis) {
+  font-style: italic;
+}
+
+.source code :global(.hljs-strong) {
+  font-weight: 700;
+}

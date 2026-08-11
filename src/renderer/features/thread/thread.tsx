@@ -14,6 +14,9 @@ export function Thread({ chat }: Props): React.JSX.Element {
   const end = useRef<HTMLDivElement>(null)
   const [following, setFollowing] = useState(true)
   const count = chat?.messages.length ?? 0
+  // Messages past this count arrived after mount, so they get an entrance.
+  // History loaded from disk mounts with the thread and stays still.
+  const [mountedCount] = useState(count)
   const tail = chat?.messages.at(-1)?.text ?? ''
   const scrollToEnd = useCallback(() => {
     if (following) end.current?.scrollIntoView({ block: 'end' })
@@ -41,11 +44,12 @@ export function Thread({ chat }: Props): React.JSX.Element {
         <div className={styles.inner}>
           {count === 0 && <Greeting />}
 
-          {chat?.messages.map((message) => (
+          {chat?.messages.map((message, index) => (
             <Message
               key={message.id}
               message={message}
               conversationId={chat.id}
+              fresh={index >= mountedCount}
               onGrow={scrollToEnd}
             />
           ))}

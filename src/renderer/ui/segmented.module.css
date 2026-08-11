@@ -21,11 +21,16 @@
   white-space: nowrap;
   transition:
     background var(--fast) var(--ease),
-    color var(--fast) var(--ease);
+    color var(--fast) var(--ease),
+    transform var(--fast) var(--ease);
 }
 
 .seg:hover:not(.on) {
   color: var(--text);
+}
+
+.seg:active {
+  transform: scale(0.95);
 }
 
 .on {

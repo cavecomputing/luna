@@ -33,6 +33,17 @@
   --bubble-user-text: #14161a;
   --bubble-bot: #ffffff;
 
+  /* Dimmed layer behind modal dialogs */
+  --backdrop: rgb(16 24 40 / 18%);
+
+  /* Syntax highlighting */
+  --code-keyword: #cf222e;
+  --code-string: #0a3069;
+  --code-number: #0550ae;
+  --code-comment: #6e7781;
+  --code-title: #8250df;
+  --code-attr: #0550ae;
+
   /* Spacing — 8px grid, with 4px half-steps */
   --s-1: 4px;
   --s-2: 8px;
@@ -92,5 +103,14 @@
     --bubble-user: #23304a;
     --bubble-user-text: #eaf1fe;
     --bubble-bot: #191c22;
+
+    --backdrop: rgb(0 0 0 / 44%);
+
+    --code-keyword: #ff7b72;
+    --code-string: #a5d6ff;
+    --code-number: #79c0ff;
+    --code-comment: #8b949e;
+    --code-title: #d2a8ff;
+    --code-attr: #79c0ff;
   }
 }

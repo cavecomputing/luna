@@ -118,7 +118,7 @@ export function App(): React.JSX.Element {
 
   return (
     <div className={styles.shell} data-platform={window.luna.platform}>
-      {open && (
+      <div className={cx(styles.side, !open && styles.sideClosed)} inert={!open}>
         <Sidebar
           chats={chats}
           collapse={usesTrafficLights ? sidebarButton : null}
@@ -130,7 +130,7 @@ export function App(): React.JSX.Element {
             void window.luna.settings.open()
           }}
         />
-      )}
+      </div>
 
       <main className={styles.pane}>
         <header className={cx(styles.top, !usesTrafficLights && styles.withInlineToggle)}>

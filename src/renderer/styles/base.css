@@ -44,6 +44,21 @@ button {
   outline-offset: 2px;
 }
 
+/*
+ * Theme flips cross-fade instead of snapping. Elements that define their own
+ * transition (buttons, list rows) keep it — a class beats the universal
+ * selector — so this only covers surfaces that would otherwise hard-cut.
+ * The reduced-motion block below zeroes it out.
+ */
+*,
+*::before,
+*::after {
+  transition:
+    background-color 160ms var(--ease),
+    border-color 160ms var(--ease),
+    color 160ms var(--ease);
+}
+
 /* Thin scrollbars that fade into the surface, as in native Mac lists. */
 ::-webkit-scrollbar {
   width: 10px;

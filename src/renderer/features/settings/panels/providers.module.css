@@ -29,6 +29,15 @@
   border-radius: var(--r-md);
   font-size: var(--t-md);
   font-weight: 600;
+  transition:
+    background var(--fast) var(--ease),
+    transform var(--fast) var(--ease);
+}
+
+.primary:active:not(:disabled),
+.secondary:active:not(:disabled),
+.danger:active:not(:disabled) {
+  transform: scale(0.96);
 }
 
 .primary {

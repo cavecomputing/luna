@@ -7,9 +7,28 @@
   text-align: center;
 }
 
+/* The three pieces rise in one after another, avatar first. */
+.mark,
+.hello,
+.sub {
+  animation: greeting-in 240ms var(--ease) backwards;
+}
+
 .mark {
+  position: relative;
   line-height: 0;
   margin-bottom: var(--s-2);
+}
+
+/* The concept's glowing ring, as a slow-breathing halo behind the avatar. */
+.mark::before {
+  position: absolute;
+  z-index: -1;
+  inset: -16px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--accent-soft) 40%, transparent);
+  content: '';
+  animation: halo 3.6s ease-in-out infinite;
 }
 
 .hello {
@@ -17,10 +36,32 @@
   font-size: var(--t-xl);
   font-weight: 700;
   letter-spacing: -0.01em;
+  animation-delay: 70ms;
 }
 
 .sub {
   margin: 0;
   font-size: var(--t-lg);
   color: var(--text-muted);
+  animation-delay: 140ms;
+}
+
+@keyframes greeting-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes halo {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
 }

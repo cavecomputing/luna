@@ -19,7 +19,9 @@
   border-radius: var(--r-xl);
   background: var(--surface);
   box-shadow: var(--shadow-card);
-  transition: border-color var(--fast) var(--ease);
+  transition:
+    border-color var(--fast) var(--ease),
+    box-shadow var(--fast) var(--ease);
 }
 
 .tray {
@@ -109,6 +111,7 @@
 
 .box:focus-within {
   border-color: var(--accent);
+  box-shadow: var(--shadow-card), 0 0 0 3px var(--accent-soft);
 }
 
 .input {

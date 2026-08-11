@@ -8,12 +8,17 @@
   transition:
     background var(--fast) var(--ease),
     color var(--fast) var(--ease),
-    opacity var(--fast) var(--ease);
+    opacity var(--fast) var(--ease),
+    transform var(--fast) var(--ease);
 }
 
 .btn:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.9);
 }
 
 /* Sizes */

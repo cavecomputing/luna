@@ -5,6 +5,29 @@
   background: var(--bg);
 }
 
+/*
+ * The sidebar stays mounted so collapsing animates instead of popping. The
+ * fixed-width panel inside clips away as the wrapper shrinks, which reads as
+ * a slide-out. visibility waits for the slide to finish before hiding.
+ */
+.side {
+  width: var(--sidebar-w);
+  flex: none;
+  overflow: hidden;
+  visibility: visible;
+  transition:
+    width 200ms var(--ease),
+    visibility 0s;
+}
+
+.sideClosed {
+  width: 0;
+  visibility: hidden;
+  transition:
+    width 200ms var(--ease),
+    visibility 0s 200ms;
+}
+
 .pane {
   display: flex;
   flex-direction: column;

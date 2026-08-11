@@ -10,13 +10,15 @@ import { MessageAttachments } from '../attachments/message-attachments.js'
 
 type Props = {
   message: Msg
+  /** Arrived after the thread mounted, so it plays an entrance. */
+  fresh: boolean
   onGrow: () => void
   conversationId: string
 }
 
-export function Message({ message, onGrow, conversationId }: Props): React.JSX.Element {
+export function Message({ message, fresh, onGrow, conversationId }: Props): React.JSX.Element {
   const mine = message.role === 'user'
-  const [incoming] = useState(() => !mine && message.status === 'streaming')
+  const [incoming] = useState(() => fresh || (!mine && message.status === 'streaming'))
   const fallback =
     message.text === '' && message.status === 'error'
       ? 'Response interrupted. Try again.'

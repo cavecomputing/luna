@@ -5,9 +5,10 @@
   display: grid;
   place-items: center;
   padding: var(--s-5);
-  background: rgb(16 24 40 / 18%);
-  backdrop-filter: blur(2px);
+  background: var(--backdrop);
+  backdrop-filter: blur(4px);
   -webkit-app-region: no-drag;
+  animation: fade-in 140ms var(--ease) backwards;
 }
 
 .dialog {
@@ -20,6 +21,20 @@
   border-radius: var(--r-xl);
   background: var(--surface);
   box-shadow: var(--shadow-pop);
+  animation: dialog-in 180ms var(--ease) backwards;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
 }
 
 .head {

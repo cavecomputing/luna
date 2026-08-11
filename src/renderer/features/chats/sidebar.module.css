@@ -80,10 +80,15 @@
   color: var(--text-muted);
   transition:
     background var(--fast) var(--ease),
-    color var(--fast) var(--ease);
+    color var(--fast) var(--ease),
+    transform var(--fast) var(--ease);
 }
 
 .settings:hover {
   background: var(--surface-hover);
   color: var(--text);
+}
+
+.settings:active {
+  transform: scale(0.97);
 }
