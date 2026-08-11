@@ -59,10 +59,14 @@ export function App(): React.JSX.Element {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const usesTrafficLights = window.luna.platform === 'darwin'
   const startChat = useRef(chats.start)
+  const currentMode = useRef(chats.currentMode)
+  const changeMode = useRef(chats.setMode)
 
   useEffect(() => {
     startChat.current = chats.start
-  }, [chats.start])
+    currentMode.current = chats.currentMode
+    changeMode.current = chats.setMode
+  }, [chats.currentMode, chats.setMode, chats.start])
 
   useEffect(() => {
     const offNewChat = window.luna.onNewChat(() => {
@@ -77,10 +81,14 @@ export function App(): React.JSX.Element {
     const offToggleSidebar = window.luna.onToggleSidebar(() => {
       setOpen((value) => !value)
     })
+    const offToggleMode = window.luna.onToggleMode(() => {
+      changeMode.current(currentMode.current === 'fast' ? 'expert' : 'fast')
+    })
     return () => {
       offNewChat()
       offPalette()
       offToggleSidebar()
+      offToggleMode()
     }
   }, [])
 

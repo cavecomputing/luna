@@ -31,6 +31,13 @@ describe('window shortcuts', () => {
     ).toBe(true)
   })
 
+  it('matches the mode toggle only with the primary and Shift modifiers', () => {
+    expect(
+      matchesShortcut(input({ code: 'KeyM', meta: true, shift: true }), 'toggleMode', 'darwin'),
+    ).toBe(true)
+    expect(matchesShortcut(input({ key: 'm', control: true }), 'toggleMode', 'win32')).toBe(false)
+  })
+
   it('matches Cmd+, on macOS', () => {
     expect(matchesShortcut(input({ key: ',', meta: true }), 'settings', 'darwin')).toBe(true)
   })

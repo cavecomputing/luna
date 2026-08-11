@@ -27,6 +27,13 @@ export const keyboardShortcuts = {
     otherKeys: ['Ctrl', 'B'],
     match: { key: 'b', code: 'KeyB', shift: false },
   },
+  toggleMode: {
+    label: 'Toggle Fast / Expert mode',
+    accelerator: 'CmdOrCtrl+Shift+M',
+    macKeys: ['⌘', '⇧', 'M'],
+    otherKeys: ['Ctrl', 'Shift', 'M'],
+    match: { key: 'm', code: 'KeyM', shift: true },
+  },
   settings: {
     label: 'Open Settings',
     accelerator: 'CmdOrCtrl+,',
@@ -65,6 +72,7 @@ export type MatchableShortcutId =
   | 'commandPalette'
   | 'search'
   | 'toggleSidebar'
+  | 'toggleMode'
   | 'settings'
   | 'shortcuts'
   | 'close'
@@ -74,6 +82,7 @@ export const keyboardShortcutOrder: KeyboardShortcutId[] = [
   'commandPalette',
   'search',
   'toggleSidebar',
+  'toggleMode',
   'settings',
   'shortcuts',
   'send',

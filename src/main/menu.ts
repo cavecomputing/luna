@@ -5,6 +5,7 @@ import {
   openCommandPalette,
   openSettings,
   openShortcuts,
+  toggleMode,
   toggleSidebar,
 } from './window.js'
 
@@ -70,6 +71,13 @@ export function build(): void {
           accelerator: keyboardShortcuts.toggleSidebar.accelerator,
           click: () => {
             toggleSidebar()
+          },
+        },
+        {
+          label: 'Toggle Fast / Expert Mode',
+          accelerator: keyboardShortcuts.toggleMode.accelerator,
+          click: () => {
+            toggleMode()
           },
         },
         {

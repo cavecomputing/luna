@@ -14,6 +14,7 @@ export type WindowShortcut =
   | 'newChat'
   | 'commandPalette'
   | 'toggleSidebar'
+  | 'toggleMode'
   | 'settings'
   | 'shortcuts'
 

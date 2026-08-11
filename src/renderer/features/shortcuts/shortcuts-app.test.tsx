@@ -15,6 +15,9 @@ describe('ShortcutsApp', () => {
     render(<ShortcutsApp />)
 
     expect(screen.getByText('Toggle sidebar').nextElementSibling?.textContent).toBe('⌘B')
+    expect(screen.getByText('Toggle Fast / Expert mode').nextElementSibling?.textContent).toBe(
+      '⌘⇧M',
+    )
     expect(screen.getByText('Open Settings').nextElementSibling?.textContent).toBe('⌘,')
     expect(screen.getByText('Keyboard shortcuts').nextElementSibling?.textContent).toBe('⌘?')
   })

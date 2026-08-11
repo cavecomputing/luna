@@ -85,6 +85,7 @@ const api = {
   onNewChat: (fn: () => void) => subscribe('shortcut:new-chat', fn),
   onCommandPalette: (fn: () => void) => subscribe('shortcut:command-palette', fn),
   onToggleSidebar: (fn: () => void) => subscribe('shortcut:toggle-sidebar', fn),
+  onToggleMode: (fn: () => void) => subscribe('shortcut:toggle-mode', fn),
   onTheme: (fn: (data: EventData<'theme:changed'>) => void) => subscribe('theme:changed', fn),
   onPrefs: (fn: (data: EventData<'prefs:changed'>) => void) => subscribe('prefs:changed', fn),
   onProviders: (fn: (data: EventData<'providers:changed'>) => void) =>

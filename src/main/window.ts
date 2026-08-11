@@ -52,6 +52,7 @@ type MainShortcutEvent =
   | 'shortcut:new-chat'
   | 'shortcut:command-palette'
   | 'shortcut:toggle-sidebar'
+  | 'shortcut:toggle-mode'
 
 function notifyMain(event: MainShortcutEvent): void {
   const win = create()
@@ -74,6 +75,10 @@ export function openCommandPalette(): void {
 
 export function toggleSidebar(): void {
   notifyMain('shortcut:toggle-sidebar')
+}
+
+export function toggleMode(): void {
+  notifyMain('shortcut:toggle-mode')
 }
 
 export function openSettings(): BrowserWindow {
@@ -194,6 +199,9 @@ function bindShortcuts(win: BrowserWindow, kind: WindowKind): void {
     } else if (matchesShortcut(input, 'toggleSidebar', process.platform)) {
       event.preventDefault()
       toggleSidebar()
+    } else if (matchesShortcut(input, 'toggleMode', process.platform)) {
+      event.preventDefault()
+      toggleMode()
     } else if (matchesShortcut(input, 'settings', process.platform)) {
       event.preventDefault()
       openSettings()
