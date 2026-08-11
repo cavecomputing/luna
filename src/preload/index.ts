@@ -60,6 +60,7 @@ const api = {
     setDraft: (id: string, draft: string) => invoke('chats:set-draft', { id, draft }),
     setPinned: (id: string, pinned: boolean) =>
       invoke('chats:set-pinned', { id, pinned }),
+    rename: (id: string, title: string) => invoke('chats:rename', { id, title }),
     delete: (id: string) => invoke('chats:delete', { id }),
     menu: (id: string) => invoke('chats:menu', { id }),
   },
@@ -87,6 +88,8 @@ const api = {
   onCommandPalette: (fn: () => void) => subscribe('shortcut:command-palette', fn),
   onToggleSidebar: (fn: () => void) => subscribe('shortcut:toggle-sidebar', fn),
   onToggleMode: (fn: () => void) => subscribe('shortcut:toggle-mode', fn),
+  onRenameChat: (fn: (data: EventData<'chats:rename-requested'>) => void) =>
+    subscribe('chats:rename-requested', fn),
   onTheme: (fn: (data: EventData<'theme:changed'>) => void) => subscribe('theme:changed', fn),
   onPrefs: (fn: (data: EventData<'prefs:changed'>) => void) => subscribe('prefs:changed', fn),
   onProviders: (fn: (data: EventData<'providers:changed'>) => void) =>

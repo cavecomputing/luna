@@ -8,6 +8,7 @@ import {
   updateChatMode,
   updateChatDraft,
   updateChatPinned,
+  updateChatTitle,
 } from './chats.js'
 
 function chat(id = 'chat-1'): Conversation {
@@ -42,6 +43,13 @@ function makeDeps(): TestDeps {
       items = items.map((item) => (item.id === id ? value : item))
       return value
     }),
+    setTitle: vi.fn((id: string, title: string) => {
+      const found = items.find((item) => item.id === id)
+      if (found === undefined) return undefined
+      const value = { ...found, title }
+      items = items.map((item) => (item.id === id ? value : item))
+      return value
+    }),
     setDraft: vi.fn((id: string, draft: string) => {
       const found = items.find((item) => item.id === id)
       if (found === undefined) return false
@@ -69,21 +77,30 @@ function makeDeps(): TestDeps {
 }
 
 describe('conversation IPC actions', () => {
-  it('opens a conversation menu wired to pin and delete actions', () => {
+  it('opens a conversation menu wired to pin, rename, and delete actions', () => {
     const togglePinned = vi.fn()
+    const rename = vi.fn()
     const remove = vi.fn()
-    const show = vi.fn((_chat: Conversation, pin: () => void, deleteChat: () => void) => {
+    const show = vi.fn((
+      _chat: Conversation,
+      pin: () => void,
+      renameChat: () => void,
+      deleteChat: () => void,
+    ) => {
       pin()
+      renameChat()
       deleteChat()
     })
 
     expect(showChatMenu({ id: 'chat-1' }, {
       get: (id) => id === 'chat-1' ? chat() : undefined,
       togglePinned,
+      rename,
       remove,
       show,
     })).toEqual({ ok: true, value: undefined })
     expect(togglePinned).toHaveBeenCalledWith('chat-1', true)
+    expect(rename).toHaveBeenCalledWith('chat-1')
     expect(remove).toHaveBeenCalledWith('chat-1')
   })
 
@@ -91,6 +108,7 @@ describe('conversation IPC actions', () => {
     const d = {
       get: vi.fn(() => undefined),
       togglePinned: vi.fn(),
+      rename: vi.fn(),
       remove: vi.fn(),
       show: vi.fn(),
     }
@@ -110,7 +128,7 @@ describe('conversation IPC actions', () => {
     expect(d.notify).toHaveBeenCalledTimes(1)
   })
 
-  it('updates mode and pin state', () => {
+  it('updates mode, title, and pin state', () => {
     const d = makeDeps()
     expect(updateChatMode({ id: 'chat-1', mode: 'expert' }, d)).toMatchObject({
       ok: true,
@@ -120,7 +138,11 @@ describe('conversation IPC actions', () => {
       ok: true,
       value: { pinned: true },
     })
-    expect(d.notify).toHaveBeenCalledTimes(2)
+    expect(updateChatTitle({ id: 'chat-1', title: '  Better title  ' }, d)).toMatchObject({
+      ok: true,
+      value: { title: 'Better title' },
+    })
+    expect(d.notify).toHaveBeenCalledTimes(3)
   })
 
   it('persists a conversation draft without broadcasting the full chat list', () => {
@@ -156,6 +178,8 @@ describe('conversation IPC actions', () => {
     [() => updateChatDraft({ id: 'chat-1', draft: 42 }, makeDeps()), 'chat/invalid'],
     [() => updateChatDraft({ id: 'missing', draft: 'text' }, makeDeps()), 'chat/missing'],
     [() => updateChatPinned({ id: 'chat-1', pinned: 'yes' }, makeDeps()), 'chat/invalid'],
+    [() => updateChatTitle({ id: 'chat-1', title: '   ' }, makeDeps()), 'chat/invalid'],
+    [() => updateChatTitle({ id: 'missing', title: 'Title' }, makeDeps()), 'chat/missing'],
     [() => deleteChat({ id: 'missing' }, makeDeps()), 'chat/missing'],
   ])('returns a stable error for invalid or missing input', async (run, code) => {
     expect(await run()).toMatchObject({ ok: false, code })

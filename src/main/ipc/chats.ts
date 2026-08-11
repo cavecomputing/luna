@@ -11,13 +11,14 @@ import { err, ok, type Result } from '../../shared/result.js'
 import type { Conversation, Mode } from '../../shared/types.js'
 import * as chats from '../chats.js'
 import * as db from '../db.js'
-import { broadcast, handle } from './bus.js'
+import { broadcast, emit, handle } from './bus.js'
 
 type Deps = {
   list: () => Conversation[]
   get: (id: string) => Conversation | undefined
   create: (id: string, mode: Mode, now: number) => Conversation
   setMode: (id: string, mode: Mode) => Conversation | undefined
+  setTitle: (id: string, title: string) => Conversation | undefined
   setDraft: (id: string, draft: string) => boolean
   setPinned: (id: string, pinned: boolean) => Conversation | undefined
   remove: (id: string) => boolean
@@ -31,8 +32,14 @@ type Deps = {
 type MenuDeps = {
   get: (id: string) => Conversation | undefined
   togglePinned: (id: string, pinned: boolean) => void
+  rename: (id: string) => void
   remove: (id: string) => void
-  show: (chat: Conversation, togglePinned: () => void, remove: () => void) => void
+  show: (
+    chat: Conversation,
+    togglePinned: () => void,
+    rename: () => void,
+    remove: () => void,
+  ) => void
 }
 
 async function confirmDelete(): Promise<boolean> {
@@ -58,6 +65,7 @@ const deps: Deps = {
   get: chats.get,
   create: (id, mode, now) => chats.create(db.handle(), id, mode, now),
   setMode: (id, mode) => chats.setMode(db.handle(), id, mode),
+  setTitle: (id, title) => chats.setTitle(db.handle(), id, title),
   setDraft: (id, draft) => chats.setDraft(db.handle(), id, draft),
   setPinned: (id, pinned) => chats.setPinned(db.handle(), id, pinned),
   remove: (id) => chats.remove(db.handle(), id),
@@ -135,6 +143,19 @@ export function updateChatPinned(input: unknown, d: Deps): Result<Conversation> 
   return ok(value)
 }
 
+export function updateChatTitle(input: unknown, d: Deps): Result<Conversation> {
+  const req = object(input)
+  const chatId = id(req?.id)
+  const title = typeof req?.title === 'string' ? req.title.trim() : ''
+  if (chatId === undefined || title === '' || title.length > 200) {
+    return err('chat/invalid', 'conversation title was invalid')
+  }
+  const value = d.setTitle(chatId, title)
+  if (value === undefined) return err('chat/missing', 'conversation was not found')
+  announce(d)
+  return ok(value)
+}
+
 export async function deleteChat(input: unknown, d: Deps): Promise<Result<undefined>> {
   const req = object(input)
   const chatId = id(req?.id)
@@ -158,6 +179,9 @@ export function showChatMenu(input: unknown, d: MenuDeps): Result<undefined> {
       d.togglePinned(chat.id, !chat.pinned)
     },
     () => {
+      d.rename(chat.id)
+    },
+    () => {
       d.remove(chat.id)
     },
   )
@@ -168,10 +192,12 @@ function popup(
   sender: WebContents,
   chat: Conversation,
   togglePinned: () => void,
+  rename: () => void,
   remove: () => void,
 ): void {
   const template: MenuItemConstructorOptions[] = [
     { label: chat.pinned ? 'Unpin Conversation' : 'Pin Conversation', click: togglePinned },
+    { label: 'Rename Conversation', click: rename },
     { type: 'separator' },
     { label: 'Delete Conversation', click: remove },
   ]
@@ -190,6 +216,7 @@ export function register(): void {
   handle('chats:set-mode', (_event, req) => updateChatMode(req, deps))
   handle('chats:set-draft', (_event, req) => updateChatDraft(req, deps))
   handle('chats:set-pinned', (_event, req) => updateChatPinned(req, deps))
+  handle('chats:rename', (_event, req) => updateChatTitle(req, deps))
   handle('chats:delete', (_event, req) => deleteChat(req, deps))
   handle('chats:menu', (event, req) =>
     showChatMenu(req, {
@@ -197,11 +224,14 @@ export function register(): void {
       togglePinned: (id, pinned) => {
         updateChatPinned({ id, pinned }, deps)
       },
+      rename: (id) => {
+        emit(event.sender, 'chats:rename-requested', { id })
+      },
       remove: (id) => {
         void deleteChat({ id }, deps).catch(() => undefined)
       },
-      show: (chat, togglePinned, remove) => {
-        popup(event.sender, chat, togglePinned, remove)
+      show: (chat, togglePinned, rename, remove) => {
+        popup(event.sender, chat, togglePinned, rename, remove)
       },
     }),
   )

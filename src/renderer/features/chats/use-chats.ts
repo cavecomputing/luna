@@ -111,6 +111,7 @@ export function useChats(defaultMode: Mode) {
   const [chats, setChats] = useState<Conversation[]>([])
   const [openId, setOpenId] = useState<string>()
   const [draftMode, setDraftMode] = useState<Mode>()
+  const [renameId, setRenameId] = useState<string>()
   const [error, setError] = useState<string>()
 
   useEffect(() => {
@@ -157,12 +158,16 @@ export function useChats(defaultMode: Mode) {
       setChats((current) => applyFinal(current, value))
       setError(friendlyError(value.code))
     })
+    const offRename = window.luna.onRenameChat(({ id }) => {
+      setRenameId(id)
+    })
     return () => {
       alive = false
       offChats()
       offDelta()
       offDone()
       offError()
+      offRename()
       if (deltaFrame !== undefined) cancelAnimationFrame(deltaFrame)
     }
   }, [])
@@ -258,6 +263,22 @@ export function useChats(defaultMode: Mode) {
     })
   }
 
+  function rename(id: string, title: string): void {
+    void window.luna.chats.rename(id, title).then((result) => {
+      if (!result.ok) {
+        setError('The conversation could not be renamed.')
+        setRenameId(undefined)
+        return
+      }
+      setChats((current) => current.map((chat) => (chat.id === id ? result.value : chat)))
+      setRenameId(undefined)
+    })
+  }
+
+  function cancelRename(): void {
+    setRenameId(undefined)
+  }
+
   return {
     visible,
     all: chats,
@@ -266,6 +287,7 @@ export function useChats(defaultMode: Mode) {
     currentMode,
     streamingMessage,
     error,
+    renameId,
     setOpenId,
     start,
     ensure,
@@ -275,5 +297,7 @@ export function useChats(defaultMode: Mode) {
     setDraft,
     togglePinned,
     remove,
+    rename,
+    cancelRename,
   }
 }

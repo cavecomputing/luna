@@ -14,10 +14,22 @@ type GroupProps = {
   label: string
   chats: Conversation[]
   openId: string | undefined
+  renameId: string | undefined
   onSelect: (id: string) => void
+  onRename: (id: string, title: string) => void
+  onCancelRename: () => void
 }
 
-function ChatGroup({ id, label, chats, openId, onSelect }: GroupProps): React.JSX.Element {
+function ChatGroup({
+  id,
+  label,
+  chats,
+  openId,
+  renameId,
+  onSelect,
+  onRename,
+  onCancelRename,
+}: GroupProps): React.JSX.Element {
   return (
     <section className={styles.group} aria-labelledby={id}>
       <h2 className={styles.groupLabel} id={id}>{label}</h2>
@@ -26,7 +38,10 @@ function ChatGroup({ id, label, chats, openId, onSelect }: GroupProps): React.JS
           key={chat.id}
           chat={chat}
           active={chat.id === openId}
+          renaming={chat.id === renameId}
           onSelect={onSelect}
+          onRename={onRename}
+          onCancelRename={onCancelRename}
         />
       ))}
     </section>
@@ -73,7 +88,10 @@ export function Sidebar({
             label="Pinned"
             chats={groups.pinned}
             openId={chats.openId}
+            renameId={chats.renameId}
             onSelect={chats.setOpenId}
+            onRename={chats.rename}
+            onCancelRename={chats.cancelRename}
           />
         )}
 
@@ -83,7 +101,10 @@ export function Sidebar({
             label="Recent"
             chats={groups.recent}
             openId={chats.openId}
+            renameId={chats.renameId}
             onSelect={chats.setOpenId}
+            onRename={chats.rename}
+            onCancelRename={chats.cancelRename}
           />
         )}
 

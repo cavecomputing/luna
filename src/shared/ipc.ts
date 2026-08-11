@@ -89,6 +89,7 @@ export type Invocations = {
   'chats:set-mode': { req: { id: string; mode: Mode }; res: Conversation }
   'chats:set-draft': { req: { id: string; draft: string }; res: undefined }
   'chats:set-pinned': { req: { id: string; pinned: boolean }; res: Conversation }
+  'chats:rename': { req: { id: string; title: string }; res: Conversation }
   'chats:delete': { req: { id: string }; res: undefined }
   'chats:menu': { req: { id: string }; res: undefined }
   'attachments:add': {
@@ -116,6 +117,7 @@ export type Events = {
   'shortcut:command-palette': undefined
   'shortcut:toggle-sidebar': undefined
   'shortcut:toggle-mode': undefined
+  'chats:rename-requested': { id: string }
   'theme:changed': { dark: boolean }
   /** Sent to every window after a successful write. Carries the stored set. */
   'prefs:changed': Prefs
