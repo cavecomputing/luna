@@ -10,6 +10,7 @@ import styles from './sidebar.module.css'
 type Props = {
   chats: Chats
   collapse: React.ReactNode | null
+  width: number
   /** Frozen per render of the shell so every row formats against one clock. */
   now: number
   onSearchOpen: () => void
@@ -19,6 +20,7 @@ type Props = {
 export function Sidebar({
   chats,
   collapse,
+  width,
   now,
   onSearchOpen,
   onSettings,
@@ -27,7 +29,7 @@ export function Sidebar({
   const searchLabel = searchKeys.join(window.luna.platform === 'darwin' ? '' : '+')
 
   return (
-    <aside className={styles.sidebar}>
+    <aside className={styles.sidebar} style={{ width }}>
       <header className={styles.head}>
         {collapse !== null && <div className={styles.collapse}>{collapse}</div>}
         <div className={styles.actions}>

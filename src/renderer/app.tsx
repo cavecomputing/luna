@@ -14,6 +14,10 @@ import { isSearchShortcut } from './features/chats/search-shortcut.js'
 import { ChatSearch } from './features/chats/chat-search.js'
 import { CommandPalette } from './features/commands/command-palette.js'
 import { matchesShortcutKey } from '../shared/keyboard-shortcuts.js'
+import {
+  clampSidebarWidth,
+  DEFAULT_SIDEBAR_WIDTH,
+} from './features/chats/sidebar-width.js'
 
 type ConversationSurfaceProps = {
   chats: Chats
@@ -49,6 +53,8 @@ export function App(): React.JSX.Element {
   const { prefs } = usePrefs()
   const chats = useChats(prefs.defaultMode)
   const [open, setOpen] = useState(true)
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
+  const [isResizing, setIsResizing] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const usesTrafficLights = window.luna.platform === 'darwin'
@@ -106,6 +112,31 @@ export function App(): React.JSX.Element {
     setSearchOpen(false)
   }
 
+  function startResize(event: React.PointerEvent<HTMLDivElement>): void {
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setIsResizing(true)
+  }
+
+  function resize(event: React.PointerEvent<HTMLDivElement>): void {
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
+    setSidebarWidth(clampSidebarWidth(event.clientX))
+  }
+
+  function stopResize(event: React.PointerEvent<HTMLDivElement>): void {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    setIsResizing(false)
+  }
+
+  function resizeWithKeys(event: React.KeyboardEvent<HTMLDivElement>): void {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    event.preventDefault()
+    const change = event.key === 'ArrowLeft' ? -8 : 8
+    setSidebarWidth((width) => clampSidebarWidth(width + change))
+  }
+
   // One ticking clock for the whole shell, so every row agrees.
   const now = useNow()
   const sidebarButton = (
@@ -121,11 +152,20 @@ export function App(): React.JSX.Element {
   )
 
   return (
-    <div className={styles.shell} data-platform={window.luna.platform}>
-      <div className={cx(styles.side, !open && styles.sideClosed)} inert={!open}>
+    <div
+      className={styles.shell}
+      data-platform={window.luna.platform}
+      data-resizing={isResizing ? 'true' : undefined}
+    >
+      <div
+        className={cx(styles.side, !open && styles.sideClosed, isResizing && styles.sideResizing)}
+        style={{ width: open ? sidebarWidth : 0 }}
+        inert={!open}
+      >
         <Sidebar
           chats={chats}
           collapse={usesTrafficLights ? sidebarButton : null}
+          width={sidebarWidth}
           now={now}
           onSearchOpen={() => {
             setSearchOpen(true)
@@ -135,6 +175,31 @@ export function App(): React.JSX.Element {
           }}
         />
       </div>
+
+      {open && (
+        <div
+          className={styles.resize}
+          style={{ left: sidebarWidth - 4 }}
+          role="separator"
+          aria-label="Resize sidebar"
+          aria-orientation="vertical"
+          aria-valuemin={200}
+          aria-valuemax={420}
+          aria-valuenow={sidebarWidth}
+          tabIndex={0}
+          onDoubleClick={() => {
+            setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)
+          }}
+          onPointerDown={startResize}
+          onPointerMove={resize}
+          onPointerUp={stopResize}
+          onPointerCancel={stopResize}
+          onLostPointerCapture={() => {
+            setIsResizing(false)
+          }}
+          onKeyDown={resizeWithKeys}
+        />
+      )}
 
       <main className={styles.pane}>
         <header className={cx(styles.top, !usesTrafficLights && styles.withInlineToggle)}>

@@ -28,6 +28,49 @@
     visibility 0s 200ms;
 }
 
+.sideResizing {
+  transition: none;
+}
+
+.resize {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  -webkit-app-region: no-drag;
+  touch-action: none;
+  outline: none;
+}
+
+.resize::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transform: scaleX(0.5);
+  transition:
+    opacity var(--fast) var(--ease),
+    transform var(--fast) var(--ease);
+}
+
+.resize:hover::after,
+.resize:focus-visible::after,
+.shell[data-resizing='true'] .resize::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.shell[data-resizing='true'] {
+  cursor: col-resize;
+  user-select: none;
+}
+
 .pane {
   display: flex;
   flex-direction: column;
