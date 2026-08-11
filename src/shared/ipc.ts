@@ -71,6 +71,8 @@ export type AppInfo = {
 /** Two-way. Renderer asks, main answers. ipcRenderer.invoke / ipcMain.handle. */
 export type Invocations = {
   'app:info': { req: undefined; res: AppInfo }
+  'app:recover': { req: undefined; res: undefined }
+  'app:close-window': { req: undefined; res: undefined }
   'prefs:get': { req: undefined; res: Prefs }
   'prefs:set': { req: Prefs; res: Prefs }
   'providers:list': { req: undefined; res: Provider[] }

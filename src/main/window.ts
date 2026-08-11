@@ -1,4 +1,11 @@
-import { BrowserWindow, nativeTheme, screen, shell, type WebContents } from 'electron'
+import {
+  BrowserWindow,
+  nativeTheme,
+  screen,
+  shell,
+  type RenderProcessGoneDetails,
+  type WebContents,
+} from 'electron'
 import { join } from 'node:path'
 import * as db from './db.js'
 import { APP_ORIGIN } from './protocol.js'
@@ -7,6 +14,7 @@ import { canFrameLoad } from './navigation.js'
 import { closesAuxiliary, matchesShortcut } from './shortcut-input.js'
 import { emit } from './ipc/bus.js'
 import * as windowState from './window-state.js'
+import { needsRecovery } from './crash-recovery.js'
 
 const MIN_WIDTH = 720
 const MIN_HEIGHT = 480
@@ -22,6 +30,9 @@ let settings: BrowserWindow | undefined
 let shortcuts: BrowserWindow | undefined
 let settingsCanClose = false
 let settingsCloseTimer: ReturnType<typeof setTimeout> | undefined
+let quitting = false
+const recoveryTargets = new WeakMap<BrowserWindow, string>()
+const recoveryWindows = new WeakSet<BrowserWindow>()
 
 export function create(): BrowserWindow {
   if (main !== undefined && !main.isDestroyed()) {
@@ -105,7 +116,7 @@ export function openSettings(): BrowserWindow {
 
   settingsCanClose = false
   win.on('close', (event) => {
-    if (settingsCanClose || win.webContents.isDestroyed()) return
+    if (settingsCanClose || win.webContents.isDestroyed() || recoveryWindows.has(win)) return
     event.preventDefault()
     emit(win.webContents, 'settings:close-requested', undefined)
     settingsCloseTimer ??= setTimeout(() => {
@@ -214,6 +225,9 @@ function build(shape: Shape, kind: WindowKind, stateName: windowState.WindowName
 
   lockNavigation(win)
   bindShortcuts(win, kind)
+  win.webContents.on('render-process-gone', (_event, details) => {
+    rendererGone(win, details)
+  })
   return win
 }
 
@@ -272,6 +286,64 @@ function devUrl(): string | undefined {
 }
 
 function load(win: BrowserWindow, page: string): void {
+  recoveryTargets.set(win, page)
+  recoveryWindows.delete(win)
+  void navigate(win, page)
+}
+
+function navigate(win: BrowserWindow, page: string): Promise<void> {
   const dev = devUrl()
-  void win.loadURL(dev === undefined ? `${APP_ORIGIN}/${page}` : `${dev}/${page}`)
+  return win.loadURL(dev === undefined ? `${APP_ORIGIN}/${page}` : `${dev}/${page}`)
+}
+
+function rendererGone(win: BrowserWindow, details: RenderProcessGoneDetails): void {
+  console.error('renderer process gone', details.reason, details.exitCode)
+  if (!needsRecovery(details.reason, quitting) || win.isDestroyed()) return
+
+  // A second crash means the recovery renderer itself failed. Avoid a loop.
+  if (recoveryWindows.has(win)) {
+    win.close()
+    return
+  }
+
+  recoveryWindows.add(win)
+  void navigate(win, 'crash.html').catch(() => {
+    console.error('failed to load crash recovery')
+    if (!win.isDestroyed()) win.close()
+  })
+}
+
+/** Called from before-quit so renderer teardown cannot reopen a recovery page. */
+export function beginQuit(): void {
+  quitting = true
+}
+
+/** Only a window currently showing the recovery page may restore its target. */
+export function recoverWindow(sender: WebContents): boolean {
+  const win = BrowserWindow.fromWebContents(sender)
+  const target = win === null ? undefined : recoveryTargets.get(win)
+  if (win === null || target === undefined || !recoveryWindows.has(win)) return false
+
+  setTimeout(() => {
+    if (win.isDestroyed()) return
+    recoveryWindows.delete(win)
+    void navigate(win, target).catch(() => {
+      console.error('failed to restore crashed window')
+      if (!win.isDestroyed()) rendererGone(win, { reason: 'launch-failed', exitCode: 0 })
+    })
+  }, 0)
+  return true
+}
+
+/** Closes the recovery window without waiting on a renderer that already failed. */
+export function closeCrashedWindow(sender: WebContents): boolean {
+  const win = BrowserWindow.fromWebContents(sender)
+  if (win === null || !recoveryWindows.has(win)) return false
+
+  setTimeout(() => {
+    if (win.isDestroyed()) return
+    if (win === settings) settingsCanClose = true
+    win.close()
+  }, 0)
+  return true
 }

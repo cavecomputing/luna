@@ -28,6 +28,7 @@ export default defineConfig({
         // so neither window ships the other's code.
         input: {
           index: 'src/renderer/index.html',
+          crash: 'src/renderer/crash.html',
           settings: 'src/renderer/settings.html',
           shortcuts: 'src/renderer/shortcuts.html',
         },

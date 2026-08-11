@@ -57,6 +57,14 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
+app.on('before-quit', () => {
+  window.beginQuit()
+})
+
+app.on('child-process-gone', (_event, details) => {
+  console.error('child process gone', details.type, details.reason, details.exitCode)
+})
+
 // Checkpoints the WAL, so the next launch doesn't replay one.
 app.on('will-quit', () => {
   coordinator.stopAll()

@@ -1,0 +1,117 @@
+.screen {
+  position: relative;
+  display: grid;
+  min-height: 100%;
+  place-items: center;
+  overflow: auto;
+  padding: calc(var(--titlebar) + var(--s-4)) var(--s-5) var(--s-7);
+  background: var(--bg);
+  text-align: center;
+}
+
+.screen::before {
+  position: fixed;
+  inset: 0 0 auto;
+  height: var(--titlebar);
+  content: '';
+  -webkit-app-region: drag;
+}
+
+.content {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  width: min(520px, 100%);
+}
+
+.mascot {
+  display: block;
+  width: min(320px, 70vw);
+  max-height: 310px;
+  margin-bottom: var(--s-2);
+  object-fit: contain;
+}
+
+.title {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(24px, 4vw, 32px);
+  line-height: 1.2;
+}
+
+.message {
+  max-width: 460px;
+  margin: var(--s-3) 0 0;
+  color: var(--text-muted);
+  font-size: var(--t-lg);
+}
+
+.actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--s-3);
+  margin-top: var(--s-5);
+}
+
+.primary,
+.secondary {
+  min-width: 120px;
+  padding: 10px var(--s-4);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  font-weight: 600;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    opacity var(--fast) var(--ease);
+}
+
+.primary {
+  background: var(--accent);
+  color: var(--accent-on);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.secondary {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.primary:disabled,
+.secondary:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.error {
+  margin: var(--s-4) 0 0;
+  color: var(--danger);
+  font-size: var(--t-md);
+}
+
+@media (max-height: 620px) {
+  .screen {
+    place-items: start center;
+  }
+
+  .mascot {
+    width: min(230px, 54vw);
+    max-height: 210px;
+  }
+}
+
+@media (max-width: 480px) {
+  .actions {
+    align-self: stretch;
+    flex-direction: column;
+  }
+}

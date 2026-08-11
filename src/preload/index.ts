@@ -33,6 +33,8 @@ const api = {
   platform: process.platform,
   app: {
     info: () => invoke('app:info', undefined),
+    recover: () => invoke('app:recover', undefined),
+    closeWindow: () => invoke('app:close-window', undefined),
   },
   prefs: {
     get: () => invoke('prefs:get', undefined),
