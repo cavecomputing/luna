@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Sidebar } from './features/chats/sidebar.js'
-import { useChats } from './features/chats/use-chats.js'
+import { type Chats, useChats } from './features/chats/use-chats.js'
 import { Composer } from './features/composer/composer.js'
 import { ModeSwitch } from './features/mode/mode-switch.js'
 import { Thread } from './features/thread/thread.js'
@@ -14,6 +14,32 @@ import { isSearchShortcut } from './features/chats/search-shortcut.js'
 import { ChatSearch } from './features/chats/chat-search.js'
 import { CommandPalette } from './features/commands/command-palette.js'
 import { matchesShortcutKey } from '../shared/keyboard-shortcuts.js'
+
+type ConversationSurfaceProps = {
+  chats: Chats
+}
+
+/** Remount conversation-local state without giving adjacent siblings duplicate keys. */
+export function ConversationSurface({ chats }: ConversationSurfaceProps): React.JSX.Element {
+  const conversationKey = chats.openId ?? 'empty'
+  return (
+    <>
+      <Thread key={`thread:${conversationKey}`} chat={chats.open} />
+
+      <Composer
+        key={`composer:${conversationKey}`}
+        onSend={chats.send}
+        conversationId={chats.openId}
+        onEnsureConversation={chats.ensure}
+        onCancel={chats.cancel}
+        streaming={chats.streamingMessage !== undefined}
+        initialDraft={chats.open?.draft}
+        onDraftChange={chats.setDraft}
+        notice={chats.error}
+      />
+    </>
+  )
+}
 
 /**
  * Layout only. Every pane owns its own state; the shell just decides where
@@ -118,19 +144,7 @@ export function App(): React.JSX.Element {
           </div>
         </header>
 
-        <Thread key={chats.openId ?? 'empty-thread'} chat={chats.open} />
-
-        <Composer
-          key={chats.openId ?? 'new-chat'}
-          onSend={chats.send}
-          conversationId={chats.openId}
-          onEnsureConversation={chats.ensure}
-          onCancel={chats.cancel}
-          streaming={chats.streamingMessage !== undefined}
-          initialDraft={chats.open?.draft}
-          onDraftChange={chats.setDraft}
-          notice={chats.error}
-        />
+        <ConversationSurface chats={chats} />
       </main>
 
       {searchOpen && (
