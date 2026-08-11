@@ -1,6 +1,18 @@
-import { describe, expect, it } from 'vitest'
-import { mergeDrafts } from './models.js'
-import type { ModelSlots } from '../../../../shared/types.js'
+// @vitest-environment jsdom
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ModelSlots, Provider } from '../../../../shared/types.js'
+import { Models, mergeDrafts } from './models.js'
+
+const provider: Provider = {
+  id: 'openai',
+  name: 'OpenAI',
+  baseUrl: 'https://api.openai.com/v1',
+  api: 'responses',
+  organization: '',
+  project: '',
+  hasApiKey: true,
+}
 
 function slots(fast: string, expert: string): ModelSlots {
   return {
@@ -8,6 +20,10 @@ function slots(fast: string, expert: string): ModelSlots {
     expert: { providerId: 'openai', model: expert },
   }
 }
+
+afterEach(() => {
+  cleanup()
+})
 
 describe('mergeDrafts', () => {
   it('keeps local drafts when the broadcast carries what this window saved', () => {
@@ -51,5 +67,35 @@ describe('mergeDrafts', () => {
       slots('same-model', ''),
     )
     expect(merged.fast).toBe('same-model')
+  })
+})
+
+describe('Models', () => {
+  it('does not save the empty initial drafts over persisted model choices', async () => {
+    const persisted = slots('gpt-fast', 'gpt-expert')
+    const set = vi.fn(() => Promise.resolve({ ok: true as const, value: persisted }))
+
+    Object.defineProperty(window, 'luna', {
+      configurable: true,
+      value: {
+        providers: {
+          list: () => Promise.resolve({ ok: true, value: [provider] }),
+          models: () => Promise.resolve({ ok: true, value: [] }),
+        },
+        models: {
+          get: () => Promise.resolve({ ok: true, value: persisted }),
+          set,
+        },
+        onProviders: () => () => undefined,
+        onModels: () => () => undefined,
+      },
+    })
+
+    render(<Models />)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('gpt-expert')).toBeTruthy()
+    })
+    expect(set).not.toHaveBeenCalled()
   })
 })

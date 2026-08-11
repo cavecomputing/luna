@@ -210,24 +210,24 @@ export function Models(): React.JSX.Element {
   }, [])
 
   useEffect(() => {
-    if (!ready || fast === slots.fast.model) return
+    if (!ready || fast !== drafts.fast || fast === slots.fast.model) return
     saved.current.fast = { providerId: slots.fast.providerId, model: fast }
     void window.luna.models
       .set('fast', slots.fast.providerId, fast)
       .then((result) => {
         if (!result.ok) setStatus((current) => ({ ...current, fast: 'Model choice could not be saved.' }))
       })
-  }, [fast, ready, slots.fast.model, slots.fast.providerId])
+  }, [drafts.fast, fast, ready, slots.fast.model, slots.fast.providerId])
 
   useEffect(() => {
-    if (!ready || expert === slots.expert.model) return
+    if (!ready || expert !== drafts.expert || expert === slots.expert.model) return
     saved.current.expert = { providerId: slots.expert.providerId, model: expert }
     void window.luna.models
       .set('expert', slots.expert.providerId, expert)
       .then((result) => {
         if (!result.ok) setStatus((current) => ({ ...current, expert: 'Model choice could not be saved.' }))
       })
-  }, [expert, ready, slots.expert.model, slots.expert.providerId])
+  }, [drafts.expert, expert, ready, slots.expert.model, slots.expert.providerId])
 
   async function choose(slot: Mode, providerId: string | null): Promise<void> {
     setDrafts((current) => ({ ...current, [slot]: '' }))
