@@ -2,7 +2,7 @@ import { BrowserWindow, nativeTheme, screen, shell } from 'electron'
 import { join } from 'node:path'
 import * as db from './db.js'
 import { APP_ORIGIN } from './protocol.js'
-import { background, chromeOptions, overlay } from './window-chrome.js'
+import { background, chromeOptions, overlay, settingsMinimum } from './window-chrome.js'
 import { canFrameLoad } from './navigation.js'
 import { closesAuxiliary, matchesShortcut } from './shortcut-input.js'
 import { emit } from './ipc/bus.js'
@@ -83,12 +83,13 @@ export function openSettings(): BrowserWindow {
     return settings
   }
 
+  const minimum = settingsMinimum(process.platform)
   const win = build(
     {
       width: SETTINGS_WIDTH,
       height: SETTINGS_HEIGHT,
-      minWidth: 640,
-      minHeight: 460,
+      minWidth: minimum.width,
+      minHeight: minimum.height,
       title: 'Settings',
     },
     'auxiliary',

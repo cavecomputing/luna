@@ -16,6 +16,11 @@ type ChromeOptions = Pick<
   'titleBarOverlay' | 'titleBarStyle' | 'trafficLightPosition'
 >
 
+type MinimumSize = {
+  width: number
+  height: number
+}
+
 export function background(dark: boolean): string {
   return dark ? DARK_BACKGROUND : LIGHT_BACKGROUND
 }
@@ -26,6 +31,11 @@ export function overlay(dark: boolean): TitleBarOverlay {
     symbolColor: dark ? DARK_SYMBOL : LIGHT_SYMBOL,
     height: TITLE_BAR_HEIGHT,
   }
+}
+
+/** Windows caption controls need the full Settings chrome at its designed size. */
+export function settingsMinimum(platform: NodeJS.Platform): MinimumSize {
+  return platform === 'win32' ? { width: 800, height: 580 } : { width: 640, height: 460 }
 }
 
 /** Platform-native controls over Luna's shared draggable title-bar row. */

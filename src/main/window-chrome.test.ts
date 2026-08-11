@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { background, chromeOptions, overlay } from './window-chrome.js'
+import { background, chromeOptions, overlay, settingsMinimum } from './window-chrome.js'
 
 describe('window chrome', () => {
   it('puts Windows controls over the shared title bar', () => {
@@ -31,5 +31,10 @@ describe('window chrome', () => {
 
   it('leaves Linux window chrome native', () => {
     expect(chromeOptions('linux', false)).toEqual({})
+  })
+
+  it('keeps Windows Settings large enough to clear its caption controls', () => {
+    expect(settingsMinimum('win32')).toEqual({ width: 800, height: 580 })
+    expect(settingsMinimum('darwin')).toEqual({ width: 640, height: 460 })
   })
 })
