@@ -9,27 +9,32 @@ import * as dock from './dock.js'
 import * as menu from './menu.js'
 import * as prefs from './prefs.js'
 import { registerScheme, serveRenderer } from './protocol.js'
+import * as recoveryIpc from './ipc/recovery.js'
+import * as recoveryWindow from './recovery-window.js'
 import * as window from './window.js'
 
 let quitting = false
+let launched = false
 
-async function ready(): Promise<void> {
-  serveRenderer(join(import.meta.dirname, '../renderer'))
-  dock.setIcon()
-
-  // Opens and migrates. No window exists yet, so a slow migration has nothing
-  // to block, and a failure lands in the rejection handler below.
+async function launch(): Promise<void> {
+  if (launched) return
   const conn = db.handle()
   await prefs.adoptLegacy(conn, prefs.legacyPath())
   chats.recoverInterrupted(conn)
 
-  // Theme comes from prefs, which default to light. Applied before the first
-  // window so there is no flash of the wrong appearance.
   prefs.applyTheme(prefs.load())
-
   menu.build()
   registerAll()
+  db.startBackups()
+  launched = true
   window.create()
+}
+
+async function ready(): Promise<void> {
+  serveRenderer(join(import.meta.dirname, '../renderer'))
+  dock.setIcon()
+  recoveryIpc.setReady(launch)
+  recoveryIpc.register()
 
   nativeTheme.on('updated', () => {
     for (const win of BrowserWindow.getAllWindows()) {
@@ -38,10 +43,18 @@ async function ready(): Promise<void> {
     }
   })
 
-  // macOS: clicking the dock icon with no windows open reopens one.
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) window.create()
+    if (BrowserWindow.getAllWindows().length !== 0) return
+    if (launched) window.create()
+    else if (db.recoveryStatus() !== undefined) recoveryWindow.show()
   })
+
+  const recovery = await db.initialize()
+  if (recovery !== undefined) {
+    recoveryWindow.show()
+    return
+  }
+  await launch()
 }
 
 function failed(error: unknown): void {
@@ -53,7 +66,10 @@ function start(): void {
   // Must happen before 'ready'.
   registerScheme()
   app.on('second-instance', () => {
-    if (!quitting && app.isReady()) window.create()
+    if (!quitting && app.isReady()) {
+      if (launched) window.create()
+      else if (db.recoveryStatus() !== undefined) recoveryWindow.show()
+    }
   })
   void app.whenReady().then(ready, failed)
 }

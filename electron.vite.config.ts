@@ -29,6 +29,7 @@ export default defineConfig({
         input: {
           index: 'src/renderer/index.html',
           crash: 'src/renderer/crash.html',
+          recovery: 'src/renderer/recovery.html',
           settings: 'src/renderer/settings.html',
           shortcuts: 'src/renderer/shortcuts.html',
         },

@@ -68,11 +68,22 @@ export type AppInfo = {
   platform: string
 }
 
+export type DatabaseRecoveryStatus =
+  | { kind: 'corrupt'; backupCreatedAt: number }
+  | { kind: 'corrupt-empty' }
+  | { kind: 'migration-failed' }
+  | { kind: 'newer-version' }
+
 /** Two-way. Renderer asks, main answers. ipcRenderer.invoke / ipcMain.handle. */
 export type Invocations = {
   'app:info': { req: undefined; res: AppInfo }
   'app:recover': { req: undefined; res: undefined }
   'app:close-window': { req: undefined; res: undefined }
+  'recovery:status': { req: undefined; res: DatabaseRecoveryStatus }
+  'recovery:restore': { req: undefined; res: undefined }
+  'recovery:retry': { req: undefined; res: undefined }
+  'recovery:start-fresh': { req: undefined; res: undefined }
+  'recovery:quit': { req: undefined; res: undefined }
   'prefs:get': { req: undefined; res: Prefs }
   'prefs:set': { req: Prefs; res: Prefs }
   'providers:list': { req: undefined; res: Provider[] }

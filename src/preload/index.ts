@@ -36,6 +36,13 @@ const api = {
     recover: () => invoke('app:recover', undefined),
     closeWindow: () => invoke('app:close-window', undefined),
   },
+  recovery: {
+    status: () => invoke('recovery:status', undefined),
+    restore: () => invoke('recovery:restore', undefined),
+    retry: () => invoke('recovery:retry', undefined),
+    startFresh: () => invoke('recovery:start-fresh', undefined),
+    quit: () => invoke('recovery:quit', undefined),
+  },
   prefs: {
     get: () => invoke('prefs:get', undefined),
     set: (prefs: Prefs) => invoke('prefs:set', prefs),

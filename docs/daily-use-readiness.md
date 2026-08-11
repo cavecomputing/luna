@@ -15,23 +15,15 @@ is deliberately deferred and is not part of this checklist.
   boundary with **Try again** and **Reload window** actions.
 - The README, screenshots, getting-started guide, and development documentation are current.
 
-## Remaining work
+## Daily-driver threshold
 
-### 1. Database backup and recovery
+### 1. Database backup and recovery — completed
 
-This is the next task and the highest-priority daily-use risk. All persistent data currently
-lives in `luna.db`, and a startup or migration failure presently logs the error and quits.
-
-- Create rotating local backups before schema migrations and after appropriate clean database
-  checkpoints.
-- Keep the database, WAL, and backup operations consistent so a backup is always restorable.
-- Run a SQLite integrity check during the startup recovery path.
-- If the active database is damaged, restore the newest valid backup when safe or show a clear,
-  text-only recovery choice instead of silently discarding data.
-- Never overwrite the damaged database without preserving a recoverable copy.
-- Cover clean startup, migration failure, corrupt database, valid backup restore, invalid backup,
-  and interrupted recovery with deterministic tests.
-- Keep all database work in main; no database paths or contents may cross into the renderer.
+Luna now keeps five rotating, uncompressed SQLite snapshots before migrations and at most daily
+after clean checkpoints. Startup validates damaged data and backup candidates, requires explicit
+consent before restoring, preserves the database/WAL bundle, and resumes interrupted recovery.
+Migration failures and databases from newer Luna versions remain untouched. All database paths
+and contents stay in main.
 
 ### 2. Export and delete-all
 
@@ -51,6 +43,8 @@ The Privacy settings panel currently marks these controls as unfinished.
   validation.
 
 Items 1–3 are the daily-driver threshold.
+
+## Remaining work
 
 ### 4. Attachment storage controls
 
