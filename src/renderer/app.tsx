@@ -68,9 +68,13 @@ export function App(): React.JSX.Element {
       setSearchOpen(false)
       setPaletteOpen(true)
     })
+    const offToggleSidebar = window.luna.onToggleSidebar(() => {
+      setOpen((value) => !value)
+    })
     return () => {
       offNewChat()
       offPalette()
+      offToggleSidebar()
     }
   }, [])
 

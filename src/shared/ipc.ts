@@ -113,6 +113,7 @@ export type Invocations = {
 export type Events = {
   'shortcut:new-chat': undefined
   'shortcut:command-palette': undefined
+  'shortcut:toggle-sidebar': undefined
   'theme:changed': { dark: boolean }
   /** Sent to every window after a successful write. Carries the stored set. */
   'prefs:changed': Prefs

@@ -20,6 +20,13 @@ export const keyboardShortcuts = {
     otherKeys: ['Ctrl', 'F'],
     match: { key: 'f', code: 'KeyF', shift: false },
   },
+  toggleSidebar: {
+    label: 'Toggle sidebar',
+    accelerator: 'CmdOrCtrl+B',
+    macKeys: ['⌘', 'B'],
+    otherKeys: ['Ctrl', 'B'],
+    match: { key: 'b', code: 'KeyB', shift: false },
+  },
   settings: {
     label: 'Open Settings',
     accelerator: 'CmdOrCtrl+,',
@@ -57,6 +64,7 @@ export type MatchableShortcutId =
   | 'newChat'
   | 'commandPalette'
   | 'search'
+  | 'toggleSidebar'
   | 'settings'
   | 'shortcuts'
   | 'close'
@@ -65,6 +73,7 @@ export const keyboardShortcutOrder: KeyboardShortcutId[] = [
   'newChat',
   'commandPalette',
   'search',
+  'toggleSidebar',
   'settings',
   'shortcuts',
   'send',

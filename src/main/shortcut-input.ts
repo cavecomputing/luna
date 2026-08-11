@@ -10,7 +10,12 @@ export type ShortcutInput = {
   shift: boolean
 }
 
-export type WindowShortcut = 'newChat' | 'commandPalette' | 'settings' | 'shortcuts'
+export type WindowShortcut =
+  | 'newChat'
+  | 'commandPalette'
+  | 'toggleSidebar'
+  | 'settings'
+  | 'shortcuts'
 
 export function matchesShortcut(
   input: ShortcutInput,

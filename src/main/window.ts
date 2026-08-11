@@ -48,7 +48,12 @@ export function create(): BrowserWindow {
   return win
 }
 
-function notifyMain(event: 'shortcut:new-chat' | 'shortcut:command-palette'): void {
+type MainShortcutEvent =
+  | 'shortcut:new-chat'
+  | 'shortcut:command-palette'
+  | 'shortcut:toggle-sidebar'
+
+function notifyMain(event: MainShortcutEvent): void {
   const win = create()
   const notify = (): void => {
     win.show()
@@ -65,6 +70,10 @@ export function newChat(): void {
 
 export function openCommandPalette(): void {
   notifyMain('shortcut:command-palette')
+}
+
+export function toggleSidebar(): void {
+  notifyMain('shortcut:toggle-sidebar')
 }
 
 export function openSettings(): BrowserWindow {
@@ -181,6 +190,9 @@ function bindShortcuts(win: BrowserWindow, kind: WindowKind): void {
     } else if (matchesShortcut(input, 'commandPalette', process.platform)) {
       event.preventDefault()
       openCommandPalette()
+    } else if (matchesShortcut(input, 'toggleSidebar', process.platform)) {
+      event.preventDefault()
+      toggleSidebar()
     } else if (matchesShortcut(input, 'settings', process.platform)) {
       event.preventDefault()
       openSettings()

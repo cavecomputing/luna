@@ -22,6 +22,15 @@ describe('window shortcuts', () => {
     ).toBe(true)
   })
 
+  it('matches Cmd+B on macOS and Ctrl+B elsewhere', () => {
+    expect(matchesShortcut(input({ key: 'b', meta: true }), 'toggleSidebar', 'darwin')).toBe(
+      true,
+    )
+    expect(
+      matchesShortcut(input({ code: 'KeyB', control: true }), 'toggleSidebar', 'win32'),
+    ).toBe(true)
+  })
+
   it('matches Cmd+, on macOS', () => {
     expect(matchesShortcut(input({ key: ',', meta: true }), 'settings', 'darwin')).toBe(true)
   })

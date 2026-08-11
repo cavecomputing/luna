@@ -5,6 +5,7 @@ import {
   openCommandPalette,
   openSettings,
   openShortcuts,
+  toggleSidebar,
 } from './window.js'
 
 /**
@@ -64,6 +65,13 @@ export function build(): void {
     {
       label: 'View',
       submenu: [
+        {
+          label: 'Toggle Sidebar',
+          accelerator: keyboardShortcuts.toggleSidebar.accelerator,
+          click: () => {
+            toggleSidebar()
+          },
+        },
         {
           label: 'Command Palette (WIP)',
           accelerator: keyboardShortcuts.commandPalette.accelerator,
