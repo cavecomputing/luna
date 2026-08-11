@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { MessageBoxOptions } from 'electron'
+import { BrowserWindow, dialog, type MessageBoxOptions } from 'electron'
 import { err, ok, type Result } from '../../shared/result.js'
 import type { Conversation, Mode } from '../../shared/types.js'
 import * as chats from '../chats.js'
@@ -22,7 +22,6 @@ type Deps = {
 }
 
 async function confirmDelete(): Promise<boolean> {
-  const { BrowserWindow, dialog } = await import('electron')
   const options: MessageBoxOptions = {
     type: 'warning',
     buttons: ['Delete', 'Cancel'],
@@ -34,7 +33,7 @@ async function confirmDelete(): Promise<boolean> {
   }
   const parent = BrowserWindow.getFocusedWindow()
   const result =
-    parent === null
+    process.platform === 'darwin' || parent === null
       ? await dialog.showMessageBox(options)
       : await dialog.showMessageBox(parent, options)
   return result.response === 0
