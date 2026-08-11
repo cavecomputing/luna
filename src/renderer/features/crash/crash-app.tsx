@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import mascot from '../../../../assets/crash-mascot.png'
 import styles from './crash-app.module.css'
 
 export function CrashApp(): React.JSX.Element {
@@ -34,11 +33,9 @@ export function CrashApp(): React.JSX.Element {
   return (
     <main className={styles.screen}>
       <section className={styles.content} aria-labelledby="crash-title">
-        <img className={styles.mascot} src={mascot} alt="" />
-        <h1 id="crash-title" className={styles.title}>Luna took a tumble.</h1>
+        <h1 id="crash-title" className={styles.title}>Luna couldn&rsquo;t reopen this window.</h1>
         <p className={styles.message}>
-          This window stopped unexpectedly. Your saved chats are still on this device, though a
-          reply that was arriving may need to be tried again.
+          Automatic recovery didn&rsquo;t stick. Try once more, or close this window and reopen Luna.
         </p>
         <div className={styles.actions}>
           <button

@@ -14,7 +14,7 @@ import { canFrameLoad } from './navigation.js'
 import { closesAuxiliary, matchesShortcut } from './shortcut-input.js'
 import { emit } from './ipc/bus.js'
 import * as windowState from './window-state.js'
-import { needsRecovery } from './crash-recovery.js'
+import { canAutoRecover, needsRecovery } from './crash-recovery.js'
 
 const MIN_WIDTH = 720
 const MIN_HEIGHT = 480
@@ -33,6 +33,7 @@ let settingsCloseTimer: ReturnType<typeof setTimeout> | undefined
 let quitting = false
 const recoveryTargets = new WeakMap<BrowserWindow, string>()
 const recoveryWindows = new WeakSet<BrowserWindow>()
+const autoRecoveries = new WeakMap<BrowserWindow, number>()
 
 export function create(): BrowserWindow {
   if (main !== undefined && !main.isDestroyed()) {
@@ -307,6 +308,21 @@ function rendererGone(win: BrowserWindow, details: RenderProcessGoneDetails): vo
     return
   }
 
+  const target = recoveryTargets.get(win)
+  const now = Date.now()
+  if (target !== undefined && canAutoRecover(autoRecoveries.get(win), now)) {
+    autoRecoveries.set(win, now)
+    void navigate(win, target).catch(() => {
+      console.error('automatic renderer recovery failed')
+      if (!win.isDestroyed()) showRecovery(win)
+    })
+    return
+  }
+
+  showRecovery(win)
+}
+
+function showRecovery(win: BrowserWindow): void {
   recoveryWindows.add(win)
   void navigate(win, 'crash.html').catch(() => {
     console.error('failed to load crash recovery')

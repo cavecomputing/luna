@@ -24,6 +24,8 @@ describe('CrashApp', () => {
     bridge(recover)
     render(<CrashApp />)
 
+    expect(screen.queryByRole('img')).toBeNull()
+    expect(screen.getByRole('heading').textContent).toContain('couldn’t reopen')
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     await waitFor(() => {
       expect(recover).toHaveBeenCalledOnce()

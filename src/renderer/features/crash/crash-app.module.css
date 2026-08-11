@@ -21,15 +21,7 @@
   display: flex;
   align-items: center;
   flex-direction: column;
-  width: min(520px, 100%);
-}
-
-.mascot {
-  display: block;
-  width: min(320px, 70vw);
-  max-height: 310px;
-  margin-bottom: var(--s-2);
-  object-fit: contain;
+  width: min(480px, 100%);
 }
 
 .title {
@@ -101,11 +93,6 @@
 @media (max-height: 620px) {
   .screen {
     place-items: start center;
-  }
-
-  .mascot {
-    width: min(230px, 54vw);
-    max-height: 210px;
   }
 }
 
