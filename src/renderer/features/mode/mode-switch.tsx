@@ -1,11 +1,11 @@
 import type { Mode } from '../../../shared/types.js'
 import { Segmented, type Segment } from '../../ui/segmented.js'
 import { Bolt } from '../../ui/icons/bolt.js'
-import { Crescent } from '../../ui/icons/crescent.js'
+import { Star } from '../../ui/icons/star.js'
 
 const segments: Segment<Mode>[] = [
   { value: 'fast', label: 'Fast', icon: <Bolt size={14} /> },
-  { value: 'expert', label: 'Expert', icon: <Crescent size={14} /> },
+  { value: 'expert', label: 'Expert', icon: <Star size={14} /> },
 ]
 
 type Props = {

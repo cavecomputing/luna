@@ -2,14 +2,14 @@ import type { Mode } from '../../../../shared/types.js'
 import { Segmented, type Segment } from '../../../ui/segmented.js'
 import { Toggle } from '../../../ui/toggle.js'
 import { Bolt } from '../../../ui/icons/bolt.js'
-import { Crescent } from '../../../ui/icons/crescent.js'
+import { Star } from '../../../ui/icons/star.js'
 import { Panel, Row } from '../panel.js'
 import type { usePrefs } from '../../../lib/use-prefs.js'
 import styles from './chat.module.css'
 
 const modes: Segment<Mode>[] = [
   { value: 'fast', label: 'Fast', icon: <Bolt size={14} /> },
-  { value: 'expert', label: 'Expert', icon: <Crescent size={14} /> },
+  { value: 'expert', label: 'Expert', icon: <Star size={14} /> },
 ]
 
 type Props = {
