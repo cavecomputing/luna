@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Conversation } from '../../../shared/types.js'
-import { byRecency, filterChats, messageExcerpt } from './filter.js'
+import { byRecency, filterChats, groupChats, messageExcerpt } from './filter.js'
 
 const chat = (id: string, title: string, updatedAt: number): Conversation => ({
   id,
@@ -140,5 +140,20 @@ describe('byRecency', () => {
       item.id === 'b' || item.id === 'c' ? { ...item, pinned: true } : item,
     )
     expect(byRecency(pinned).map((c) => c.id)).toEqual(['c', 'b', 'a'])
+  })
+})
+
+describe('groupChats', () => {
+  it('separates pinned conversations from recent conversations without reordering them', () => {
+    const ordered = [
+      { ...chat('pinned', 'Pinned', 300), pinned: true },
+      chat('new', 'New', 200),
+      chat('old', 'Old', 100),
+    ]
+
+    expect(groupChats(ordered)).toEqual({
+      pinned: [ordered[0]],
+      recent: [ordered[1], ordered[2]],
+    })
   })
 })

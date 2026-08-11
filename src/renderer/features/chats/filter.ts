@@ -55,3 +55,13 @@ export function byRecency(chats: Conversation[]): Conversation[] {
     return pinOrder === 0 ? b.updatedAt - a.updatedAt : pinOrder
   })
 }
+
+export function groupChats(chats: Conversation[]): {
+  pinned: Conversation[]
+  recent: Conversation[]
+} {
+  return {
+    pinned: chats.filter((chat) => chat.pinned),
+    recent: chats.filter((chat) => !chat.pinned),
+  }
+}

@@ -5,7 +5,33 @@ import { IconButton } from '../../ui/icon-button.js'
 import { Gear } from '../../ui/icons/gear.js'
 import { Plus } from '../../ui/icons/plus.js'
 import { Search } from '../../ui/icons/search.js'
+import { groupChats } from './filter.js'
+import type { Conversation } from '../../../shared/types.js'
 import styles from './sidebar.module.css'
+
+type GroupProps = {
+  id: string
+  label: string
+  chats: Conversation[]
+  openId: string | undefined
+  onSelect: (id: string) => void
+}
+
+function ChatGroup({ id, label, chats, openId, onSelect }: GroupProps): React.JSX.Element {
+  return (
+    <section className={styles.group} aria-labelledby={id}>
+      <h2 className={styles.groupLabel} id={id}>{label}</h2>
+      {chats.map((chat) => (
+        <ChatItem
+          key={chat.id}
+          chat={chat}
+          active={chat.id === openId}
+          onSelect={onSelect}
+        />
+      ))}
+    </section>
+  )
+}
 
 type Props = {
   chats: Chats
@@ -24,6 +50,7 @@ export function Sidebar({
 }: Props): React.JSX.Element {
   const searchKeys = shortcutKeys('search', window.luna.platform)
   const searchLabel = searchKeys.join(window.luna.platform === 'darwin' ? '' : '+')
+  const groups = groupChats(chats.visible)
 
   return (
     <aside className={styles.sidebar} style={{ width }}>
@@ -40,14 +67,25 @@ export function Sidebar({
       </header>
 
       <nav className={styles.list} aria-label="Conversations">
-        {chats.visible.map((chat) => (
-          <ChatItem
-            key={chat.id}
-            chat={chat}
-            active={chat.id === chats.openId}
+        {groups.pinned.length > 0 && (
+          <ChatGroup
+            id="pinned-conversations"
+            label="Pinned"
+            chats={groups.pinned}
+            openId={chats.openId}
             onSelect={chats.setOpenId}
           />
-        ))}
+        )}
+
+        {groups.recent.length > 0 && (
+          <ChatGroup
+            id="recent-conversations"
+            label="Recent"
+            chats={groups.recent}
+            openId={chats.openId}
+            onSelect={chats.setOpenId}
+          />
+        )}
 
         {chats.visible.length === 0 && <p className={styles.empty}>No conversations yet</p>}
       </nav>
