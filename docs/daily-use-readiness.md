@@ -69,8 +69,12 @@ Items 1–3 are the daily-driver threshold.
 
 Use this prompt in a fresh chat:
 
-> Read `CLAUDE.md` and `docs/daily-use-readiness.md`. Implement item 1, database backup and
-> recovery, as a focused change. Inspect the existing SQLite startup and migration flow before
-> planning. Preserve damaged data, add deterministic recovery tests, visually verify any recovery
-> UI, run typecheck/lint/test, and commit the completed work separately. Do not begin the deferred
-> command-palette work.
+> Read `CLAUDE.md` and `docs/daily-use-readiness.md`. Item 1, database backup and recovery, is
+> complete. Plan and implement item 2, export and delete-all, as a focused change.
+> Inspect the Privacy settings panel, SQLite ownership, attachment storage, secure provider-key
+> storage, file-dialog IPC, and existing confirmation patterns before planning. Define and document
+> a portable export format that excludes credentials, write only to the destination the user chose,
+> and make delete-all an explicit confirmed action that removes conversations, attachments,
+> preferences, provider metadata, and encrypted provider credentials. Add deterministic main/IPC/UI
+> tests, visually verify the destructive confirmation flow, run typecheck/lint/test, and commit the
+> completed work separately. Do not begin packaged-app smoke testing or deferred command-palette work.
