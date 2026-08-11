@@ -21,4 +21,12 @@ describe('ShortcutsApp', () => {
     expect(screen.getByText('Open Settings').nextElementSibling?.textContent).toBe('⌘,')
     expect(screen.getByText('Keyboard shortcuts').nextElementSibling?.textContent).toBe('⌘?')
   })
+
+  it('keeps a fixed title-bar spacer outside the scrolling content', () => {
+    const { container } = render(<ShortcutsApp />)
+    const main = container.querySelector('main')
+
+    expect(main?.firstElementChild?.getAttribute('aria-hidden')).toBe('true')
+    expect(main?.lastElementChild?.querySelector('h1')?.textContent).toBe('Keyboard Shortcuts')
+  })
 })

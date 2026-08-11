@@ -1,24 +1,26 @@
 .shell {
-  position: relative;
+  display: flex;
+  flex-direction: column;
   height: 100%;
-  overflow-y: auto;
-  padding: var(--titlebar) var(--s-6) var(--s-6);
+  overflow: hidden;
   background: var(--bg);
 }
 
-.shell::before {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
+.chrome {
   height: var(--titlebar);
-  content: '';
+  flex: none;
   -webkit-app-region: drag;
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--s-6) var(--s-6);
 }
 
 .head {
   margin-bottom: var(--s-5);
-  -webkit-app-region: drag;
 }
 
 .head h1 {
