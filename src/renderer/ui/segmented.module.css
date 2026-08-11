@@ -9,6 +9,7 @@
 }
 
 .seg {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: var(--s-2);
@@ -23,6 +24,37 @@
     background var(--fast) var(--ease),
     color var(--fast) var(--ease),
     transform var(--fast) var(--ease);
+}
+
+.seg[data-tooltip]::after {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + var(--s-2));
+  right: 0;
+  width: max-content;
+  max-width: 280px;
+  padding: 5px var(--s-2);
+  border-radius: var(--r-sm);
+  background: var(--text);
+  box-shadow: var(--shadow-pop);
+  color: var(--surface);
+  content: attr(data-tooltip);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  line-height: 1.4;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition:
+    opacity var(--fast) var(--ease),
+    transform var(--fast) var(--ease);
+  white-space: nowrap;
+}
+
+.seg[data-tooltip]:hover::after,
+.seg[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .seg:hover:not(.on) {

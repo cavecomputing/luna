@@ -5,6 +5,7 @@ export type Segment<T extends string> = {
   value: T
   label: string
   icon: React.ReactNode
+  tooltip?: string
 }
 
 type Props<T extends string> = {
@@ -30,6 +31,8 @@ export function Segmented<T extends string>({
           type="button"
           role="radio"
           aria-checked={seg.value === value}
+          aria-description={seg.tooltip}
+          data-tooltip={seg.tooltip}
           className={cx(styles.seg, seg.value === value && styles.on)}
           onClick={() => {
             onChange(seg.value)

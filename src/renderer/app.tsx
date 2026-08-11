@@ -3,6 +3,7 @@ import { Sidebar } from './features/chats/sidebar.js'
 import { type Chats, useChats } from './features/chats/use-chats.js'
 import { Composer } from './features/composer/composer.js'
 import { ModeSwitch } from './features/mode/mode-switch.js'
+import { useModels } from './features/mode/use-models.js'
 import { Thread } from './features/thread/thread.js'
 import { IconButton } from './ui/icon-button.js'
 import { Collapse } from './ui/icons/collapse.js'
@@ -52,6 +53,7 @@ export function ConversationSurface({ chats }: ConversationSurfaceProps): React.
 export function App(): React.JSX.Element {
   const { prefs, set: setPref } = usePrefs()
   const chats = useChats(prefs.defaultMode)
+  const models = useModels()
   const [open, setOpen] = useState(true)
   const [resizeWidth, setResizeWidth] = useState<number>()
   const [isResizing, setIsResizing] = useState(false)
@@ -223,7 +225,7 @@ export function App(): React.JSX.Element {
           {!usesTrafficLights && <div className={styles.noDrag}>{sidebarButton}</div>}
 
           <div className={styles.noDrag}>
-            <ModeSwitch value={chats.currentMode} onChange={chats.setMode} />
+            <ModeSwitch value={chats.currentMode} models={models} onChange={chats.setMode} />
           </div>
         </header>
 

@@ -1,0 +1,26 @@
+// @vitest-environment jsdom
+import { render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { ModeSwitch } from './mode-switch.js'
+
+describe('ModeSwitch', () => {
+  it('identifies the configured model in each mode tooltip', () => {
+    render(
+      <ModeSwitch
+        value="fast"
+        models={{
+          fast: { providerId: 'provider-1', model: 'fast-model' },
+          expert: { providerId: 'provider-1', model: 'expert-model' },
+        }}
+        onChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('radio', { name: 'Fast' }).getAttribute('data-tooltip')).toBe(
+      'Fast model: fast-model',
+    )
+    expect(screen.getByRole('radio', { name: 'Expert' }).getAttribute('data-tooltip')).toBe(
+      'Expert model: expert-model',
+    )
+  })
+})
