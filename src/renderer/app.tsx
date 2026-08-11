@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import { Sidebar } from './features/chats/sidebar.js'
 import { type Chats, useChats } from './features/chats/use-chats.js'
 import { Composer } from './features/composer/composer.js'
@@ -182,6 +182,9 @@ export function App(): React.JSX.Element {
       className={styles.shell}
       data-platform={window.luna.platform}
       data-resizing={isResizing ? 'true' : undefined}
+      style={{
+        '--dialog-pane-inset': open ? `${String(sidebarWidth)}px` : '0px',
+      } as CSSProperties}
     >
       <div
         className={cx(styles.side, !open && styles.sideClosed, isResizing && styles.sideResizing)}
