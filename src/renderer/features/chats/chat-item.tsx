@@ -1,6 +1,4 @@
 import type { Conversation } from '../../../shared/types.js'
-import { ChatGlyph } from '../../ui/chat-glyph.js'
-import { relative } from '../../lib/time.js'
 import styles from './chat-item.module.css'
 import { cx } from '../../lib/cx.js'
 import { IconButton } from '../../ui/icon-button.js'
@@ -10,7 +8,6 @@ import { Trash } from '../../ui/icons/trash.js'
 type Props = {
   chat: Conversation
   active: boolean
-  now: number
   onSelect: (id: string) => void
   onTogglePinned: (id: string) => void
   onDelete: (id: string) => void
@@ -19,7 +16,6 @@ type Props = {
 export function ChatItem({
   chat,
   active,
-  now,
   onSelect,
   onTogglePinned,
   onDelete,
@@ -34,33 +30,27 @@ export function ChatItem({
           onSelect(chat.id)
         }}
       >
-        <span className={styles.glyph}>
-          <ChatGlyph icon={chat.icon} />
-        </span>
-        <span className={styles.text}>
-          <span className={styles.title}>{chat.title}</span>
-          <span className={styles.when}>{relative(chat.updatedAt, now)}</span>
-        </span>
+        <span className={styles.title}>{chat.title}</span>
       </button>
 
       <span className={styles.actions}>
         <IconButton
           label={chat.pinned ? `Unpin ${chat.title}` : `Pin ${chat.title}`}
-          size="sm"
+          size="xs"
           onClick={() => {
             onTogglePinned(chat.id)
           }}
         >
-          <Pin size={14} />
+          <Pin size={12} />
         </IconButton>
         <IconButton
           label={`Delete ${chat.title}`}
-          size="sm"
+          size="xs"
           onClick={() => {
             onDelete(chat.id)
           }}
         >
-          <Trash size={14} />
+          <Trash size={12} />
         </IconButton>
       </span>
     </div>

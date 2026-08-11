@@ -7,7 +7,7 @@ type Props = {
   children: React.ReactNode
   onClick?: () => void
   variant?: 'ghost' | 'soft' | 'accent'
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'xs' | 'sm' | 'md' | 'lg'
   disabled?: boolean
 }
 

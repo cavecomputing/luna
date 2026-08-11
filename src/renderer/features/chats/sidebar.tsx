@@ -11,8 +11,6 @@ type Props = {
   chats: Chats
   collapse: React.ReactNode | null
   width: number
-  /** Frozen per render of the shell so every row formats against one clock. */
-  now: number
   onSearchOpen: () => void
   onSettings: () => void
 }
@@ -21,7 +19,6 @@ export function Sidebar({
   chats,
   collapse,
   width,
-  now,
   onSearchOpen,
   onSettings,
 }: Props): React.JSX.Element {
@@ -47,7 +44,6 @@ export function Sidebar({
           <ChatItem
             key={chat.id}
             chat={chat}
-            now={now}
             active={chat.id === chats.openId}
             onSelect={chats.setOpenId}
             onTogglePinned={chats.togglePinned}

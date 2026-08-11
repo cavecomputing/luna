@@ -22,6 +22,12 @@
 }
 
 /* Sizes */
+.xs {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-sm);
+}
+
 .sm {
   width: 24px;
   height: 24px;

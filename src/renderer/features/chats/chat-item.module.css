@@ -21,54 +21,27 @@
 .select {
   display: flex;
   align-items: center;
-  gap: var(--s-2);
   width: 100%;
   min-width: 0;
-  padding: 5px var(--s-2);
+  padding: 6px var(--s-2);
   border-radius: inherit;
   text-align: left;
 }
 
-.glyph {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--r-sm);
-  background: var(--surface-sunken);
-  color: var(--accent);
-}
-
-.active .glyph {
-  background: var(--surface);
-}
-
-.text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  gap: 1px;
-}
-
-.item:hover .text,
-.item:focus-within .text {
-  padding-right: 48px;
+.item:hover .title,
+.item:focus-within .title {
+  padding-right: 40px;
 }
 
 .title {
+  flex: 1;
+  min-width: 0;
   font-size: var(--t-md);
   font-weight: 500;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.when {
-  font-size: var(--t-sm);
-  color: var(--text-faint);
 }
 
 .actions {

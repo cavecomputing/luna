@@ -174,7 +174,6 @@ export function App(): React.JSX.Element {
           chats={chats}
           collapse={usesTrafficLights ? sidebarButton : null}
           width={sidebarWidth}
-          now={now}
           onSearchOpen={() => {
             setSearchOpen(true)
           }}
