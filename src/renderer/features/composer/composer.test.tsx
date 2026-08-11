@@ -4,7 +4,25 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Composer } from './composer.js'
 
 function renderComposer(): HTMLTextAreaElement {
-  render(<Composer onSend={vi.fn()} onCancel={vi.fn()} streaming={false} />)
+  Object.defineProperty(window, 'luna', {
+    configurable: true,
+    value: {
+      attachments: {
+        list: () => Promise.resolve({ ok: true, value: [] }),
+        add: () => Promise.resolve({ ok: true, value: { accepted: [], rejected: [] } }),
+        remove: () => Promise.resolve({ ok: true, value: undefined }),
+      },
+      onAttachments: () => () => undefined,
+    },
+  })
+  render(
+    <Composer
+      onSend={vi.fn()}
+      onEnsureConversation={vi.fn(() => Promise.resolve({ id: 'chat-1' }))}
+      onCancel={vi.fn()}
+      streaming={false}
+    />,
+  )
   return screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Message Luna' })
 }
 

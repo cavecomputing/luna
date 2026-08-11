@@ -12,6 +12,10 @@ import { migrate } from './migrations.js'
 
 let conn: DatabaseSync | undefined
 
+export function filePath(): string {
+  return join(app.getPath('userData'), 'luna.db')
+}
+
 /**
  * Opens a database, sets the pragmas we depend on, and brings the schema up to
  * date. Takes a path rather than resolving one, so tests can pass ':memory:'.
@@ -28,7 +32,7 @@ export function open(file: string): DatabaseSync {
 
 /** The process-wide connection, under userData. Opened on first use. */
 export function handle(): DatabaseSync {
-  conn ??= open(join(app.getPath('userData'), 'luna.db'))
+  conn ??= open(filePath())
   return conn
 }
 

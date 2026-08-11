@@ -6,13 +6,15 @@ import { Avatar } from '../../ui/avatar.js'
 import styles from './message.module.css'
 import { cx } from '../../lib/cx.js'
 import { useSmoothText } from './use-smooth-text.js'
+import { MessageAttachments } from '../attachments/message-attachments.js'
 
 type Props = {
   message: Msg
   onGrow: () => void
+  conversationId: string
 }
 
-export function Message({ message, onGrow }: Props): React.JSX.Element {
+export function Message({ message, onGrow, conversationId }: Props): React.JSX.Element {
   const mine = message.role === 'user'
   const [incoming] = useState(() => !mine && message.status === 'streaming')
   const fallback =
@@ -58,6 +60,12 @@ export function Message({ message, onGrow }: Props): React.JSX.Element {
               <i />
             </span>
           )}
+          {message.attachments.length > 0 && (
+            <MessageAttachments
+              attachments={message.attachments}
+              conversationId={conversationId}
+            />
+          )}
           {!mine && visibleReasoning !== '' && (
             <details
               className={styles.reasoning}
@@ -73,7 +81,7 @@ export function Message({ message, onGrow }: Props): React.JSX.Element {
               </div>
             </details>
           )}
-          <Markdown text={visibleText} />
+          {visibleText !== '' && <Markdown text={visibleText} />}
         </div>
         {!mine && message.status === 'error' && message.text !== '' && (
           <p className={styles.interrupted}>Response interrupted</p>

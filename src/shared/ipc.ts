@@ -7,6 +7,7 @@
 
 import type { Prefs } from './prefs.js'
 import type {
+  AttachmentMeta,
   Conversation,
   Message,
   ModelSlots,
@@ -15,6 +16,27 @@ import type {
   ProviderDraft,
   ProviderModel,
 } from './types.js'
+
+export type AttachmentInput = {
+  name: string
+  mediaType: string
+  data: Uint8Array
+}
+
+export type AttachmentRejection = {
+  name: string
+  code: string
+}
+
+export type AttachmentImport = {
+  accepted: AttachmentMeta[]
+  rejected: AttachmentRejection[]
+}
+
+export type AttachmentBytes = {
+  mediaType: string
+  data: Uint8Array
+}
 
 export type ChatStart = {
   conversation: Conversation
@@ -68,7 +90,20 @@ export type Invocations = {
   'chats:set-draft': { req: { id: string; draft: string }; res: undefined }
   'chats:set-pinned': { req: { id: string; pinned: boolean }; res: Conversation }
   'chats:delete': { req: { id: string }; res: undefined }
-  'chat:send': { req: { conversationId: string; text: string }; res: ChatStart }
+  'attachments:add': {
+    req: { conversationId: string; files: AttachmentInput[] }
+    res: AttachmentImport
+  }
+  'attachments:list': { req: { conversationId: string }; res: AttachmentMeta[] }
+  'attachments:remove': { req: { conversationId: string; id: string }; res: undefined }
+  'attachments:read': {
+    req: { conversationId: string; id: string }
+    res: AttachmentBytes
+  }
+  'chat:send': {
+    req: { conversationId: string; text: string; attachmentIds: string[] }
+    res: ChatStart
+  }
   'chat:cancel': { req: { messageId: string }; res: undefined }
   'messages:menu': { req: { id: string }; res: undefined }
   'settings:open': { req: undefined; res: undefined }
@@ -86,6 +121,7 @@ export type Events = {
   /** Fast or Expert was assigned to a different provider/model pair. */
   'models:changed': ModelSlots
   'chats:changed': Conversation[]
+  'attachments:changed': { conversationId: string; attachments: AttachmentMeta[] }
   'chat:delta': ChatDelta
   'chat:done': ChatFinal
   'chat:error': ChatFailure

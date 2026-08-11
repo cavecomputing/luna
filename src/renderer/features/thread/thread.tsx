@@ -42,7 +42,12 @@ export function Thread({ chat }: Props): React.JSX.Element {
           {count === 0 && <Greeting />}
 
           {chat?.messages.map((message) => (
-            <Message key={message.id} message={message} onGrow={scrollToEnd} />
+            <Message
+              key={message.id}
+              message={message}
+              conversationId={chat.id}
+              onGrow={scrollToEnd}
+            />
           ))}
 
           <div ref={end} />

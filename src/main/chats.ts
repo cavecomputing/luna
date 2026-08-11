@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type {
   ApiKind,
+  AttachmentMeta,
   ChatIcon,
   Conversation,
   Message,
@@ -9,8 +10,11 @@ import type {
   Role,
 } from '../shared/types.js'
 import * as db from './db.js'
+import * as attachments from './attachments.js'
+import type { StoredAttachment } from './attachments.js'
 
-export type StoredMessage = Message & {
+export type StoredMessage = Omit<Message, 'attachments'> & {
+  attachments: StoredAttachment[]
   providerId?: string
   providerApi?: ApiKind
   providerItems?: unknown[]
@@ -106,6 +110,7 @@ function messageRow(row: unknown): (StoredMessage & { conversationId: string }) 
     ...(cell.reasoning === '' ? {} : { reasoning: cell.reasoning }),
     status: parsedStatus,
     at: cell.created_at,
+    attachments: [],
     ...(typeof cell.provider_id !== 'string' ? {} : { providerId: cell.provider_id }),
     ...(parsedApi === undefined ? {} : { providerApi: parsedApi }),
     ...(parsedItems === undefined ? {} : { providerItems: parsedItems }),
@@ -143,7 +148,9 @@ function conversationRow(row: unknown, messages: Message[]): Conversation | unde
   }
 }
 
-function visibleMessage(message: StoredMessage): Message {
+function visibleMessage(
+  message: Omit<Message, 'attachments'> & { attachments: AttachmentMeta[] },
+): Message {
   return {
     id: message.id,
     role: message.role,
@@ -151,12 +158,14 @@ function visibleMessage(message: StoredMessage): Message {
     ...(message.reasoning === undefined ? {} : { reasoning: message.reasoning }),
     status: message.status,
     at: message.at,
+    attachments: message.attachments,
     ...(message.streamSeq === undefined ? {} : { streamSeq: message.streamSeq }),
   }
 }
 
 export function list(conn: DatabaseSync): Conversation[] {
   const grouped = new Map<string, Message[]>()
+  const attachmentMap = attachments.messageMap(conn)
   for (const row of conn
     .prepare(
       `SELECT id, conversation_id, role, text, reasoning, status, created_at,
@@ -167,7 +176,7 @@ export function list(conn: DatabaseSync): Conversation[] {
     const parsed = messageRow(row)
     if (parsed === undefined) continue
     const messages = grouped.get(parsed.conversationId) ?? []
-    messages.push(visibleMessage(parsed))
+    messages.push(visibleMessage({ ...parsed, attachments: attachmentMap.get(parsed.id) ?? [] }))
     grouped.set(parsed.conversationId, messages)
   }
 
@@ -189,7 +198,11 @@ export function find(conn: DatabaseSync, id: string): Conversation | undefined {
   return list(conn).find((conversation) => conversation.id === id)
 }
 
-export function history(conn: DatabaseSync, conversationId: string): StoredMessage[] {
+export function history(
+  conn: DatabaseSync,
+  conversationId: string,
+  attachmentMap = attachments.historyMap(conn, conversationId),
+): StoredMessage[] {
   return conn
     .prepare(
       `SELECT id, conversation_id, role, text, reasoning, status, created_at,
@@ -201,7 +214,8 @@ export function history(conn: DatabaseSync, conversationId: string): StoredMessa
       const parsed = messageRow(row)
       if (parsed === undefined) return []
       return [{
-        ...visibleMessage(parsed),
+        ...parsed,
+        attachments: attachmentMap.get(parsed.id) ?? [],
         ...(parsed.providerApi === undefined ? {} : { providerApi: parsed.providerApi }),
         ...(parsed.providerId === undefined ? {} : { providerId: parsed.providerId }),
         ...(parsed.providerItems === undefined ? {} : { providerItems: parsed.providerItems }),
@@ -322,6 +336,11 @@ function updateConversation(
   return result.changes === 0 ? undefined : find(conn, id)
 }
 
+function attachmentTitle(input: string): string {
+  const stem = input.replace(/\.[^.]+$/, '').trim()
+  return (stem === '' ? 'Attachment' : stem).slice(0, 80)
+}
+
 export function setMode(
   conn: DatabaseSync,
   id: string,
@@ -366,6 +385,7 @@ export function beginTurn(
   userMessageId: string,
   assistantMessageId: string,
   now: number,
+  attachmentIds: string[] = [],
 ): Turn | undefined {
   conn.exec('BEGIN')
   try {
@@ -388,6 +408,22 @@ export function beginTurn(
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
     insert.run(userMessageId, conversationId, 'user', text, 'complete', now, next)
+    if (!attachments.bindDrafts(conn, conversationId, userMessageId, attachmentIds)) {
+      conn.exec('ROLLBACK')
+      return undefined
+    }
+    if (text === '' && attachmentIds.length > 0) {
+      const firstId = attachmentIds[0]
+      if (firstId === undefined) throw new Error('attachment id disappeared')
+      const first = object(
+        conn.prepare('SELECT name FROM attachments WHERE id = ?').get(firstId),
+      )
+      if (typeof first?.name === 'string') {
+        conn
+          .prepare("UPDATE conversations SET title = ? WHERE id = ? AND title = 'New chat'")
+          .run(attachmentTitle(first.name), conversationId)
+      }
+    }
     insert.run(assistantMessageId, conversationId, 'assistant', '', 'streaming', now, next + 1)
     conn
       .prepare("UPDATE conversations SET updated_at = ?, draft = '' WHERE id = ?")
@@ -458,7 +494,7 @@ export function finishMessage(
       .get(id),
   )
   if (parsed === undefined) return undefined
-  return visibleMessage(parsed)
+  return visibleMessage({ ...parsed, attachments: [] })
 }
 
 /** Marks requests abandoned by a prior process as interrupted on next launch. */
@@ -478,6 +514,13 @@ export function get(id: string): Conversation | undefined {
 
 export function transcript(id: string): StoredMessage[] {
   return history(db.handle(), id)
+}
+
+export function transcriptWith(
+  id: string,
+  attachmentMap: Map<string, StoredAttachment[]>,
+): StoredMessage[] {
+  return history(db.handle(), id, attachmentMap)
 }
 
 export function text(id: string): string | undefined {

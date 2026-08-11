@@ -37,6 +37,16 @@ export type Role = 'user' | 'assistant'
 
 export type MessageStatus = 'complete' | 'streaming' | 'error' | 'cancelled'
 
+export type AttachmentKind = 'image' | 'text' | 'pdf'
+
+export type AttachmentMeta = {
+  id: string
+  name: string
+  kind: AttachmentKind
+  mediaType: string
+  size: number
+}
+
 export type Message = {
   id: string
   role: Role
@@ -48,6 +58,7 @@ export type Message = {
   streamSeq?: number
   /** Epoch milliseconds. Formatting is the renderer's job. */
   at: number
+  attachments: AttachmentMeta[]
 }
 
 /**

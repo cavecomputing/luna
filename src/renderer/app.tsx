@@ -123,6 +123,8 @@ export function App(): React.JSX.Element {
         <Composer
           key={chats.openId ?? 'new-chat'}
           onSend={chats.send}
+          conversationId={chats.openId}
+          onEnsureConversation={chats.ensure}
           onCancel={chats.cancel}
           streaming={chats.streamingMessage !== undefined}
           initialDraft={chats.open?.draft}

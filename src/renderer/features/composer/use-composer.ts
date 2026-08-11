@@ -9,10 +9,12 @@ export function useComposer(
   onSend: (text: string) => boolean | Promise<boolean>,
   initialDraft = '',
   onDraftChange: (draft: string) => void = () => undefined,
+  hasAttachments = false,
+  blocked = false,
 ) {
   const [draft, setDraftState] = useState(initialDraft)
   const [submitting, setSubmitting] = useState(false)
-  const canSend = draft.trim() !== ''
+  const canSend = (draft.trim() !== '' || hasAttachments) && !blocked
 
   async function submit(): Promise<void> {
     if (!canSend || submitting) return

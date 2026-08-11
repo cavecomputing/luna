@@ -3,6 +3,7 @@ import type { Channel, EventData, EventName, Req, Res } from '../shared/ipc.js'
 import type { Prefs } from '../shared/prefs.js'
 import type { Result } from '../shared/result.js'
 import type { Mode, ProviderDraft } from '../shared/types.js'
+import type { AttachmentInput } from '../shared/ipc.js'
 
 function invoke<C extends Channel>(channel: C, req: Req<C>): Promise<Result<Res<C>>> {
   return ipcRenderer.invoke(channel, req) as Promise<Result<Res<C>>>
@@ -61,9 +62,18 @@ const api = {
       invoke('chats:set-pinned', { id, pinned }),
     delete: (id: string) => invoke('chats:delete', { id }),
   },
+  attachments: {
+    add: (conversationId: string, files: AttachmentInput[]) =>
+      invoke('attachments:add', { conversationId, files }),
+    list: (conversationId: string) => invoke('attachments:list', { conversationId }),
+    remove: (conversationId: string, id: string) =>
+      invoke('attachments:remove', { conversationId, id }),
+    read: (conversationId: string, id: string) =>
+      invoke('attachments:read', { conversationId, id }),
+  },
   chat: {
-    send: (conversationId: string, text: string) =>
-      invoke('chat:send', { conversationId, text }),
+    send: (conversationId: string, text: string, attachmentIds: string[]) =>
+      invoke('chat:send', { conversationId, text, attachmentIds }),
     cancel: (messageId: string) => invoke('chat:cancel', { messageId }),
   },
   messages: {
@@ -82,6 +92,8 @@ const api = {
     subscribe('models:changed', fn),
   onChats: (fn: (data: EventData<'chats:changed'>) => void) =>
     subscribe('chats:changed', fn),
+  onAttachments: (fn: (data: EventData<'attachments:changed'>) => void) =>
+    subscribe('attachments:changed', fn),
   onChatDelta: (fn: (data: EventData<'chat:delta'>) => void) =>
     subscribe('chat:delta', fn),
   onChatDone: (fn: (data: EventData<'chat:done'>) => void) =>

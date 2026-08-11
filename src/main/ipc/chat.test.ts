@@ -44,6 +44,7 @@ function assistant(status: Message['status'], text: string, reasoning = ''): Mes
     ...(reasoning === '' ? {} : { reasoning }),
     status,
     at: 10,
+    attachments: [],
   }
 }
 
@@ -62,8 +63,8 @@ function makeDeps(): TestDeps {
       conversation: {
         ...conversation,
         messages: [
-          { id: userId, role: 'user' as const, text, status: 'complete' as const, at: 10 },
-          { id: assistantId, role: 'assistant' as const, text: '', status: 'streaming' as const, at: 10 },
+          { id: userId, role: 'user' as const, text, status: 'complete' as const, at: 10, attachments: [] },
+          { id: assistantId, role: 'assistant' as const, text: '', status: 'streaming' as const, at: 10, attachments: [] },
         ],
       },
       userMessageId: userId,
@@ -75,16 +76,16 @@ function makeDeps(): TestDeps {
         ? {
             ...conversation,
             messages: [
-              { id: 'user-1', role: 'user' as const, text: 'Hello', status: 'complete' as const, at: 10 },
-              { id, role: 'assistant' as const, text: '', status: 'streaming' as const, at: 10 },
+              { id: 'user-1', role: 'user' as const, text: 'Hello', status: 'complete' as const, at: 10, attachments: [] },
+              { id, role: 'assistant' as const, text: '', status: 'streaming' as const, at: 10, attachments: [] },
             ],
           }
         : undefined,
     ),
-    history: vi.fn(() => [
-      { id: 'user-1', role: 'user' as const, text: 'Hello', status: 'complete' as const, at: 10 },
-      { id: 'assistant-1', role: 'assistant' as const, text: '', status: 'streaming' as const, at: 10 },
-    ]),
+    history: vi.fn(() => Promise.resolve([
+      { id: 'user-1', role: 'user' as const, text: 'Hello', status: 'complete' as const, at: 10, attachments: [] },
+      { id: 'assistant-1', role: 'assistant' as const, text: '', status: 'streaming' as const, at: 10, attachments: [] },
+    ])),
     finish: vi.fn(
       (
         _id: string,
@@ -115,7 +116,7 @@ describe('ChatCoordinator', () => {
   it('starts a persisted turn and publishes streaming completion', async () => {
     const d = makeDeps()
     const chat = new ChatCoordinator(d)
-    expect(await chat.send({ conversationId: 'chat-1', text: 'Hello' })).toMatchObject({
+    expect(await chat.send({ conversationId: 'chat-1', text: 'Hello', attachmentIds: [] })).toMatchObject({
       ok: true,
       value: { userMessageId: 'user-1', assistantMessageId: 'assistant-1' },
     })
@@ -141,6 +142,22 @@ describe('ChatCoordinator', () => {
     )
   })
 
+  it('accepts an attachment-only turn and passes selected draft ids atomically', async () => {
+    const d = makeDeps()
+    const chat = new ChatCoordinator(d)
+    expect(
+      await chat.send({ conversationId: 'chat-1', text: '', attachmentIds: ['file-1'] }),
+    ).toMatchObject({ ok: true })
+    expect(d.begin).toHaveBeenCalledWith(
+      'chat-1',
+      '',
+      'user-1',
+      'assistant-1',
+      10,
+      ['file-1'],
+    )
+  })
+
   it('separates thinking tags even when they are split across streamed deltas', async () => {
     const d = makeDeps()
     d.stream = vi.fn(
@@ -154,7 +171,7 @@ describe('ChatCoordinator', () => {
         })
       },
     )
-    await new ChatCoordinator(d).send({ conversationId: 'chat-1', text: 'Question' })
+    await new ChatCoordinator(d).send({ conversationId: 'chat-1', text: 'Question', attachmentIds: [] })
     await vi.waitFor(() => {
       expect(d.notifyDone).toHaveBeenCalledWith(
         'chat-1',
@@ -191,7 +208,7 @@ describe('ChatCoordinator', () => {
         })
       },
     )
-    await new ChatCoordinator(d).send({ conversationId: 'chat-1', text: 'Question' })
+    await new ChatCoordinator(d).send({ conversationId: 'chat-1', text: 'Question', attachmentIds: [] })
     await vi.waitFor(() => {
       expect(d.notifyDone).toHaveBeenCalledWith(
         'chat-1',
@@ -207,7 +224,7 @@ describe('ChatCoordinator', () => {
       return Promise.resolve({ ok: false as const, code: 'chat/provider', message: 'failed' })
     })
     const chat = new ChatCoordinator(d)
-    await chat.send({ conversationId: 'chat-1', text: 'Hello' })
+    await chat.send({ conversationId: 'chat-1', text: 'Hello', attachmentIds: [] })
     await vi.waitFor(() => {
       expect(d.notifyError).toHaveBeenCalledWith(
         'chat-1',
@@ -228,7 +245,7 @@ describe('ChatCoordinator', () => {
       }),
     )
     const chat = new ChatCoordinator(d)
-    await chat.send({ conversationId: 'chat-1', text: 'Hello' })
+    await chat.send({ conversationId: 'chat-1', text: 'Hello', attachmentIds: [] })
     expect(chat.cancel({ messageId: 'assistant-1' })).toEqual({ ok: true, value: undefined })
     await vi.waitFor(() => {
       expect(d.notifyDone).toHaveBeenCalledWith(
@@ -244,8 +261,8 @@ describe('ChatCoordinator', () => {
       () => new Promise<Result<ChatCompletion>>((resolve) => { void resolve }),
     )
     const chat = new ChatCoordinator(d)
-    await chat.send({ conversationId: 'chat-1', text: 'First' })
-    expect(await chat.send({ conversationId: 'chat-1', text: 'Second' })).toMatchObject({
+    await chat.send({ conversationId: 'chat-1', text: 'First', attachmentIds: [] })
+    expect(await chat.send({ conversationId: 'chat-1', text: 'Second', attachmentIds: [] })).toMatchObject({
       ok: false,
       code: 'chat/busy',
     })
@@ -283,9 +300,10 @@ describe('ChatCoordinator', () => {
   })
 
   it.each([
-    [{ conversationId: '../bad', text: 'Hello' }, 'chat/invalid'],
-    [{ conversationId: 'missing', text: 'Hello' }, 'chat/missing'],
-    [{ conversationId: 'chat-1', text: '   ' }, 'chat/invalid'],
+    [{ conversationId: '../bad', text: 'Hello', attachmentIds: [] }, 'chat/invalid'],
+    [{ conversationId: 'missing', text: 'Hello', attachmentIds: [] }, 'chat/missing'],
+    [{ conversationId: 'chat-1', text: '   ', attachmentIds: [] }, 'chat/invalid'],
+    [{ conversationId: 'chat-1', text: '', attachmentIds: ['../bad'] }, 'chat/invalid'],
   ])('returns a stable error for invalid input', async (input, code) => {
     const chat = new ChatCoordinator(makeDeps())
     expect(await chat.send(input)).toMatchObject({ ok: false, code })
@@ -298,7 +316,7 @@ describe('ChatCoordinator', () => {
       expert: { providerId: null, model: '' },
     }))
     expect(
-      await new ChatCoordinator(d).send({ conversationId: 'chat-1', text: 'Hello' }),
+      await new ChatCoordinator(d).send({ conversationId: 'chat-1', text: 'Hello', attachmentIds: [] }),
     ).toMatchObject({ ok: false, code: 'chat/no-model' })
     expect(d.begin).not.toHaveBeenCalled()
   })
@@ -317,7 +335,7 @@ describe('ChatCoordinator', () => {
         return Promise.resolve({ ok: true as const, value: { text: 'Helpful Greeting', reasoning: '' } })
       },
     )
-    await new ChatCoordinator(d).send({ conversationId: 'chat-1', text: 'Hello' })
+    await new ChatCoordinator(d).send({ conversationId: 'chat-1', text: 'Hello', attachmentIds: [] })
     await vi.waitFor(() => {
       expect(d.setTitle).toHaveBeenCalledWith('chat-1', 'Helpful Greeting')
     })

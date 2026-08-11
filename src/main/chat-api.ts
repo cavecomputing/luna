@@ -24,6 +24,48 @@ export type ChatChunk = {
   reasoning: string
 }
 
+function dataUrl(mediaType: string, data: Uint8Array): string {
+  return `data:${mediaType};base64,${Buffer.from(data).toString('base64')}`
+}
+
+function chatContent(message: StoredMessage): string | Record<string, unknown>[] {
+  if (message.attachments.length === 0) return message.text
+  const content: Record<string, unknown>[] = []
+  if (message.text !== '') content.push({ type: 'text', text: message.text })
+  for (const attachment of message.attachments) {
+    const url = dataUrl(attachment.mediaType, attachment.data)
+    if (attachment.kind === 'image') {
+      content.push({ type: 'image_url', image_url: { url, detail: 'auto' } })
+    } else {
+      content.push({
+        type: 'file',
+        file: { filename: attachment.name, file_data: url },
+      })
+    }
+  }
+  return content
+}
+
+function responseContent(message: StoredMessage): string | Record<string, unknown>[] {
+  if (message.attachments.length === 0) return message.text
+  const content: Record<string, unknown>[] = []
+  if (message.text !== '') content.push({ type: 'input_text', text: message.text })
+  for (const attachment of message.attachments) {
+    const url = dataUrl(attachment.mediaType, attachment.data)
+    if (attachment.kind === 'image') {
+      content.push({ type: 'input_image', image_url: url, detail: 'auto' })
+    } else {
+      content.push({
+        type: 'input_file',
+        filename: attachment.name,
+        file_data: url,
+        ...(attachment.kind === 'pdf' ? { detail: 'auto' } : {}),
+      })
+    }
+  }
+  return content
+}
+
 function object(input: unknown): Record<string, unknown> | undefined {
   return typeof input === 'object' && input !== null ? { ...input } : undefined
 }
@@ -51,7 +93,10 @@ export function requestBody(request: ChatRequest): Record<string, unknown> {
     }
     for (const message of request.history) {
       if (message.status !== 'complete') continue
-      messages.push({ role: message.role, content: message.text })
+      messages.push({
+        role: message.role,
+        content: message.role === 'user' ? chatContent(message) : message.text,
+      })
     }
     return { model: request.model, messages, stream: true, store: false }
   }
@@ -67,7 +112,10 @@ export function requestBody(request: ChatRequest): Record<string, unknown> {
     ) {
       input.push(...message.providerItems)
     } else {
-      input.push({ role: message.role, content: message.text })
+      input.push({
+        role: message.role,
+        content: message.role === 'user' ? responseContent(message) : message.text,
+      })
     }
   }
   return {
@@ -134,12 +182,18 @@ function outputReasoning(items: unknown[]): string {
   return reasoning
 }
 
-function statusError(status: number): Result<never> {
+function statusError(status: number, hasAttachments: boolean): Result<never> {
   if (status === 401 || status === 403) {
     return err('chat/auth', 'provider rejected the credential')
   }
   if (status === 404) return err('chat/endpoint', 'provider endpoint was not found')
   if (status === 429) return err('chat/rate-limit', 'provider rate limit reached')
+  if (hasAttachments && status === 413) {
+    return err('chat/attachments-too-large', 'provider rejected the attachment payload size')
+  }
+  if (hasAttachments && (status === 400 || status === 415 || status === 422)) {
+    return err('chat/attachments-unsupported', 'provider rejected attachment input')
+  }
   return err('chat/http', `provider returned HTTP ${String(status)}`)
 }
 
@@ -282,7 +336,8 @@ export async function streamChat(
       : err('chat/network', 'provider request failed')
   }
 
-  if (!response.ok) return statusError(response.status)
+  const hasAttachments = request.history.some((message) => message.attachments.length > 0)
+  if (!response.ok) return statusError(response.status, hasAttachments)
   if (response.body === null) return err('chat/bad-stream', 'provider returned no stream')
 
   const reader = response.body.getReader()

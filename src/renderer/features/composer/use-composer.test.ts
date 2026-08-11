@@ -47,6 +47,23 @@ describe('useComposer', () => {
     expect(result.current.canSend).toBe(false)
   })
 
+  it('can send an attachment without text', async () => {
+    const onSend = vi.fn(() => true)
+    const { result } = renderHook(() => useComposer(onSend, '', () => undefined, true))
+    expect(result.current.canSend).toBe(true)
+    await act(async () => {
+      await result.current.submit()
+    })
+    expect(onSend).toHaveBeenCalledWith('')
+  })
+
+  it('cannot send while an attachment is importing', () => {
+    const { result } = renderHook(() =>
+      useComposer(vi.fn(), 'ready', () => undefined, false, true),
+    )
+    expect(result.current.canSend).toBe(false)
+  })
+
   it('sends trimmed text and clears the draft', async () => {
     const onSend = vi.fn(() => true)
     const { result } = renderHook(() => useComposer(onSend))

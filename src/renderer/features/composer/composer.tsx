@@ -1,15 +1,22 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { formatBytes } from '../../../shared/attachments.js'
+import type { AttachmentMeta } from '../../../shared/types.js'
+import { AttachmentImage } from '../attachments/attachment-image.js'
 import { IconButton } from '../../ui/icon-button.js'
 import { Paperclip } from '../../ui/icons/paperclip.js'
 import { Send } from '../../ui/icons/send.js'
 import { Stop } from '../../ui/icons/stop.js'
+import { X } from '../../ui/icons/x.js'
 import { useComposer } from './use-composer.js'
+import { useAttachments } from './use-attachments.js'
 import styles from './composer.module.css'
 
 const MAX_ROWS_PX = 160
 
 type Props = {
-  onSend: (text: string) => boolean | Promise<boolean>
+  conversationId?: string | undefined
+  onEnsureConversation: () => Promise<{ id: string } | undefined>
+  onSend: (text: string, attachmentIds: string[]) => boolean | Promise<boolean>
   onCancel: () => void | Promise<void>
   streaming: boolean
   initialDraft?: string | undefined
@@ -24,9 +31,28 @@ export function Composer({
   initialDraft = '',
   onDraftChange = () => undefined,
   notice,
+  conversationId,
+  onEnsureConversation,
 }: Props): React.JSX.Element {
-  const composer = useComposer(onSend, initialDraft, onDraftChange)
+  const attachments = useAttachments(conversationId, onEnsureConversation)
+  const composer = useComposer(
+    async (text) => {
+      const sent = await onSend(text, attachments.items.map((item) => item.id))
+      if (sent) attachments.clear()
+      return sent
+    },
+    initialDraft,
+    onDraftChange,
+    attachments.items.length > 0,
+    attachments.importing,
+  )
   const box = useRef<HTMLTextAreaElement>(null)
+  const picker = useRef<HTMLInputElement>(null)
+  const [dragging, setDragging] = useState(false)
+
+  function addFiles(files: FileList | File[]): void {
+    void attachments.add(Array.from(files))
+  }
 
   useEffect(() => {
     function focusComposer(): void {
@@ -49,39 +75,120 @@ export function Composer({
   }, [composer.draft])
 
   return (
-    <div className={styles.bar}>
-      <div className={styles.box}>
-        <IconButton label="Attachments are coming later" size="lg" disabled>
-          <Paperclip />
-        </IconButton>
+    <div
+      className={styles.bar}
+      onDragEnter={(event) => {
+        event.preventDefault()
+        setDragging(true)
+      }}
+      onDragOver={(event) => {
+        event.preventDefault()
+      }}
+      onDragLeave={(event) => {
+        if (event.currentTarget === event.target) setDragging(false)
+      }}
+      onDrop={(event) => {
+        event.preventDefault()
+        setDragging(false)
+        addFiles(event.dataTransfer.files)
+      }}
+    >
+      <div className={styles.wrap}>
+        {dragging && <div className={styles.drop}>Drop files to attach</div>}
+        {attachments.items.length > 0 && (
+          <div className={styles.tray} aria-label="Draft attachments">
+            {attachments.items.map((attachment: AttachmentMeta) => (
+              <div key={attachment.id} className={styles.attachment}>
+                {attachment.kind === 'image' ? (
+                  <AttachmentImage
+                    attachment={attachment}
+                    conversationId={conversationId ?? ''}
+                    compact
+                  />
+                ) : (
+                  <span className={styles.badge}>{attachment.kind === 'pdf' ? 'PDF' : 'TXT'}</span>
+                )}
+                <span className={styles.fileText}>
+                  <span className={styles.fileName}>{attachment.name}</span>
+                  <span className={styles.fileSize}>{formatBytes(attachment.size)}</span>
+                </span>
+                <IconButton
+                  label={`Remove ${attachment.name}`}
+                  size="sm"
+                  onClick={() => {
+                    void attachments.remove(attachment.id)
+                  }}
+                >
+                  <X size={14} />
+                </IconButton>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className={styles.box}>
+          <input
+            ref={picker}
+            className={styles.picker}
+            type="file"
+            multiple
+            accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,text/*,.md,.json,.jsonl,.yaml,.yml,.csv,.tsv,.js,.jsx,.ts,.tsx,.py,.sql,.toml,.ini,.log"
+            onChange={(event) => {
+              if (event.target.files !== null) addFiles(event.target.files)
+              event.target.value = ''
+            }}
+          />
+          <IconButton
+            label="Add attachments"
+            size="lg"
+            disabled={streaming || attachments.importing}
+            onClick={() => {
+              picker.current?.click()
+            }}
+          >
+            <Paperclip />
+          </IconButton>
 
-        <textarea
-          ref={box}
-          className={styles.input}
-          rows={1}
-          value={composer.draft}
-          placeholder="Message Luna…"
-          aria-label="Message Luna"
-          onChange={(e) => {
-            composer.setDraft(e.target.value)
-          }}
-          onKeyDown={composer.onKeyDown}
-        />
+          <textarea
+            ref={box}
+            className={styles.input}
+            rows={1}
+            value={composer.draft}
+            placeholder="Message Luna…"
+            aria-label="Message Luna"
+            onChange={(e) => {
+              composer.setDraft(e.target.value)
+            }}
+            onKeyDown={composer.onKeyDown}
+            onPaste={(event) => {
+              const images = Array.from(event.clipboardData.items).flatMap((item) => {
+                if (item.kind !== 'file' || !item.type.startsWith('image/')) return []
+                const file = item.getAsFile()
+                return file === null ? [] : [file]
+              })
+              if (images.length === 0) return
+              event.preventDefault()
+              addFiles(images)
+            }}
+          />
 
-        <IconButton
-          label={streaming ? 'Stop response' : 'Send'}
-          variant="accent"
-          size="lg"
-          disabled={streaming ? false : !composer.canSend}
-          onClick={() => {
-            if (streaming) void onCancel()
-            else void composer.submit()
-          }}
-        >
-          {streaming ? <Stop /> : <Send />}
-        </IconButton>
+          <IconButton
+            label={streaming ? 'Stop response' : 'Send'}
+            variant="accent"
+            size="lg"
+            disabled={streaming ? false : !composer.canSend}
+            onClick={() => {
+              if (streaming) void onCancel()
+              else void composer.submit()
+            }}
+          >
+            {streaming ? <Stop /> : <Send />}
+          </IconButton>
+        </div>
       </div>
-      {notice !== undefined && <p className={styles.notice}>{notice}</p>}
+      {attachments.importing && <p className={styles.status}>Importing attachments…</p>}
+      {(attachments.notice ?? notice) !== undefined && (
+        <p className={styles.notice} role="status">{attachments.notice ?? notice}</p>
+      )}
     </div>
   )
 }

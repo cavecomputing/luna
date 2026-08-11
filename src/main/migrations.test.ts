@@ -57,6 +57,18 @@ describe('migrate', () => {
     ).toContainEqual({ name: 'messages_by_conversation' })
   })
 
+  it('creates persistent attachment storage', () => {
+    const db = fresh()
+    migrate(db)
+    expect(tables(db)).toContain('attachments')
+    expect(db.prepare('PRAGMA table_info(attachments)').all()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'content', type: 'BLOB', notnull: 1 }),
+        expect.objectContaining({ name: 'message_id', type: 'TEXT', notnull: 0 }),
+      ]),
+    )
+  })
+
   it('does nothing to an already migrated database', () => {
     const db = fresh()
     migrate(db)
@@ -113,6 +125,7 @@ describe('migrate', () => {
     migrate(db)
     db.exec(`PRAGMA user_version = 3;
       DROP TABLE window_state;
+      DROP TABLE attachments;
       ALTER TABLE messages DROP COLUMN reasoning;
       ALTER TABLE messages DROP COLUMN provider_id;
       ALTER TABLE conversations DROP COLUMN draft;`)
@@ -136,6 +149,7 @@ describe('migrate', () => {
       VALUES ('message-1', 'chat-1', 'assistant', 'Answer', 'complete', 1, 0);
       PRAGMA user_version = 4;
       DROP TABLE window_state;
+      DROP TABLE attachments;
       ALTER TABLE messages DROP COLUMN reasoning;
       ALTER TABLE conversations DROP COLUMN draft;`)
 
@@ -155,6 +169,7 @@ describe('migrate', () => {
       VALUES ('chat-1', 'Chat', 'spark', 'fast', 0, 1, 1, 'temporary');
       PRAGMA user_version = 5;
       DROP TABLE window_state;
+      DROP TABLE attachments;
       ALTER TABLE conversations DROP COLUMN draft;`)
 
     migrate(db)

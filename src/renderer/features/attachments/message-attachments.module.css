@@ -1,0 +1,60 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.imageCard {
+  margin: 0;
+}
+
+.imageCard figcaption {
+  margin-top: var(--s-1);
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--t-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file {
+  display: flex;
+  align-items: center;
+  min-width: 220px;
+  padding: var(--s-2);
+  gap: var(--s-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-sunken);
+}
+
+.badge {
+  flex: none;
+  padding: 5px 6px;
+  border-radius: var(--r-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--t-xs);
+  font-weight: 700;
+}
+
+.details {
+  min-width: 0;
+}
+
+.name,
+.size {
+  display: block;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.size {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: var(--t-xs);
+}

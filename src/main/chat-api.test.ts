@@ -17,18 +17,19 @@ function request(api: ProviderConfig['api'] = 'responses'): ChatRequest {
     model: 'model-1',
     systemPrompt: 'Be useful.',
     history: [
-      { id: 'u1', role: 'user', text: 'Hello', status: 'complete', at: 1 },
+      { id: 'u1', role: 'user', text: 'Hello', status: 'complete', at: 1, attachments: [] },
       {
         id: 'a1',
         role: 'assistant',
         text: 'Hi',
         status: 'complete',
         at: 2,
+        attachments: [],
         providerApi: 'responses',
         providerId: 'openai',
         providerItems: [{ type: 'message', role: 'assistant', id: 'msg_1' }],
       },
-      { id: 'u2', role: 'user', text: 'Again', status: 'complete', at: 3 },
+      { id: 'u2', role: 'user', text: 'Again', status: 'complete', at: 3, attachments: [] },
     ],
   }
 }
@@ -43,6 +44,39 @@ function sse(parts: string[], status = 200): Response {
     }),
     { status, headers: { 'content-type': 'text/event-stream' } },
   )
+}
+
+function attachmentRequest(api: ProviderConfig['api']): ChatRequest {
+  return {
+    ...request(api),
+    history: [
+      {
+        id: 'u1',
+        role: 'user',
+        text: '',
+        status: 'complete',
+        at: 1,
+        attachments: [
+          {
+            id: 'image-1',
+            name: 'image.png',
+            kind: 'image',
+            mediaType: 'image/png',
+            size: 2,
+            data: Uint8Array.from([1, 2]),
+          },
+          {
+            id: 'pdf-1',
+            name: 'document.pdf',
+            kind: 'pdf',
+            mediaType: 'application/pdf',
+            size: 2,
+            data: Uint8Array.from([3, 4]),
+          },
+        ],
+      },
+    ],
+  }
 }
 
 describe('requestBody', () => {
@@ -84,9 +118,59 @@ describe('requestBody', () => {
       { role: 'user', content: 'Again' },
     ])
   })
+
+  it('builds native Responses image and file content for an attachment-only turn', () => {
+    expect(requestBody(attachmentRequest('responses')).input).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'input_image', image_url: 'data:image/png;base64,AQI=', detail: 'auto' },
+          {
+            type: 'input_file',
+            filename: 'document.pdf',
+            file_data: 'data:application/pdf;base64,AwQ=',
+            detail: 'auto',
+          },
+        ],
+      },
+    ])
+  })
+
+  it('builds native Chat Completions image and file content', () => {
+    expect(requestBody(attachmentRequest('chat-completions')).messages).toEqual([
+      { role: 'system', content: 'Be useful.' },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image_url',
+            image_url: { url: 'data:image/png;base64,AQI=', detail: 'auto' },
+          },
+          {
+            type: 'file',
+            file: {
+              filename: 'document.pdf',
+              file_data: 'data:application/pdf;base64,AwQ=',
+            },
+          },
+        ],
+      },
+    ])
+  })
 })
 
 describe('streamChat', () => {
+  it('maps optimistic attachment rejections to stable errors', async () => {
+    const unsupported = vi.fn(() => Promise.resolve(new Response('', { status: 415 })))
+    expect(
+      await streamChat(attachmentRequest('responses'), new AbortController().signal, () => undefined, unsupported),
+    ).toMatchObject({ ok: false, code: 'chat/attachments-unsupported' })
+
+    const tooLarge = vi.fn(() => Promise.resolve(new Response('', { status: 413 })))
+    expect(
+      await streamChat(attachmentRequest('responses'), new AbortController().signal, () => undefined, tooLarge),
+    ).toMatchObject({ ok: false, code: 'chat/attachments-too-large' })
+  })
   it('assembles partial Responses chunks and keeps replay metadata', async () => {
     const fetcher = vi.fn(() =>
       Promise.resolve(

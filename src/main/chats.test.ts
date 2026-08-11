@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { open } from './db.js'
+import { addFiles } from './attachments.js'
 import {
   beginTurn,
   create,
@@ -42,8 +43,8 @@ describe('chat storage', () => {
     const turn = beginTurn(db, 'chat-1', 'Hello', 'user-1', 'assistant-1', 20)
     expect(turn?.conversation.draft).toBe('')
     expect(turn?.conversation.messages).toEqual([
-      { id: 'user-1', role: 'user', text: 'Hello', status: 'complete', at: 20 },
-      { id: 'assistant-1', role: 'assistant', text: '', status: 'streaming', at: 20 },
+      { id: 'user-1', role: 'user', text: 'Hello', status: 'complete', at: 20, attachments: [] },
+      { id: 'assistant-1', role: 'assistant', text: '', status: 'streaming', at: 20, attachments: [] },
     ])
 
     expect(
@@ -65,6 +66,7 @@ describe('chat storage', () => {
       reasoning: 'Considered the greeting.',
       status: 'complete',
       at: 20,
+      attachments: [],
     })
     expect(find(db, 'chat-1')).toMatchObject({ updatedAt: 30 })
     expect(messageText(db, 'assistant-1')).toBe('Hi there')
@@ -74,6 +76,34 @@ describe('chat storage', () => {
       providerItems: [{ type: 'message', role: 'assistant' }],
       reasoning: 'Considered the greeting.',
     })
+  })
+
+  it('associates draft attachments and seeds an attachment-only title', () => {
+    const db = open(':memory:')
+    create(db, 'chat-1', 'fast', 10)
+    addFiles(
+      db,
+      'chat-1',
+      [{ name: 'project-notes.pdf', mediaType: 'application/pdf', data: new TextEncoder().encode('%PDF-1.7') }],
+      () => 'file-1',
+      15,
+    )
+
+    const turn = beginTurn(db, 'chat-1', '', 'user-1', 'assistant-1', 20, ['file-1'])
+
+    expect(turn?.conversation.title).toBe('project-notes')
+    expect(turn?.conversation.messages[0]?.attachments).toEqual([
+      {
+        id: 'file-1',
+        name: 'project-notes.pdf',
+        kind: 'pdf',
+        mediaType: 'application/pdf',
+        size: 8,
+      },
+    ])
+    expect(history(db, 'chat-1')[0]?.attachments[0]?.data).toEqual(
+      new TextEncoder().encode('%PDF-1.7'),
+    )
   })
 
   it('does not finish the same streaming message twice', () => {

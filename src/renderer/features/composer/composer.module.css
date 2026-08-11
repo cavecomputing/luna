@@ -3,18 +3,108 @@
   padding: var(--s-3) var(--s-6) var(--s-5);
 }
 
+.wrap {
+  position: relative;
+  max-width: 860px;
+  margin: 0 auto;
+}
+
 .box {
   display: flex;
   align-items: flex-end;
   gap: var(--s-2);
-  max-width: 860px;
-  margin: 0 auto;
+  min-height: 52px;
   padding: var(--s-2);
   border: 1px solid var(--line);
   border-radius: var(--r-xl);
   background: var(--surface);
   box-shadow: var(--shadow-card);
   transition: border-color var(--fast) var(--ease);
+}
+
+.tray {
+  display: flex;
+  gap: var(--s-2);
+  padding: 0 var(--s-1) var(--s-2);
+  overflow-x: auto;
+}
+
+.attachment {
+  display: flex;
+  align-items: center;
+  min-width: 210px;
+  max-width: 280px;
+  padding: var(--s-1);
+  gap: var(--s-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.badge {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  flex: none;
+  border-radius: var(--r-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--t-xs);
+  font-weight: 700;
+}
+
+.fileText {
+  min-width: 0;
+  flex: 1;
+}
+
+.fileName,
+.fileSize {
+  display: block;
+}
+
+.fileName {
+  overflow: hidden;
+  font-size: var(--t-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileSize {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: var(--t-xs);
+}
+
+.picker {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.drop {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.status {
+  max-width: 860px;
+  margin: var(--s-2) auto 0;
+  color: var(--text-muted);
+  font-size: var(--t-sm);
+  text-align: center;
 }
 
 .box:focus-within {
@@ -24,13 +114,15 @@
 .input {
   flex: 1;
   min-width: 0;
+  min-height: 34px;
   max-height: 160px;
-  padding: var(--s-2) var(--s-1);
+  box-sizing: border-box;
+  padding: 6px var(--s-1);
   border: 0;
   background: none;
   resize: none;
   font-size: var(--t-base);
-  line-height: 1.5;
+  line-height: 22px;
 }
 
 .input:focus {

@@ -93,6 +93,15 @@ function friendlyError(code: string): string {
   if (code === 'chat/auth') return 'The provider rejected its API key.'
   if (code === 'chat/rate-limit') return 'The provider rate limit was reached. Try again shortly.'
   if (code === 'chat/network') return 'Luna could not reach the provider.'
+  if (code === 'chat/attachments-unsupported') {
+    return 'This provider or model does not support one or more attachments.'
+  }
+  if (code === 'chat/attachments-too-large') {
+    return 'The provider rejected the attachment payload as too large.'
+  }
+  if (code === 'chat/invalid-attachments') {
+    return 'The selected attachments changed before the message was sent. Please try again.'
+  }
   if (code === 'secret/unavailable') return 'The saved API key could not be read.'
   return 'The message could not be completed. Please try again.'
 }
@@ -174,21 +183,24 @@ export function useChats(defaultMode: Mode) {
     setOpenId(result.value.id)
   }
 
-  async function send(text: string): Promise<boolean> {
-    setError(undefined)
-    let conversation = open
-    if (conversation === undefined) {
-      const created = await window.luna.chats.create(draftMode ?? defaultMode)
-      if (!created.ok) {
-        setError('A new conversation could not be created.')
-        return false
-      }
-      conversation = created.value
-      setChats((current) => mergeChats(current, [created.value, ...current]))
-      setOpenId(created.value.id)
+  async function ensure(): Promise<Conversation | undefined> {
+    if (open !== undefined) return open
+    const created = await window.luna.chats.create(draftMode ?? defaultMode)
+    if (!created.ok) {
+      setError('A new conversation could not be created.')
+      return undefined
     }
+    setChats((current) => mergeChats(current, [created.value, ...current]))
+    setOpenId(created.value.id)
+    return created.value
+  }
 
-    const result = await window.luna.chat.send(conversation.id, text)
+  async function send(text: string, attachmentIds: string[] = []): Promise<boolean> {
+    setError(undefined)
+    const conversation = await ensure()
+    if (conversation === undefined) return false
+
+    const result = await window.luna.chat.send(conversation.id, text, attachmentIds)
     if (!result.ok) {
       setError(friendlyError(result.code))
       return false
@@ -256,6 +268,7 @@ export function useChats(defaultMode: Mode) {
     error,
     setOpenId,
     start,
+    ensure,
     send,
     cancel,
     setMode,

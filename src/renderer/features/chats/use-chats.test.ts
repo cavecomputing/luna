@@ -14,7 +14,7 @@ function chat(status: 'streaming' | 'complete' = 'streaming'): Conversation {
     pinned: false,
     updatedAt: 1,
     messages: [
-      { id: 'assistant-1', role: 'assistant', text: '', status, at: 1 },
+      { id: 'assistant-1', role: 'assistant', text: '', status, at: 1, attachments: [] },
     ],
   }
 }
@@ -48,6 +48,7 @@ describe('stream event reducers', () => {
         text: 'Done',
         status: 'complete',
         at: 1,
+        attachments: [],
       },
     })
     expect(

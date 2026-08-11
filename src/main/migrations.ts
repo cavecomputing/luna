@@ -71,6 +71,22 @@ const steps: readonly string[] = [
      width  INTEGER NOT NULL CHECK (width > 0),
      height INTEGER NOT NULL CHECK (height > 0)
    ) STRICT;`,
+  `CREATE TABLE attachments (
+     id              TEXT PRIMARY KEY,
+     conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+     message_id      TEXT REFERENCES messages(id) ON DELETE CASCADE,
+     name            TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 255),
+     kind            TEXT NOT NULL CHECK (kind IN ('image', 'text', 'pdf')),
+     media_type      TEXT NOT NULL CHECK (length(media_type) BETWEEN 1 AND 100),
+     byte_size       INTEGER NOT NULL CHECK (byte_size BETWEEN 1 AND 10485760),
+     content         BLOB NOT NULL CHECK (length(content) = byte_size),
+     ordinal         INTEGER NOT NULL CHECK (ordinal >= 0),
+     created_at      INTEGER NOT NULL,
+     UNIQUE (message_id, ordinal)
+   ) STRICT;
+
+   CREATE INDEX attachments_by_conversation
+   ON attachments (conversation_id, message_id, ordinal);`,
 ]
 
 /** The version a fully migrated database reports. */

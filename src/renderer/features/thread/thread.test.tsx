@@ -13,7 +13,7 @@ const chat: Conversation = {
   pinned: false,
   updatedAt: 1,
   messages: [
-    { id: 'message-1', role: 'assistant', text: 'Answer', status: 'complete', at: 1 },
+    { id: 'message-1', role: 'assistant', text: 'Answer', status: 'complete', at: 1, attachments: [] },
   ],
 }
 

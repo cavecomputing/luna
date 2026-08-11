@@ -7,6 +7,8 @@ import type { ApiKind, Conversation, Message, ModelSlots } from '../../shared/ty
 import { parseThinkingTags } from '../../shared/thinking.js'
 import { streamChat, type ChatChunk, type ChatCompletion, type ChatRequest } from '../chat-api.js'
 import * as chats from '../chats.js'
+import * as attachmentJobs from '../attachment-jobs.js'
+import type { StoredAttachment } from '../attachments.js'
 import type { StoredMessage, Turn } from '../chats.js'
 import * as db from '../db.js'
 import * as prefs from '../prefs.js'
@@ -27,10 +29,11 @@ type Deps = {
     userMessageId: string,
     assistantMessageId: string,
     now: number,
+    attachmentIds: string[],
   ) => Turn | undefined
   retryTarget: (messageId: string) => string | undefined
   restart: (messageId: string, now: number) => Conversation | undefined
-  history: (conversationId: string) => StoredMessage[]
+  history: (conversationId: string) => Promise<StoredMessage[]>
   finish: (
     id: string,
     text: string,
@@ -68,11 +71,28 @@ const deps: Deps = {
   getProvider: providers.get,
   readKey: secrets.read,
   prefs: prefs.load,
-  begin: (conversationId, text, userId, assistantId, now) =>
-    chats.beginTurn(db.handle(), conversationId, text, userId, assistantId, now),
+  begin: (conversationId, text, userId, assistantId, now, attachmentIds) =>
+    chats.beginTurn(db.handle(), conversationId, text, userId, assistantId, now, attachmentIds),
   retryTarget: chats.retry,
   restart: (messageId, now) => chats.restartMessage(db.handle(), messageId, now),
-  history: chats.transcript,
+  history: async (conversationId) => {
+    const loaded = await attachmentJobs.readHistory(db.filePath(), conversationId)
+    if (loaded === undefined) throw new Error('attachment history read failed')
+    const grouped = new Map<string, StoredAttachment[]>()
+    for (const item of loaded) {
+      const existing = grouped.get(item.messageId) ?? []
+      existing.push({
+        id: item.id,
+        name: item.name,
+        kind: item.kind,
+        mediaType: item.mediaType,
+        size: item.size,
+        data: item.data,
+      })
+      grouped.set(item.messageId, existing)
+    }
+    return chats.transcriptWith(conversationId, grouped)
+  },
   finish: (id, text, reasoning, status, now, api, providerId, items) =>
     chats.finishMessage(db.handle(), id, text, reasoning, status, now, api, providerId, items),
   setTitle: (id, title) => chats.setTitle(db.handle(), id, title),
@@ -108,7 +128,18 @@ function id(input: unknown): string | undefined {
 function messageText(input: unknown): string | undefined {
   if (typeof input !== 'string') return undefined
   const value = input.trim()
-  return value !== '' && value.length <= 100_000 ? value : undefined
+  return value.length <= 100_000 ? value : undefined
+}
+
+function attachmentIds(input: unknown): string[] | undefined {
+  if (!Array.isArray(input) || input.length > 5) return undefined
+  const parsed = input.flatMap((value) => {
+    const parsedId = id(value)
+    return parsedId === undefined ? [] : [parsedId]
+  })
+  return parsed.length === input.length && new Set(parsed).size === parsed.length
+    ? parsed
+    : undefined
 }
 
 function combineReasoning(structured: string, tagged: string): string {
@@ -149,7 +180,13 @@ export class ChatCoordinator {
     const req = object(input)
     const conversationId = id(req?.conversationId)
     const text = messageText(req?.text)
-    if (conversationId === undefined || text === undefined) {
+    const selectedAttachments = attachmentIds(req?.attachmentIds)
+    if (
+      conversationId === undefined ||
+      text === undefined ||
+      selectedAttachments === undefined ||
+      (text === '' && selectedAttachments.length === 0)
+    ) {
       return err('chat/invalid', 'chat message was invalid')
     }
 
@@ -178,11 +215,12 @@ export class ChatCoordinator {
         userMessageId,
         assistantMessageId,
         this.d.now(),
+        selectedAttachments,
       )
     } finally {
       this.starting.delete(conversationId)
     }
-    if (turn === undefined) return err('chat/missing', 'conversation was not found')
+    if (turn === undefined) return err('chat/invalid-attachments', 'chat attachments were invalid')
 
     this.launch(conversationId, assistantMessageId, selected.value, apiKey)
     return ok({ ...turn })
@@ -257,22 +295,40 @@ export class ChatCoordinator {
     const controller = new AbortController()
     this.active.set(messageId, { conversationId, controller })
     this.d.notifyChats(this.d.list())
+    void this.prepare(conversationId, messageId, selected, apiKey, controller)
+  }
+
+  private async prepare(
+    conversationId: string,
+    messageId: string,
+    selected: Selection,
+    apiKey: string | undefined,
+    controller: AbortController,
+  ): Promise<void> {
+    let history: StoredMessage[]
+    try {
+      history = await this.d.history(conversationId)
+    } catch {
+      this.active.delete(messageId)
+      const message = this.d.finish(messageId, '', '', 'error', this.d.now())
+      if (message !== undefined) this.d.notifyError(conversationId, message, 'attachment/io')
+      this.d.notifyChats(this.d.list())
+      return
+    }
     const request: ChatRequest = {
       provider: selected.provider,
       ...(apiKey === undefined ? {} : { apiKey }),
       model: selected.model,
       systemPrompt: this.d.prefs().systemPrompt,
-      history: this.d.history(conversationId),
+      history,
     }
-    void this.run(
+    await this.run(
       conversationId,
       messageId,
       request,
       controller,
       this.d.prefs().stream,
-    ).catch(() => {
-      this.active.delete(messageId)
-    })
+    )
   }
 
   private async run(
@@ -328,7 +384,8 @@ export class ChatCoordinator {
       if (message !== undefined) {
         this.d.notifyDone(conversationId, message)
         if (this.d.prefs().autoTitle) {
-          const firstUser = request.history.find((item) => item.role === 'user')?.text
+          const first = request.history.find((item) => item.role === 'user')
+          const firstUser = first?.text !== '' ? first?.text : first?.attachments[0]?.name
           if (firstUser !== undefined) {
             void this.title(conversationId, firstUser, parsed.text).catch(() => undefined)
           }
@@ -384,6 +441,7 @@ export class ChatCoordinator {
             text: `User:\n${userText}\n\nAssistant:\n${assistantText}`,
             status: 'complete',
             at: this.d.now(),
+            attachments: [],
           },
         ],
       },
