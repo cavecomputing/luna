@@ -51,6 +51,11 @@
   color: var(--text);
 }
 
+.modes button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .modes .on {
   background: var(--accent);
   color: var(--accent-on);
@@ -68,6 +73,13 @@
   line-height: 1.6;
   tab-size: 2;
   white-space: pre;
+}
+
+.status {
+  margin: 0;
+  padding: var(--s-2) var(--s-4) 0;
+  color: var(--text-muted);
+  font-size: var(--t-xs);
 }
 
 .frame {

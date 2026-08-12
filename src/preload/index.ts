@@ -90,6 +90,10 @@ const api = {
   messages: {
     menu: (id: string) => invoke('messages:menu', { id }),
   },
+  preview: {
+    create: (html: string) => invoke('preview:create', { html }),
+    release: (id: string) => invoke('preview:release', { id }),
+  },
   settings: {
     open: () => invoke('settings:open', undefined),
     close: () => invoke('settings:close', undefined),

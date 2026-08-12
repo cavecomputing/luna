@@ -12,6 +12,7 @@ describe('trustedSender', () => {
   })
 
   it('rejects foreign schemes in a packaged build', () => {
+    expect(trustedSender('app://preview/12345678-1234-4123-8123-123456789abc', true)).toBe(false)
     expect(trustedSender('https://evil.example', true)).toBe(false)
     expect(trustedSender('file:///etc/passwd', true)).toBe(false)
     expect(trustedSender('http://localhost:5173', true)).toBe(false)

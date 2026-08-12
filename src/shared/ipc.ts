@@ -68,6 +68,11 @@ export type AppInfo = {
   platform: string
 }
 
+export type HtmlPreviewRef = {
+  id: string
+  url: string
+}
+
 export type DatabaseRecoveryStatus =
   | { kind: 'corrupt'; backupCreatedAt: number }
   | { kind: 'corrupt-empty' }
@@ -121,6 +126,8 @@ export type Invocations = {
   }
   'chat:cancel': { req: { messageId: string }; res: undefined }
   'messages:menu': { req: { id: string }; res: undefined }
+  'preview:create': { req: { html: string }; res: HtmlPreviewRef }
+  'preview:release': { req: { id: string }; res: undefined }
   'settings:open': { req: undefined; res: undefined }
   'settings:close': { req: undefined; res: undefined }
 }

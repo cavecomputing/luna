@@ -212,6 +212,7 @@ function build(shape: Shape, kind: WindowKind, stateName: windowState.WindowName
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      nodeIntegrationInSubFrames: false,
       webSecurity: true,
     },
   })

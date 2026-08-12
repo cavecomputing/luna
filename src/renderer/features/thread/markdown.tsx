@@ -7,6 +7,7 @@ import styles from './markdown.module.css'
 
 type Props = {
   text: string
+  canRenderHtml?: boolean
 }
 
 type CodeProps = ComponentPropsWithoutRef<'code'> & ExtraProps
@@ -26,9 +27,10 @@ function codeText(children: ReactNode): string {
     .join('')
 }
 
-function MarkdownCode({ className, children }: CodeProps): React.JSX.Element {
+function MarkdownCode({ className, children, canRender }: CodeProps & { canRender: boolean }): React.JSX.Element {
   if (htmlLanguage(className)) {
-    return <HtmlPreview code={codeText(children).replace(/\n$/, '')} />
+    const code = codeText(children).replace(/\n$/, '')
+    return <HtmlPreview key={code} code={code} canRender={canRender} />
   }
   return <code className={className}>{children}</code>
 }
@@ -61,7 +63,7 @@ function safeUrl(value: string, key: string): string {
   return ''
 }
 
-const components: Components = {
+const baseComponents: Components = {
   a({ href, children, title }) {
     if (href === undefined || href === '') return <span>{children}</span>
     if (href.startsWith('#')) return <a href={href}>{children}</a>
@@ -71,7 +73,6 @@ const components: Components = {
       </a>
     )
   },
-  code: MarkdownCode,
   img({ src, alt, title }) {
     return src === undefined || src === '' ? (
       <span className={styles.imageFallback}>{alt ?? 'Image'}</span>
@@ -82,7 +83,13 @@ const components: Components = {
   pre: MarkdownPre,
 }
 
-export function Markdown({ text }: Props): React.JSX.Element {
+export function Markdown({ text, canRenderHtml = true }: Props): React.JSX.Element {
+  const components: Components = {
+    ...baseComponents,
+    code(props) {
+      return <MarkdownCode {...props} canRender={canRenderHtml} />
+    },
+  }
   return (
     <div className={styles.markdown}>
       <ReactMarkdown

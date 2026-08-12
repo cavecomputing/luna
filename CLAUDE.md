@@ -277,8 +277,10 @@ it also holds the `window.luna` bridge.
   in our own DOM. One crafted reply then reaches the preload bridge, which is the whole
   attack we designed the process model to prevent.
 - **HTML previews render in a sandboxed `<iframe>`** — `sandbox` without `allow-same-origin`,
-  a `srcdoc` payload, and its own restrictive CSP. No preload is attached to that frame. It
-  cannot reach our origin, our bridge, or the network.
+  backed by a short-lived `app://preview` capability URL and its own restrictive response-header
+  CSP. Never use `srcdoc`: it inherits the app document's CSP, which correctly blocks inline
+  styles. No preload is attached to the frame. It cannot reach our origin, our bridge, or the
+  network.
 - HTML appears **inside a code block**, with a toggle to switch between **source** and
   **rendered**. Source is the default. The user opts in to rendering; it never happens
   automatically.

@@ -3,6 +3,7 @@ import * as attachmentsIpc from './attachments.js'
 import * as chatIpc from './chat.js'
 import * as chatsIpc from './chats.js'
 import * as prefsIpc from './prefs.js'
+import * as previewIpc from './preview.js'
 import * as providersIpc from './providers.js'
 import * as settingsIpc from './settings.js'
 import * as messagesIpc from './messages.js'
@@ -17,6 +18,7 @@ export function registerAll(): void {
   chatsIpc.register()
   chatIpc.register()
   prefsIpc.register()
+  previewIpc.register()
   providersIpc.register()
   messagesIpc.register()
   settingsIpc.register()

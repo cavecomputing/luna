@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Markdown } from './markdown.js'
+
+afterEach(cleanup)
 
 describe('Markdown', () => {
   it('renders CommonMark and GFM structures', () => {
@@ -40,6 +42,12 @@ describe('Markdown', () => {
     expect(within(block).getByRole('button', { name: 'Source' }).getAttribute('aria-pressed'))
       .toBe('true')
     expect(within(block).queryByTitle('Rendered HTML preview')).toBeNull()
+  })
+
+  it('disables HTML rendering while the displayed message is unsettled', () => {
+    render(<Markdown text={'```html\n<p>Partial</p>\n```'} canRenderHtml={false} />)
+
+    expect(screen.getByRole('button', { name: 'Render' }).hasAttribute('disabled')).toBe(true)
   })
 
   it('copies an entire fenced code block at once', async () => {

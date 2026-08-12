@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Ref } from 'react'
-import type { Message as Msg } from '../../../shared/types.js'
+import type { Message as Msg, MessageStatus } from '../../../shared/types.js'
 import { clock } from '../../lib/time.js'
 import { Markdown } from './markdown.js'
 import { Avatar } from '../../ui/avatar.js'
@@ -16,6 +16,10 @@ type Props = {
   anchorRef?: Ref<HTMLElement>
   anchored: boolean
   conversationId: string
+}
+
+export function canRenderHtml(status: MessageStatus, visible: string, complete: string): boolean {
+  return status !== 'streaming' && visible === complete
 }
 
 export function Message({
@@ -35,6 +39,12 @@ export function Message({
         : message.text
   const visibleText = useSmoothText(fallback, message.status)
   const visibleReasoning = useSmoothText(message.reasoning ?? '', message.status)
+  const canRenderText = canRenderHtml(message.status, visibleText, fallback)
+  const canRenderReasoning = canRenderHtml(
+    message.status,
+    visibleReasoning,
+    message.reasoning ?? '',
+  )
   const waiting =
     !mine &&
     message.status === 'streaming' &&
@@ -89,11 +99,11 @@ export function Message({
                   : 'Thinking'}
               </summary>
               <div className={styles.reasoningBody}>
-                <Markdown text={visibleReasoning} />
+                <Markdown text={visibleReasoning} canRenderHtml={canRenderReasoning} />
               </div>
             </details>
           )}
-          {visibleText !== '' && <Markdown text={visibleText} />}
+          {visibleText !== '' && <Markdown text={visibleText} canRenderHtml={canRenderText} />}
         </div>
         {!mine && message.status === 'error' && message.text !== '' && (
           <p className={styles.interrupted}>Response interrupted</p>
