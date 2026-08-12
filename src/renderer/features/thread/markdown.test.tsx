@@ -1,9 +1,29 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Markdown } from './markdown.js'
 
 afterEach(cleanup)
+
+const createPreview = vi.fn()
+const releasePreview = vi.fn()
+
+beforeEach(() => {
+  createPreview.mockReset()
+  releasePreview.mockReset()
+  createPreview.mockResolvedValue({
+    ok: true,
+    value: {
+      id: '12345678-1234-4123-8123-123456789abc',
+      url: 'app://preview/12345678-1234-4123-8123-123456789abc',
+    },
+  })
+  releasePreview.mockResolvedValue({ ok: true, value: undefined })
+  Object.defineProperty(window, 'luna', {
+    configurable: true,
+    value: { preview: { create: createPreview, release: releasePreview } },
+  })
+})
 
 describe('Markdown', () => {
   it('renders CommonMark and GFM structures', () => {
@@ -48,6 +68,19 @@ describe('Markdown', () => {
     render(<Markdown text={'```html\n<p>Partial</p>\n```'} canRenderHtml={false} />)
 
     expect(screen.getByRole('button', { name: 'Render' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('preserves a rendered HTML preview across parent re-renders', async () => {
+    const text = '```html\n<style>p { color: red }</style><p>Hello</p>\n```'
+    const view = render(<Markdown text={text} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Render' }))
+    await screen.findByTitle('Rendered HTML preview')
+
+    view.rerender(<Markdown text={text} />)
+
+    expect(screen.getByTitle('Rendered HTML preview')).toBeTruthy()
+    expect(createPreview).toHaveBeenCalledTimes(1)
+    expect(releasePreview).not.toHaveBeenCalled()
   })
 
   it('copies an entire fenced code block at once', async () => {

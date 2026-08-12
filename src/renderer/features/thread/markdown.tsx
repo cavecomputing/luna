@@ -1,4 +1,10 @@
-import { Children, isValidElement, type ComponentPropsWithoutRef, type ReactNode } from 'react'
+import {
+  Children,
+  isValidElement,
+  useMemo,
+  type ComponentPropsWithoutRef,
+  type ReactNode,
+} from 'react'
 import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { CodeBlock } from './code-block.js'
@@ -84,12 +90,15 @@ const baseComponents: Components = {
 }
 
 export function Markdown({ text, canRenderHtml = true }: Props): React.JSX.Element {
-  const components: Components = {
-    ...baseComponents,
-    code(props) {
-      return <MarkdownCode {...props} canRender={canRenderHtml} />
-    },
-  }
+  const components = useMemo<Components>(
+    () => ({
+      ...baseComponents,
+      code(props) {
+        return <MarkdownCode {...props} canRender={canRenderHtml} />
+      },
+    }),
+    [canRenderHtml],
+  )
   return (
     <div className={styles.markdown}>
       <ReactMarkdown
