@@ -22,5 +22,8 @@ describe('ModeSwitch', () => {
     expect(screen.getByRole('radio', { name: 'Expert' }).getAttribute('data-tooltip')).toBe(
       'Expert model: expert-model',
     )
+    expect(screen.getByRole('radiogroup', { name: 'Response mode' }).getAttribute('data-size')).toBe(
+      'compact',
+    )
   })
 })

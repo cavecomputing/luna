@@ -14,6 +14,7 @@ type Props<T extends string> = {
   value: T
   segments: Segment<T>[]
   onChange: (value: T) => void
+  size?: 'regular' | 'compact'
 }
 
 /** Two-or-more exclusive choices in a pill. Generic so it isn't tied to Mode. */
@@ -22,9 +23,15 @@ export function Segmented<T extends string>({
   value,
   segments,
   onChange,
+  size = 'regular',
 }: Props<T>): React.JSX.Element {
   return (
-    <div className={styles.group} role="radiogroup" aria-label={label}>
+    <div
+      className={cx(styles.group, size === 'compact' && styles.compact)}
+      role="radiogroup"
+      aria-label={label}
+      data-size={size}
+    >
       {segments.map((seg) => (
         <button
           key={seg.value}

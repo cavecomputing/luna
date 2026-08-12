@@ -11,7 +11,7 @@ export function CommandPalette({ onClose }: Props): React.JSX.Element {
   const [query, setQuery] = useState('')
 
   return (
-    <Dialog label="Command palette" placement="top" onClose={onClose} frameClassName={styles.frame}>
+    <Dialog label="Command palette" onClose={onClose} frameClassName={styles.frame}>
       <DialogHead>
         <div className={styles.prompt}>
           <span className={styles.glyph} aria-hidden="true">

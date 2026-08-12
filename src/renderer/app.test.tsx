@@ -1,13 +1,50 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, render, screen, within } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Conversation } from '../shared/types.js'
 import type { Chats } from './features/chats/use-chats.js'
-import { ConversationSurface } from './app.js'
+import { App, ConversationSurface } from './app.js'
 
 vi.mock('./features/composer/composer.js', () => ({
   Composer: () => <div data-testid="composer" />,
 }))
+
+vi.mock('./features/chats/sidebar.js', () => ({
+  Sidebar: ({ collapse }: { collapse: React.ReactNode | null }) => (
+    <aside data-testid="sidebar">{collapse}</aside>
+  ),
+}))
+
+vi.mock('./features/chats/use-chats.js', () => ({
+  useChats: () => ({
+    open: undefined,
+    openId: undefined,
+    all: [],
+    visible: [],
+    currentMode: 'fast',
+    streamingMessage: undefined,
+    error: undefined,
+    start: vi.fn(),
+    send: vi.fn(),
+    ensure: vi.fn(),
+    cancel: vi.fn(),
+    setDraft: vi.fn(),
+    setMode: vi.fn(),
+    setOpenId: vi.fn(),
+  }),
+}))
+
+vi.mock('./features/mode/use-models.js', () => ({ useModels: () => ({}) }))
+vi.mock('./features/mode/mode-switch.js', () => ({ ModeSwitch: () => <div /> }))
+vi.mock('./lib/use-now.js', () => ({ useNow: () => 1 }))
+vi.mock('./lib/use-prefs.js', () => ({
+  usePrefs: () => ({
+    prefs: { defaultMode: 'fast', sidebarWidth: 264 },
+    set: vi.fn(),
+  }),
+}))
+
+afterEach(cleanup)
 
 function conversation(id: string, text?: string): Conversation {
   return {
@@ -59,5 +96,26 @@ describe('ConversationSurface', () => {
     expect(screen.getByText('Hey there! I’m Luna.')).toBeTruthy()
     expect(container.querySelectorAll('article')).toHaveLength(0)
     expect(screen.getAllByTestId('composer')).toHaveLength(1)
+  })
+})
+
+describe('App', () => {
+  it('places the Windows collapse control inside the open sidebar', () => {
+    Object.defineProperty(window, 'luna', {
+      configurable: true,
+      value: {
+        platform: 'win32',
+        app: { setModal: vi.fn() },
+        settings: { open: vi.fn() },
+        onNewChat: () => vi.fn(),
+        onCommandPalette: () => vi.fn(),
+        onToggleSidebar: () => vi.fn(),
+        onToggleMode: () => vi.fn(),
+      },
+    })
+
+    render(<App />)
+
+    expect(within(screen.getByTestId('sidebar')).getByRole('button', { name: 'Hide sidebar' })).toBeTruthy()
   })
 })

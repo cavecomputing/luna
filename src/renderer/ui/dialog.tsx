@@ -5,8 +5,6 @@ import styles from './dialog.module.css'
 type Props = {
   /** Accessible name of the dialog. */
   label: string
-  /** center: on top of everything. top: under the title bar, palette style. */
-  placement: 'center' | 'top'
   onClose: () => void
   /** Width and other sizing for the dialog box itself. */
   frameClassName?: string | undefined
@@ -16,7 +14,6 @@ type Props = {
 /** Modal overlay. A click on the backdrop, outside the dialog, closes it. */
 export function Dialog({
   label,
-  placement,
   onClose,
   frameClassName,
   children,
@@ -66,7 +63,7 @@ export function Dialog({
 
   return (
     <div
-      className={cx(styles.backdrop, placement === 'top' ? styles.top : styles.center)}
+      className={cx(styles.backdrop, styles.center)}
       role="presentation"
       onMouseDown={(event) => {
         if (event.currentTarget === event.target) onClose()

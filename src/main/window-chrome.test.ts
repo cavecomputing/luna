@@ -8,7 +8,7 @@ describe('window chrome', () => {
       titleBarOverlay: {
         color: '#eef0f4',
         symbolColor: '#14161a',
-        height: 52,
+        height: 44,
       },
     })
   })
@@ -25,7 +25,15 @@ describe('window chrome', () => {
     expect(overlay(true)).toEqual({
       color: '#101216',
       symbolColor: '#f2f4f7',
-      height: 52,
+      height: 44,
+    })
+  })
+
+  it('lets the modal backdrop show beneath Windows caption controls', () => {
+    expect(overlay(false, true)).toEqual({
+      color: '#00000000',
+      symbolColor: '#6b7280',
+      height: 44,
     })
   })
 

@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Sidebar } from './features/chats/sidebar.js'
 import { type Chats, useChats } from './features/chats/use-chats.js'
 import { Composer } from './features/composer/composer.js'
@@ -63,6 +63,8 @@ export function App(): React.JSX.Element {
   const [searchOpen, setSearchOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const usesTrafficLights = window.luna.platform === 'darwin'
+  const placesToggleInSidebar = usesTrafficLights || window.luna.platform === 'win32'
+  const showsInlineToggle = !placesToggleInSidebar || (!open && !usesTrafficLights)
   const startChat = useRef(chats.start)
   const currentMode = useRef(chats.currentMode)
   const changeMode = useRef(chats.setMode)
@@ -120,6 +122,15 @@ export function App(): React.JSX.Element {
     window.addEventListener('keydown', onKeyDown)
     return () => {
       window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [paletteOpen, searchOpen])
+
+  useEffect(() => {
+    if (window.luna.platform !== 'win32') return
+    const hasDialog = searchOpen || paletteOpen
+    void window.luna.app.setModal(hasDialog)
+    return () => {
+      if (hasDialog) void window.luna.app.setModal(false)
     }
   }, [paletteOpen, searchOpen])
 
@@ -182,9 +193,6 @@ export function App(): React.JSX.Element {
       className={styles.shell}
       data-platform={window.luna.platform}
       data-resizing={isResizing ? 'true' : undefined}
-      style={{
-        '--dialog-pane-inset': open ? `${String(sidebarWidth)}px` : '0px',
-      } as CSSProperties}
     >
       <div
         className={cx(styles.side, !open && styles.sideClosed, isResizing && styles.sideResizing)}
@@ -193,7 +201,7 @@ export function App(): React.JSX.Element {
       >
         <Sidebar
           chats={chats}
-          collapse={usesTrafficLights ? sidebarButton : null}
+          collapse={placesToggleInSidebar ? sidebarButton : null}
           width={sidebarWidth}
           onSearchOpen={() => {
             setSearchOpen(true)
@@ -237,11 +245,13 @@ export function App(): React.JSX.Element {
       )}
 
       <main className={styles.pane}>
-        <header className={cx(styles.top, !usesTrafficLights && styles.withInlineToggle)}>
+        <header className={cx(styles.top, showsInlineToggle && styles.withInlineToggle)}>
           {usesTrafficLights && !open && (
             <div className={styles.trafficToggle}>{sidebarButton}</div>
           )}
-          {!usesTrafficLights && <div className={styles.noDrag}>{sidebarButton}</div>}
+          {!usesTrafficLights && (!placesToggleInSidebar || !open) && (
+            <div className={styles.noDrag}>{sidebarButton}</div>
+          )}
 
           <div className={styles.noDrag}>
             <ModeSwitch value={chats.currentMode} models={models} onChange={chats.setMode} />

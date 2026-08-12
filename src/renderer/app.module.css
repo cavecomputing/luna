@@ -5,6 +5,10 @@
   background: var(--bg);
 }
 
+.shell[data-platform='win32'] {
+  --titlebar: 44px;
+}
+
 /*
  * The sidebar stays mounted so collapsing animates instead of popping. The
  * fixed-width panel inside clips away as the wrapper shrinks, which reads as
@@ -103,7 +107,7 @@
 
 /* Three 46px Windows caption buttons, plus breathing room before them. */
 .shell[data-platform='win32'] .top {
-  padding-right: 150px;
+  padding: 4px 150px 4px var(--s-5);
 }
 
 .shell[data-platform='darwin'] .top {

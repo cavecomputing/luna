@@ -42,8 +42,13 @@
 
 :global([data-platform='win32']) .head {
   align-items: center;
+  justify-content: space-between;
   min-height: var(--titlebar);
-  padding: var(--s-2) var(--s-4);
+  padding: 5px var(--s-3);
+}
+
+:global([data-platform='win32']) .collapse {
+  position: static;
 }
 
 .list {

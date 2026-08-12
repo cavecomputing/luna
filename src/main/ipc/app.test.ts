@@ -1,6 +1,6 @@
 import type { WebContents } from 'electron'
 import { describe, expect, it, vi } from 'vitest'
-import { appInfo, windowAction } from './app.js'
+import { appInfo, modalState, windowAction } from './app.js'
 
 const env = {
   name: 'Luna',
@@ -36,6 +36,31 @@ describe('windowAction', () => {
     expect(windowAction(sender, 'close', () => false)).toMatchObject({
       ok: false,
       code: 'app/not-recovering',
+    })
+  })
+})
+
+describe('modalState', () => {
+  const sender = {} as WebContents
+
+  it('applies modal chrome to the main window', () => {
+    const apply = vi.fn(() => true)
+
+    expect(modalState(sender, true, apply)).toEqual({ ok: true, value: undefined })
+    expect(apply).toHaveBeenCalledWith(sender, true)
+  })
+
+  it('rejects a non-boolean modal state', () => {
+    expect(modalState(sender, 'open', () => true)).toMatchObject({
+      ok: false,
+      code: 'app/invalid-modal-state',
+    })
+  })
+
+  it('rejects a renderer outside the main window', () => {
+    expect(modalState(sender, true, () => false)).toMatchObject({
+      ok: false,
+      code: 'app/not-main-window',
     })
   })
 })

@@ -26,6 +26,17 @@
     transform var(--fast) var(--ease);
 }
 
+.compact {
+  padding: 2px;
+}
+
+.compact .seg {
+  gap: var(--s-1);
+  height: 26px;
+  padding: 0 var(--s-2);
+  font-size: var(--t-sm);
+}
+
 .seg[data-tooltip]::after {
   position: absolute;
   z-index: 5;

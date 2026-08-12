@@ -35,6 +35,7 @@ const api = {
     info: () => invoke('app:info', undefined),
     recover: () => invoke('app:recover', undefined),
     closeWindow: () => invoke('app:close-window', undefined),
+    setModal: (open: boolean) => invoke('app:set-modal', open),
   },
   recovery: {
     status: () => invoke('recovery:status', undefined),

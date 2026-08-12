@@ -30,6 +30,12 @@ export function ModeSwitch({ value, models, onChange }: Props): React.JSX.Elemen
     },
   ]
   return (
-    <Segmented label="Response mode" value={value} segments={segments} onChange={onChange} />
+    <Segmented
+      label="Response mode"
+      value={value}
+      segments={segments}
+      onChange={onChange}
+      size="compact"
+    />
   )
 }

@@ -1,6 +1,6 @@
 import type { BrowserWindowConstructorOptions, TitleBarOverlay } from 'electron'
 
-const TITLE_BAR_HEIGHT = 52
+const TITLE_BAR_HEIGHT = 44
 
 const LIGHT_BACKGROUND = '#f5f6f8'
 const DARK_BACKGROUND = '#16181d'
@@ -10,6 +10,7 @@ const DARK_TITLE_BAR = '#101216'
 
 const LIGHT_SYMBOL = '#14161a'
 const DARK_SYMBOL = '#f2f4f7'
+const MODAL_SYMBOL = '#6b7280'
 
 type ChromeOptions = Pick<
   BrowserWindowConstructorOptions,
@@ -25,10 +26,10 @@ export function background(dark: boolean): string {
   return dark ? DARK_BACKGROUND : LIGHT_BACKGROUND
 }
 
-export function overlay(dark: boolean): TitleBarOverlay {
+export function overlay(dark: boolean, modal = false): TitleBarOverlay {
   return {
-    color: dark ? DARK_TITLE_BAR : LIGHT_TITLE_BAR,
-    symbolColor: dark ? DARK_SYMBOL : LIGHT_SYMBOL,
+    color: modal ? '#00000000' : dark ? DARK_TITLE_BAR : LIGHT_TITLE_BAR,
+    symbolColor: modal ? MODAL_SYMBOL : dark ? DARK_SYMBOL : LIGHT_SYMBOL,
     height: TITLE_BAR_HEIGHT,
   }
 }

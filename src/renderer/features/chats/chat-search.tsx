@@ -43,7 +43,7 @@ export function ChatSearch({ chats, now, onClose, onSelect }: Props): React.JSX.
   }
 
   return (
-    <Dialog label="Search chats" placement="center" onClose={onClose} frameClassName={styles.frame}>
+    <Dialog label="Search chats" onClose={onClose} frameClassName={styles.frame}>
       <DialogHead>
         <SearchInput
           value={draft}

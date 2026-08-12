@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import dialogStyles from '../../ui/dialog.module.css'
 import { CommandPalette } from './command-palette.js'
 
 afterEach(cleanup)
@@ -16,6 +17,15 @@ describe('CommandPalette', () => {
     expect(closeButton.textContent).toBe('Esc')
     fireEvent.click(closeButton)
     expect(close).toHaveBeenCalledOnce()
+  })
+
+  it('opens in the center of the window', () => {
+    render(<CommandPalette onClose={() => undefined} />)
+
+    const dialog = screen.getByRole('dialog', { name: 'Command palette' })
+    const center = dialogStyles.center
+    if (center === undefined) throw new Error('Missing center dialog style')
+    expect(dialog.parentElement?.classList.contains(center)).toBe(true)
   })
 
   it('contains focus and restores it after closing', () => {

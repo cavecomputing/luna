@@ -1,7 +1,7 @@
 import { app, type WebContents } from 'electron'
 import type { AppInfo } from '../../shared/ipc.js'
 import { err, ok, type Result } from '../../shared/result.js'
-import { closeCrashedWindow, recoverWindow } from '../window.js'
+import { closeCrashedWindow, recoverWindow, setModalChrome } from '../window.js'
 import { handle } from './bus.js'
 
 type Env = {
@@ -37,6 +37,16 @@ export function windowAction(
   return ok(undefined)
 }
 
+export function modalState(
+  sender: WebContents,
+  value: unknown,
+  apply: (sender: WebContents, open: boolean) => boolean,
+): Result<undefined> {
+  if (typeof value !== 'boolean') return err('app/invalid-modal-state', 'modal state must be boolean')
+  if (!apply(sender, value)) return err('app/not-main-window', 'modal state is owned by the main window')
+  return ok(undefined)
+}
+
 export function register(): void {
   handle('app:info', () =>
     appInfo({
@@ -49,5 +59,8 @@ export function register(): void {
   handle('app:recover', (event) => windowAction(event.sender, 'recover', recoverWindow))
   handle('app:close-window', (event) =>
     windowAction(event.sender, 'close', closeCrashedWindow),
+  )
+  handle('app:set-modal', (event, open) =>
+    modalState(event.sender, open, setModalChrome),
   )
 }

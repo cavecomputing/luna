@@ -34,6 +34,7 @@ let quitting = false
 const recoveryTargets = new WeakMap<BrowserWindow, string>()
 const recoveryWindows = new WeakSet<BrowserWindow>()
 const autoRecoveries = new WeakMap<BrowserWindow, number>()
+const modalWindows = new WeakSet<BrowserWindow>()
 
 export function create(): BrowserWindow {
   if (main !== undefined && !main.isDestroyed()) {
@@ -264,8 +265,18 @@ function bindShortcuts(win: BrowserWindow, kind: WindowKind): void {
 /** Keep Windows caption buttons legible when the persisted theme changes. */
 export function updateChrome(win: BrowserWindow): void {
   if (process.platform === 'win32') {
-    win.setTitleBarOverlay(overlay(nativeTheme.shouldUseDarkColors))
+    win.setTitleBarOverlay(overlay(nativeTheme.shouldUseDarkColors, modalWindows.has(win)))
   }
+}
+
+/** Lets the renderer's modal backdrop continue beneath Windows' native caption controls. */
+export function setModalChrome(sender: WebContents, open: boolean): boolean {
+  const win = BrowserWindow.fromWebContents(sender)
+  if (win === null || win !== main || win.isDestroyed()) return false
+  if (open) modalWindows.add(win)
+  else modalWindows.delete(win)
+  updateChrome(win)
+  return true
 }
 
 /** Deny by default. Real links open in the user's browser, not in the app. */

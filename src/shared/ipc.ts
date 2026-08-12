@@ -84,6 +84,7 @@ export type Invocations = {
   'app:info': { req: undefined; res: AppInfo }
   'app:recover': { req: undefined; res: undefined }
   'app:close-window': { req: undefined; res: undefined }
+  'app:set-modal': { req: boolean; res: undefined }
   'recovery:status': { req: undefined; res: DatabaseRecoveryStatus }
   'recovery:restore': { req: undefined; res: undefined }
   'recovery:retry': { req: undefined; res: undefined }
