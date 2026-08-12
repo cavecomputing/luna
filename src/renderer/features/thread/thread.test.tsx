@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from '@testing-library/react'
+import type { Ref } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Conversation, Message as Msg } from '../../../shared/types.js'
 import { Thread } from './thread.js'
 
 // The entrance itself is CSS; what Thread owns is which messages count as new.
 vi.mock('./message.js', () => ({
-  Message: ({ message, fresh }: { message: Msg; fresh: boolean }) => (
-    <article data-fresh={String(fresh)} data-testid={`message-${message.id}`} />
+  Message: ({ message, fresh, anchorRef }: { message: Msg; fresh: boolean; anchorRef?: Ref<HTMLElement> }) => (
+    <article ref={anchorRef} data-fresh={String(fresh)} data-testid={`message-${message.id}`} />
   ),
 }))
 
@@ -29,6 +30,34 @@ function chat(messages: Msg[]): Conversation {
 }
 
 describe('Thread', () => {
+  it('anchors a new response at its start without following streamed text', () => {
+    const scrollIntoView = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    })
+    const user = message('question')
+    const response: Msg = {
+      id: 'response',
+      role: 'assistant',
+      text: '',
+      status: 'streaming',
+      at: 2,
+      attachments: [],
+    }
+    const { rerender } = render(<Thread chat={chat([user])} />)
+    scrollIntoView.mockClear()
+
+    rerender(<Thread chat={chat([user, response])} />)
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' })
+
+    rerender(<Thread chat={chat([user, { ...response, text: 'First streamed words' }])} />)
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+  })
+
   it('offers a jump without forcing a reader away from history', () => {
     const scrollIntoView = vi.fn()
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {

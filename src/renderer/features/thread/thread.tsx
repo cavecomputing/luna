@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Conversation } from '../../../shared/types.js'
 import { Greeting } from './greeting.js'
 import { Message } from './message.js'
@@ -12,24 +12,31 @@ type Props = {
 export function Thread({ chat }: Props): React.JSX.Element {
   const scroll = useRef<HTMLDivElement>(null)
   const end = useRef<HTMLDivElement>(null)
+  const response = useRef<HTMLElement>(null)
   const [following, setFollowing] = useState(true)
   const count = chat?.messages.length ?? 0
   // Messages past this count arrived after mount, so they get an entrance.
   // History loaded from disk mounts with the thread and stays still.
   const [mountedCount] = useState(count)
-  const tail = chat?.messages.at(-1)?.text ?? ''
-  const scrollToEnd = useCallback(() => {
-    if (following) end.current?.scrollIntoView({ block: 'end' })
-  }, [following])
+  const streamingId = chat?.messages.findLast(
+    (message) => message.role === 'assistant' && message.status === 'streaming',
+  )?.id
+  const latest = chat?.messages.at(-1)
+  const activeAnchorId = latest?.role === 'assistant' ? latest.id : undefined
 
   useEffect(() => {
     end.current?.scrollIntoView({ block: 'end' })
   }, [chat?.id])
 
-  // Keep the newest message in view as the conversation grows.
+  // Put a new response at the top once, then leave scrolling to the reader.
   useEffect(() => {
-    scrollToEnd()
-  }, [count, tail, scrollToEnd])
+    if (streamingId === undefined) return
+    const scroller = scroll.current
+    if (scroller !== null) {
+      scroller.style.setProperty('--generation-height', `${String(scroller.clientHeight)}px`)
+    }
+    response.current?.scrollIntoView({ block: 'start' })
+  }, [streamingId])
 
   return (
     <div className={styles.thread}>
@@ -50,7 +57,8 @@ export function Thread({ chat }: Props): React.JSX.Element {
               message={message}
               conversationId={chat.id}
               fresh={index >= mountedCount}
-              onGrow={scrollToEnd}
+              {...(message.id === streamingId ? { anchorRef: response } : {})}
+              anchored={message.id === activeAnchorId}
             />
           ))}
 

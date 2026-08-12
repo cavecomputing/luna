@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import type { Ref } from 'react'
 import type { Message as Msg } from '../../../shared/types.js'
 import { clock } from '../../lib/time.js'
 import { Markdown } from './markdown.js'
@@ -12,11 +13,18 @@ type Props = {
   message: Msg
   /** Arrived after the thread mounted, so it plays an entrance. */
   fresh: boolean
-  onGrow: () => void
+  anchorRef?: Ref<HTMLElement>
+  anchored: boolean
   conversationId: string
 }
 
-export function Message({ message, fresh, onGrow, conversationId }: Props): React.JSX.Element {
+export function Message({
+  message,
+  fresh,
+  anchorRef,
+  anchored,
+  conversationId,
+}: Props): React.JSX.Element {
   const mine = message.role === 'user'
   const [incoming] = useState(() => fresh || (!mine && message.status === 'streaming'))
   const fallback =
@@ -33,13 +41,15 @@ export function Message({ message, fresh, onGrow, conversationId }: Props): Reac
     visibleText === '' &&
     visibleReasoning === ''
 
-  useEffect(() => {
-    onGrow()
-  }, [visibleText, visibleReasoning, onGrow])
-
   return (
     <article
-      className={cx(styles.row, mine ? styles.mine : styles.theirs, incoming && styles.incoming)}
+      ref={anchorRef}
+      className={cx(
+        styles.row,
+        mine ? styles.mine : styles.theirs,
+        incoming && styles.incoming,
+        anchored && styles.anchored,
+      )}
       onContextMenu={(event) => {
         event.preventDefault()
         void window.luna.messages.menu(message.id)

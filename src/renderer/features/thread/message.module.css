@@ -17,6 +17,10 @@
   padding-right: var(--s-6);
 }
 
+.anchored {
+  min-height: var(--generation-height, 0);
+}
+
 /* Wraps the shared Avatar so the row owns its placement and the component owns
    its appearance. The nudge lines her eyes up with the bubble's first line. */
 .avatar {
