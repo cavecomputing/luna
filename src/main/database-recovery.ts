@@ -27,9 +27,14 @@ export type StartResult =
 
 function configured(file: string): DatabaseSync {
   const db = new DatabaseSync(file)
-  db.exec('PRAGMA journal_mode = WAL')
-  db.exec('PRAGMA foreign_keys = ON')
-  return db
+  try {
+    db.exec('PRAGMA journal_mode = WAL')
+    db.exec('PRAGMA foreign_keys = ON')
+    return db
+  } catch (error) {
+    closeQuietly(db)
+    throw error
+  }
 }
 
 function closeQuietly(db: DatabaseSync | undefined): void {
