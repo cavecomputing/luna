@@ -372,9 +372,10 @@ Shared rules:
 
 ### Windows
 
-- Use Electron's Windows title-bar overlay so Luna's collapse and mode controls share the chrome
-  with native minimize, maximize, and close controls. Reserve the overlay-reported caption area;
-  the macOS `hiddenInset` and `trafficLightPosition` options remain conditional on `darwin`.
+- Use Electron's Windows title-bar overlay so Luna's collapse control shares the chrome with
+  native minimize, maximize, and close controls. Keep the Fast / Expert mode switch in the
+  composer's bottom toolbar beside Send. Reserve the overlay-reported caption area; the macOS
+  `hiddenInset` and `trafficLightPosition` options remain conditional on `darwin`.
 - Quit when the last window closes. Do not add a tray or background-app lifecycle unless the
   product requirements explicitly change.
 - Package x64 with NSIS. The unpacked app lives under `release/win-unpacked/`; `npm run dist`
