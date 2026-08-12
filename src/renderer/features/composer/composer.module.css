@@ -11,10 +11,10 @@
 
 .box {
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
   gap: var(--s-2);
-  min-height: 52px;
-  padding: var(--s-2);
+  min-height: 92px;
+  padding: var(--s-2) var(--s-2) var(--s-2) var(--s-3);
   border: 1px solid var(--line);
   border-radius: var(--r-xl);
   background: var(--surface);
@@ -27,7 +27,8 @@
 .tray {
   display: flex;
   gap: var(--s-2);
-  padding: 0 var(--s-1) var(--s-2);
+  width: 100%;
+  padding: 0 0 var(--s-1);
   overflow-x: auto;
 }
 
@@ -115,17 +116,31 @@
 }
 
 .input {
-  flex: 1;
+  width: 100%;
   min-width: 0;
   min-height: 34px;
   max-height: 160px;
   box-sizing: border-box;
-  padding: 6px var(--s-1);
+  padding: 6px var(--s-1) 2px;
   border: 0;
   background: none;
   resize: none;
   font-size: var(--t-base);
   line-height: 22px;
+}
+
+.tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  width: 100%;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
 }
 
 .input:focus {

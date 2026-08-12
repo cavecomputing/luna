@@ -3,6 +3,11 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Composer } from './composer.js'
 
+const models = {
+  fast: { providerId: 'provider-1', model: 'fast-model' },
+  expert: { providerId: 'provider-1', model: 'expert-model' },
+}
+
 function renderComposer(): HTMLTextAreaElement {
   Object.defineProperty(window, 'luna', {
     configurable: true,
@@ -21,6 +26,9 @@ function renderComposer(): HTMLTextAreaElement {
       onEnsureConversation={vi.fn(() => Promise.resolve({ id: 'chat-1' }))}
       onCancel={vi.fn()}
       streaming={false}
+      mode="fast"
+      models={models}
+      onModeChange={vi.fn()}
     />,
   )
   return screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Message Luna' })
@@ -44,5 +52,42 @@ describe('Composer focus', () => {
     fireEvent.focus(window)
 
     expect(document.activeElement).toBe(composer)
+  })
+})
+
+describe('Composer toolbar', () => {
+  afterEach(cleanup)
+
+  it('keeps response mode beside the send action', () => {
+    const onModeChange = vi.fn()
+    Object.defineProperty(window, 'luna', {
+      configurable: true,
+      value: {
+        attachments: {
+          list: () => Promise.resolve({ ok: true, value: [] }),
+          add: () => Promise.resolve({ ok: true, value: { accepted: [], rejected: [] } }),
+          remove: () => Promise.resolve({ ok: true, value: undefined }),
+        },
+        onAttachments: () => () => undefined,
+      },
+    })
+
+    render(
+      <Composer
+        onSend={vi.fn()}
+        onEnsureConversation={vi.fn(() => Promise.resolve({ id: 'chat-1' }))}
+        onCancel={vi.fn()}
+        streaming={false}
+        mode="fast"
+        models={models}
+        onModeChange={onModeChange}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Expert' }))
+
+    expect(onModeChange).toHaveBeenCalledWith('expert')
+    expect(screen.getByRole('button', { name: 'Add attachments' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeTruthy()
   })
 })

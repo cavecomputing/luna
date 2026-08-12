@@ -88,9 +88,13 @@ describe('ConversationSurface', () => {
       value: vi.fn(),
     })
     const existing = conversation('existing', 'Previous conversation content')
-    const { container, rerender } = render(<ConversationSurface chats={chats(existing)} />)
+    const models = {
+      fast: { providerId: 'provider-1', model: 'fast-model' },
+      expert: { providerId: 'provider-1', model: 'expert-model' },
+    }
+    const { container, rerender } = render(<ConversationSurface chats={chats(existing)} models={models} />)
 
-    rerender(<ConversationSurface chats={chats(conversation('new'))} />)
+    rerender(<ConversationSurface chats={chats(conversation('new'))} models={models} />)
 
     expect(screen.queryByText('Previous conversation content')).toBeNull()
     expect(screen.getByText('Hey there! I’m Luna.')).toBeTruthy()

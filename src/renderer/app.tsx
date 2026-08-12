@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { Sidebar } from './features/chats/sidebar.js'
 import { type Chats, useChats } from './features/chats/use-chats.js'
 import { Composer } from './features/composer/composer.js'
-import { ModeSwitch } from './features/mode/mode-switch.js'
 import { useModels } from './features/mode/use-models.js'
 import { Thread } from './features/thread/thread.js'
 import { IconButton } from './ui/icon-button.js'
@@ -25,10 +24,11 @@ import {
 
 type ConversationSurfaceProps = {
   chats: Chats
+  models: ReturnType<typeof useModels>
 }
 
 /** Remount conversation-local state without giving adjacent siblings duplicate keys. */
-export function ConversationSurface({ chats }: ConversationSurfaceProps): React.JSX.Element {
+export function ConversationSurface({ chats, models }: ConversationSurfaceProps): React.JSX.Element {
   const conversationKey = chats.openId ?? 'empty'
   return (
     <>
@@ -44,6 +44,9 @@ export function ConversationSurface({ chats }: ConversationSurfaceProps): React.
         initialDraft={chats.open?.draft}
         onDraftChange={chats.setDraft}
         notice={chats.error}
+        mode={chats.currentMode}
+        models={models}
+        onModeChange={chats.setMode}
       />
     </>
   )
@@ -253,12 +256,9 @@ export function App(): React.JSX.Element {
             <div className={cx(styles.noDrag, styles.sidebarToggle)}>{sidebarButton}</div>
           )}
 
-          <div className={styles.noDrag}>
-            <ModeSwitch value={chats.currentMode} models={models} onChange={chats.setMode} />
-          </div>
         </header>
 
-        <ConversationSurface chats={chats} />
+        <ConversationSurface chats={chats} models={models} />
       </main>
 
       {searchOpen && (
