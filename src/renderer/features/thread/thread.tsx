@@ -12,31 +12,22 @@ type Props = {
 export function Thread({ chat }: Props): React.JSX.Element {
   const scroll = useRef<HTMLDivElement>(null)
   const end = useRef<HTMLDivElement>(null)
-  const response = useRef<HTMLElement>(null)
   const [following, setFollowing] = useState(true)
   const count = chat?.messages.length ?? 0
   // Messages past this count arrived after mount, so they get an entrance.
   // History loaded from disk mounts with the thread and stays still.
   const [mountedCount] = useState(count)
-  const streamingId = chat?.messages.findLast(
-    (message) => message.role === 'assistant' && message.status === 'streaming',
-  )?.id
-  const latest = chat?.messages.at(-1)
-  const activeAnchorId = latest?.role === 'assistant' ? latest.id : undefined
 
   useEffect(() => {
     end.current?.scrollIntoView({ block: 'end' })
   }, [chat?.id])
 
-  // Put a new response at the top once, then leave scrolling to the reader.
+  // New messages never move the view — the reader scrolls, or clicks the
+  // jump button, which appears once new content lifts the bottom out of reach.
   useEffect(() => {
-    if (streamingId === undefined) return
-    const scroller = scroll.current
-    if (scroller !== null) {
-      scroller.style.setProperty('--generation-height', `${String(scroller.clientHeight)}px`)
-    }
-    response.current?.scrollIntoView({ block: 'start' })
-  }, [streamingId])
+    const element = scroll.current
+    if (element !== null) setFollowing(isNearBottom(element))
+  }, [count])
 
   return (
     <div className={styles.thread}>
@@ -57,8 +48,6 @@ export function Thread({ chat }: Props): React.JSX.Element {
               message={message}
               conversationId={chat.id}
               fresh={index >= mountedCount}
-              {...(message.id === streamingId ? { anchorRef: response } : {})}
-              anchored={message.id === activeAnchorId}
             />
           ))}
 

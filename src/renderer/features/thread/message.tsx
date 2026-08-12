@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import type { Ref } from 'react'
 import type { Message as Msg, MessageStatus } from '../../../shared/types.js'
 import { clock } from '../../lib/time.js'
 import { Markdown } from './markdown.js'
@@ -13,8 +12,6 @@ type Props = {
   message: Msg
   /** Arrived after the thread mounted, so it plays an entrance. */
   fresh: boolean
-  anchorRef?: Ref<HTMLElement>
-  anchored: boolean
   conversationId: string
 }
 
@@ -22,13 +19,7 @@ export function canRenderHtml(status: MessageStatus, visible: string, complete: 
   return status !== 'streaming' && visible === complete
 }
 
-export function Message({
-  message,
-  fresh,
-  anchorRef,
-  anchored,
-  conversationId,
-}: Props): React.JSX.Element {
+export function Message({ message, fresh, conversationId }: Props): React.JSX.Element {
   const mine = message.role === 'user'
   const [incoming] = useState(() => fresh || (!mine && message.status === 'streaming'))
   const fallback =
@@ -53,13 +44,7 @@ export function Message({
 
   return (
     <article
-      ref={anchorRef}
-      className={cx(
-        styles.row,
-        mine ? styles.mine : styles.theirs,
-        incoming && styles.incoming,
-        anchored && styles.anchored,
-      )}
+      className={cx(styles.row, mine ? styles.mine : styles.theirs, incoming && styles.incoming)}
       onContextMenu={(event) => {
         event.preventDefault()
         void window.luna.messages.menu(message.id)

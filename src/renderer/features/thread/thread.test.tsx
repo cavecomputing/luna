@@ -1,14 +1,13 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from '@testing-library/react'
-import type { Ref } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Conversation, Message as Msg } from '../../../shared/types.js'
 import { Thread } from './thread.js'
 
 // The entrance itself is CSS; what Thread owns is which messages count as new.
 vi.mock('./message.js', () => ({
-  Message: ({ message, fresh, anchorRef }: { message: Msg; fresh: boolean; anchorRef?: Ref<HTMLElement> }) => (
-    <article ref={anchorRef} data-fresh={String(fresh)} data-testid={`message-${message.id}`} />
+  Message: ({ message, fresh }: { message: Msg; fresh: boolean }) => (
+    <article data-fresh={String(fresh)} data-testid={`message-${message.id}`} />
   ),
 }))
 
@@ -30,7 +29,7 @@ function chat(messages: Msg[]): Conversation {
 }
 
 describe('Thread', () => {
-  it('anchors a new response at its start without following streamed text', () => {
+  it('never moves the view when a response starts streaming', () => {
     const scrollIntoView = vi.fn()
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
       configurable: true,
@@ -50,12 +49,29 @@ describe('Thread', () => {
 
     rerender(<Thread chat={chat([user, response])} />)
 
-    expect(scrollIntoView).toHaveBeenCalledTimes(1)
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' })
+    expect(scrollIntoView).not.toHaveBeenCalled()
 
     rerender(<Thread chat={chat([user, { ...response, text: 'First streamed words' }])} />)
 
-    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+    expect(scrollIntoView).not.toHaveBeenCalled()
+  })
+
+  it('shows the jump button when new content arrives away from the bottom', () => {
+    const { container, rerender, unmount } = render(<Thread chat={chat([message('one')])} />)
+    const scroll = container.firstElementChild?.firstElementChild
+    if (!(scroll instanceof HTMLElement)) throw new Error('missing thread scroller')
+    Object.defineProperties(scroll, {
+      scrollTop: { configurable: true, value: 0 },
+      clientHeight: { configurable: true, value: 500 },
+      scrollHeight: { configurable: true, value: 1400 },
+    })
+
+    rerender(<Thread chat={chat([message('one'), message('two')])} />)
+
+    expect(screen.getByRole('button', { name: 'Jump to latest ↓' })).toBeDefined()
+
+    // No auto-cleanup in this file; later tests query the same testids.
+    unmount()
   })
 
   it('offers a jump without forcing a reader away from history', () => {
