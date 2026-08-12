@@ -57,11 +57,11 @@ describe('read', () => {
 
   it('keeps a good field when a neighbouring row is corrupt', () => {
     const conn = db()
-    write(conn, { ...defaultPrefs, systemPrompt: 'keep me' })
+    write(conn, { ...defaultPrefs, stream: false })
     conn.exec(`UPDATE prefs SET value = '{{{' WHERE key = 'theme'`)
 
     const got = read(conn)
-    expect(got.systemPrompt).toBe('keep me')
+    expect(got.stream).toBe(false)
     expect(got.theme).toBe(defaultPrefs.theme)
   })
 })
@@ -74,7 +74,6 @@ describe('write', () => {
       defaultMode: 'expert' as const,
       autoTitle: false,
       stream: false,
-      systemPrompt: 'Be brief.',
       sidebarWidth: 320,
     }
 
@@ -93,11 +92,6 @@ describe('write', () => {
     })
   })
 
-  it('stores an empty string as an empty string, not as a missing row', () => {
-    const conn = db()
-    write(conn, { ...defaultPrefs, systemPrompt: '' })
-    expect(read(conn).systemPrompt).toBe('')
-  })
 })
 
 describe('adoptLegacy', () => {
@@ -118,7 +112,7 @@ describe('adoptLegacy', () => {
 
     const got = read(conn)
     expect(got.theme).toBe('dark')
-    expect(got.systemPrompt).toBe('from the file')
+    expect(got).not.toHaveProperty('systemPrompt')
     expect(await exists(file)).toBe(false)
   })
 

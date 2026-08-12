@@ -75,6 +75,16 @@ describe('SettingsApp', () => {
     expect(modelsPanel.scrollTop).toBe(0)
   })
 
+  it('does not offer a system prompt control', () => {
+    bridge()
+    render(<SettingsApp />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
+
+    expect(screen.queryByRole('textbox', { name: /system prompt/i })).toBeNull()
+    expect(screen.queryByText('System prompt')).toBeNull()
+  })
+
   it('saves the latest model draft when Settings closes before the debounce', async () => {
     let requestClose: (() => void) | undefined
     let finishSave: (() => void) | undefined

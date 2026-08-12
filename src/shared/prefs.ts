@@ -16,8 +16,6 @@ export type Prefs = {
   autoTitle: boolean
   /** Stream assistant replies token by token. */
   stream: boolean
-  /** Prepended to every conversation. Empty means none. */
-  systemPrompt: string
   /** Last expanded width of the conversation sidebar, in CSS pixels. */
   sidebarWidth: number
 }
@@ -27,7 +25,6 @@ export const defaultPrefs: Prefs = {
   defaultMode: 'fast',
   autoTitle: true,
   stream: true,
-  systemPrompt: '',
   sidebarWidth: 264,
 }
 
@@ -51,7 +48,6 @@ export function parsePrefs(input: unknown): Prefs {
     defaultMode: pick(raw.defaultMode, modes, defaultPrefs.defaultMode),
     autoTitle: bool(raw.autoTitle, defaultPrefs.autoTitle),
     stream: bool(raw.stream, defaultPrefs.stream),
-    systemPrompt: str(raw.systemPrompt, defaultPrefs.systemPrompt),
     sidebarWidth: range(
       raw.sidebarWidth,
       SIDEBAR_MIN_WIDTH,
@@ -67,10 +63,6 @@ function pick<T extends string>(value: unknown, allowed: T[], fallback: T): T {
 
 function bool(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback
-}
-
-function str(value: unknown, fallback: string): string {
-  return typeof value === 'string' ? value : fallback
 }
 
 function range(value: unknown, min: number, max: number, fallback: number): number {

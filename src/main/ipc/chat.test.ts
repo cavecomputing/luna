@@ -4,6 +4,7 @@ import type { Result } from '../../shared/result.js'
 import type { Conversation, Message, MessageStatus } from '../../shared/types.js'
 import type { ChatChunk, ChatCompletion, ChatRequest } from '../chat-api.js'
 import type { ProviderConfig } from '../providers.js'
+import { LUNA_SYSTEM_PROMPT } from '../system-prompt.js'
 import { ChatCoordinator } from './chat.js'
 
 const conversation: Conversation = {
@@ -31,7 +32,6 @@ const preferences: Prefs = {
   defaultMode: 'fast',
   autoTitle: false,
   stream: true,
-  systemPrompt: 'Be helpful.',
   sidebarWidth: 264,
 }
 
@@ -140,6 +140,11 @@ describe('ChatCoordinator', () => {
       'responses',
       'provider-1',
       undefined,
+    )
+    expect(d.stream).toHaveBeenCalledWith(
+      expect.objectContaining({ systemPrompt: LUNA_SYSTEM_PROMPT }),
+      expect.any(AbortSignal),
+      expect.any(Function),
     )
   })
 

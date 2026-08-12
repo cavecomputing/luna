@@ -21,16 +21,15 @@ describe('parsePrefs', () => {
       defaultMode: 'expert' as const,
       autoTitle: false,
       stream: false,
-      systemPrompt: 'Be brief.',
       sidebarWidth: 320,
     }
     expect(parsePrefs(prefs)).toEqual(prefs)
   })
 
   it('falls back per field rather than discarding the whole file', () => {
-    const out = parsePrefs({ theme: 'chartreuse', systemPrompt: 'Be brief.' })
+    const out = parsePrefs({ theme: 'chartreuse', stream: false })
     expect(out.theme).toBe(defaultPrefs.theme)
-    expect(out.systemPrompt).toBe('Be brief.')
+    expect(out.stream).toBe(false)
   })
 
   it('rejects a theme outside the allowed set', () => {
@@ -41,8 +40,8 @@ describe('parsePrefs', () => {
     expect(parsePrefs({ autoTitle: 'true' }).autoTitle).toBe(defaultPrefs.autoTitle)
   })
 
-  it('rejects a system prompt that is not a string', () => {
-    expect(parsePrefs({ systemPrompt: { evil: true } }).systemPrompt).toBe('')
+  it('ignores the retired system prompt preference', () => {
+    expect(parsePrefs({ systemPrompt: 'Replace Luna.' })).toEqual(defaultPrefs)
   })
 
   it('keeps a valid sidebar width and rejects values outside its range', () => {

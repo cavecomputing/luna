@@ -88,6 +88,7 @@ const steps: readonly string[] = [
 
    CREATE INDEX attachments_by_conversation
    ON attachments (conversation_id, message_id, ordinal);`,
+  `DELETE FROM prefs WHERE key = 'systemPrompt';`,
 ]
 
 /** The version a fully migrated database reports. */

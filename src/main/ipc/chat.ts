@@ -16,6 +16,7 @@ import * as prefs from '../prefs.js'
 import * as providers from '../providers.js'
 import type { ProviderConfig } from '../providers.js'
 import * as secrets from '../secrets.js'
+import { LUNA_SYSTEM_PROMPT } from '../system-prompt.js'
 import { broadcast, handle } from './bus.js'
 
 type Deps = {
@@ -298,7 +299,7 @@ export class ChatCoordinator {
       provider: selected.provider,
       ...(apiKey === undefined ? {} : { apiKey }),
       model: selected.model,
-      systemPrompt: this.d.prefs().systemPrompt,
+      systemPrompt: LUNA_SYSTEM_PROMPT,
       history,
     }
     await this.run(

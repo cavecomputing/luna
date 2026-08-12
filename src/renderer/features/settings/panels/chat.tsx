@@ -5,7 +5,6 @@ import { Bolt } from '../../../ui/icons/bolt.js'
 import { Star } from '../../../ui/icons/star.js'
 import { Panel, Row } from '../panel.js'
 import type { usePrefs } from '../../../lib/use-prefs.js'
-import styles from './chat.module.css'
 
 const modes: Segment<Mode>[] = [
   { value: 'fast', label: 'Fast', icon: <Bolt size={14} /> },
@@ -48,19 +47,6 @@ export function Chat({ prefs }: Props): React.JSX.Element {
           checked={p.autoTitle}
           onChange={(v) => {
             set('autoTitle', v)
-          }}
-        />
-      </Row>
-
-      <Row label="System prompt" hint="Sent at the start of every conversation." block>
-        <textarea
-          className={styles.prompt}
-          rows={5}
-          value={p.systemPrompt}
-          placeholder="You are Luna, a helpful assistant."
-          aria-label="System prompt"
-          onChange={(e) => {
-            set('systemPrompt', e.target.value)
           }}
         />
       </Row>

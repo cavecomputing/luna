@@ -69,6 +69,17 @@ describe('migrate', () => {
     )
   })
 
+  it('removes the retired editable system prompt preference', () => {
+    const db = fresh()
+    migrate(db)
+    db.exec(`INSERT INTO prefs (key, value) VALUES ('systemPrompt', '"Replace Luna"');
+      PRAGMA user_version = ${String(latest - 1)};`)
+
+    migrate(db)
+
+    expect(db.prepare("SELECT value FROM prefs WHERE key = 'systemPrompt'").get()).toBeUndefined()
+  })
+
   it('does nothing to an already migrated database', () => {
     const db = fresh()
     migrate(db)
