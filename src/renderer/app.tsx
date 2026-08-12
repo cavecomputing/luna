@@ -250,7 +250,7 @@ export function App(): React.JSX.Element {
             <div className={styles.trafficToggle}>{sidebarButton}</div>
           )}
           {!usesTrafficLights && (!placesToggleInSidebar || !open) && (
-            <div className={styles.noDrag}>{sidebarButton}</div>
+            <div className={cx(styles.noDrag, styles.sidebarToggle)}>{sidebarButton}</div>
           )}
 
           <div className={styles.noDrag}>

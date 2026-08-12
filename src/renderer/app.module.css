@@ -107,7 +107,11 @@
 
 /* Three 46px Windows caption buttons, plus breathing room before them. */
 .shell[data-platform='win32'] .top {
-  padding: 4px 150px 4px var(--s-5);
+  padding: 4px 150px 4px var(--s-3);
+}
+
+.shell[data-platform='win32'] .sidebarToggle {
+  transform: translateY(5px);
 }
 
 .shell[data-platform='darwin'] .top {

@@ -44,7 +44,7 @@
   align-items: center;
   justify-content: space-between;
   min-height: var(--titlebar);
-  padding: 5px var(--s-3);
+  padding: 10px var(--s-3) 0;
 }
 
 :global([data-platform='win32']) .collapse {
