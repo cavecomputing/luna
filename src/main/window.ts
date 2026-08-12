@@ -1,6 +1,5 @@
 import {
   BrowserWindow,
-  nativeTheme,
   screen,
   shell,
   type RenderProcessGoneDetails,
@@ -8,6 +7,7 @@ import {
 } from 'electron'
 import { join } from 'node:path'
 import * as db from './db.js'
+import * as prefs from './prefs.js'
 import { APP_ORIGIN } from './protocol.js'
 import { background, chromeOptions, overlay, settingsMinimum } from './window-chrome.js'
 import { canFrameLoad } from './navigation.js'
@@ -195,7 +195,7 @@ type Shape = {
 type WindowKind = 'main' | 'auxiliary'
 
 function build(shape: Shape, kind: WindowKind, stateName: windowState.WindowName): BrowserWindow {
-  const dark = nativeTheme.shouldUseDarkColors
+  const theme = prefs.currentTheme()
   const bounds = windowState.load(
     db.handle(),
     stateName,
@@ -206,8 +206,8 @@ function build(shape: Shape, kind: WindowKind, stateName: windowState.WindowName
     ...shape,
     ...bounds,
     show: false,
-    ...chromeOptions(process.platform, dark),
-    backgroundColor: background(dark),
+    ...chromeOptions(process.platform, theme),
+    backgroundColor: background(theme),
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.cjs'),
       contextIsolation: true,
@@ -265,7 +265,7 @@ function bindShortcuts(win: BrowserWindow, kind: WindowKind): void {
 /** Keep Windows caption buttons legible when the persisted theme changes. */
 export function updateChrome(win: BrowserWindow): void {
   if (process.platform === 'win32') {
-    win.setTitleBarOverlay(overlay(nativeTheme.shouldUseDarkColors, modalWindows.has(win)))
+    win.setTitleBarOverlay(overlay(prefs.currentTheme(), modalWindows.has(win)))
   }
 }
 

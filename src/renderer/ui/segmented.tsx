@@ -15,6 +15,8 @@ type Props<T extends string> = {
   segments: Segment<T>[]
   onChange: (value: T) => void
   size?: 'regular' | 'compact'
+  /** Fills its container, sharing the width equally between segments. */
+  grow?: boolean
 }
 
 /** Two-or-more exclusive choices in a pill. Generic so it isn't tied to Mode. */
@@ -24,10 +26,11 @@ export function Segmented<T extends string>({
   segments,
   onChange,
   size = 'regular',
+  grow = false,
 }: Props<T>): React.JSX.Element {
   return (
     <div
-      className={cx(styles.group, size === 'compact' && styles.compact)}
+      className={cx(styles.group, size === 'compact' && styles.compact, grow && styles.grow)}
       role="radiogroup"
       aria-label={label}
       data-size={size}

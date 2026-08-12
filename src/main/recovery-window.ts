@@ -1,6 +1,7 @@
-import { BrowserWindow, nativeTheme, type WebContents } from 'electron'
+import { BrowserWindow, type WebContents } from 'electron'
 import { join } from 'node:path'
 import { APP_ORIGIN } from './protocol.js'
+import { currentTheme } from './prefs.js'
 import { background, chromeOptions } from './window-chrome.js'
 
 let recovery: BrowserWindow | undefined
@@ -17,7 +18,9 @@ export function show(): BrowserWindow {
     return recovery
   }
 
-  const dark = nativeTheme.shouldUseDarkColors
+  // The database may be the reason this window exists, so the theme read
+  // must tolerate it being unavailable.
+  const theme = currentTheme()
   const win = new BrowserWindow({
     width: 620,
     height: 460,
@@ -25,8 +28,8 @@ export function show(): BrowserWindow {
     minHeight: 400,
     show: false,
     title: 'Luna Recovery',
-    ...chromeOptions(process.platform, dark),
-    backgroundColor: background(dark),
+    ...chromeOptions(process.platform, theme),
+    backgroundColor: background(theme),
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.cjs'),
       contextIsolation: true,

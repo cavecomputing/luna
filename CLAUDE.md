@@ -28,7 +28,8 @@ Deliberately not built: suggestion chips under assistant messages. Removed once 
 model config took shape — don't reintroduce without asking.
 
 Identity: blue `#2563EB` accent, white surfaces, rounded cards, generous whitespace, a fox
-mascot. Light and dark both ship. Ask before adding a surface that isn't on that list.
+mascot. Four named themes ship: Luna Light (the default), Luna Dark, Gruvbox Light, and
+Gruvbox Dark. Ask before adding a surface that isn't on that list.
 
 Settled behaviour, decided — don't relitigate these while building:
 
@@ -194,10 +195,10 @@ This is built. `prefs:changed` is declared in `shared/ipc.ts`, `broadcast()` in 
 sends it to every window, and `lib/use-prefs.ts` subscribes — so both windows follow a change
 made in either. Copy that path for the next thing that needs it; don't invent a second one.
 
-Note that theme is not evidence the path works. `nativeTheme.themeSource` flips Chromium's
-`prefers-color-scheme` for every window at once and the CSS follows without our state being
-involved, so theme would appear to work even with the broadcast removed. Test a pref that goes
-through React — `defaultMode` is the one currently wired end to end.
+Note that theme is only partial evidence the path works. The Luna pair rides
+`nativeTheme.themeSource` → `prefers-color-scheme` and needs no broadcast; the Gruvbox pair
+does travel `prefs:changed` into a `data-theme` attribute. Test a pref that goes through
+React state — `defaultMode` is the one currently wired end to end.
 
 ## Naming
 
@@ -303,9 +304,11 @@ it also holds the `window.luna` bridge.
 - `ui/` is dumb and reusable and holds no feature knowledge. `features/<name>/` owns its own
   components, hooks and state. State shared by two features is lifted to `app.tsx`, not put
   in a store.
-- Dark tokens live in one `@media (prefers-color-scheme: dark)` block in `tokens.css`. Main
-  applies the stored preference and defaults it to light, so keep that block correct. Don't
-  branch on theme in JS.
+- Each theme's colour tokens live in one block in `tokens.css`: Luna Light in `:root`, Luna
+  Dark in the `@media (prefers-color-scheme: dark)` block (main drives that media query
+  through `nativeTheme`, so Luna themes paint right on the first frame), and every other
+  named theme in a `:root[data-theme='…']` block, pinned by `lib/theme.ts` from the prefs
+  broadcast. Components reference tokens and never branch on theme in JS.
 - Never call `Date.now()` during render — it is impure and freezes relative timestamps at the
   last re-render. Use `useNow()`.
 - On macOS, any header that can sit at the window's left edge must clear the traffic lights
@@ -353,8 +356,9 @@ it also holds the `window.luna` bridge.
 
 Shared rules:
 
-- **Light is the default.** Main applies the persisted light / dark / system preference through
-  `nativeTheme`; do not make platform-specific theme branches in the renderer.
+- **Luna Light is the default.** Main maps the persisted named theme to `nativeTheme`
+  light/dark and colors native window chrome per theme; the renderer picks up named themes
+  via `data-theme`. Do not make platform-specific theme branches in the renderer.
 - Use the cross-platform font stack in `tokens.css`; platform-native fonts should win naturally.
 - Persist and restore window bounds across launches on both operating systems.
 

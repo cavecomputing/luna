@@ -17,13 +17,25 @@ describe('parsePrefs', () => {
 
   it('keeps every valid field', () => {
     const prefs = {
-      theme: 'dark' as const,
+      theme: 'luna-dark' as const,
       defaultMode: 'expert' as const,
       autoTitle: false,
       stream: false,
       sidebarWidth: 320,
     }
     expect(parsePrefs(prefs)).toEqual(prefs)
+  })
+
+  it('accepts every named theme', () => {
+    for (const theme of ['luna-light', 'luna-dark', 'gruvbox-light', 'gruvbox-dark'] as const) {
+      expect(parsePrefs({ theme }).theme).toBe(theme)
+    }
+  })
+
+  it('maps themes written by older builds onto their named equivalents', () => {
+    expect(parsePrefs({ theme: 'light' }).theme).toBe('luna-light')
+    expect(parsePrefs({ theme: 'dark' }).theme).toBe('luna-dark')
+    expect(parsePrefs({ theme: 'system' }).theme).toBe('luna-light')
   })
 
   it('falls back per field rather than discarding the whole file', () => {
@@ -33,7 +45,7 @@ describe('parsePrefs', () => {
   })
 
   it('rejects a theme outside the allowed set', () => {
-    expect(parsePrefs({ theme: 'solarized' }).theme).toBe('light')
+    expect(parsePrefs({ theme: 'solarized' }).theme).toBe('luna-light')
   })
 
   it('rejects a boolean given as a string', () => {
@@ -55,11 +67,11 @@ describe('parsePrefs', () => {
   })
 
   it('never carries a secret-looking field through', () => {
-    const out = parsePrefs({ theme: 'dark', apiKey: 'test-abc', token: 'test-xyz' })
+    const out = parsePrefs({ theme: 'gruvbox-dark', apiKey: 'test-abc', token: 'test-xyz' })
     expect(Object.keys(out)).toEqual(Object.keys(defaultPrefs))
   })
 
-  it('defaults to light, matching the shipped appearance', () => {
-    expect(defaultPrefs.theme).toBe('light')
+  it('defaults to Luna Light, matching the shipped appearance', () => {
+    expect(defaultPrefs.theme).toBe('luna-light')
   })
 })

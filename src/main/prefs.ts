@@ -11,7 +11,7 @@ import { app, nativeTheme } from 'electron'
 import { readFile, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
-import { parsePrefs, type Prefs } from '../shared/prefs.js'
+import { parsePrefs, type Prefs, type Theme } from '../shared/prefs.js'
 import * as db from './db.js'
 import { object } from './parse.js'
 
@@ -115,7 +115,27 @@ export function save(prefs: Prefs): Prefs {
   return write(db.handle(), prefs)
 }
 
+/** themeSource knows only light/dark; named themes map to their brightness. */
+const themeSource: Record<Theme, 'light' | 'dark'> = {
+  'luna-light': 'light',
+  'luna-dark': 'dark',
+  'gruvbox-light': 'light',
+  'gruvbox-dark': 'dark',
+}
+
 /** Push the stored theme into Chromium so prefers-color-scheme follows it. */
 export function applyTheme(prefs: Prefs): void {
-  nativeTheme.themeSource = prefs.theme
+  nativeTheme.themeSource = themeSource[prefs.theme]
+}
+
+/**
+ * The stored theme for chrome decisions, or a brightness-matched Luna theme
+ * when the database can't answer — the recovery window exists precisely then.
+ */
+export function currentTheme(): Theme {
+  try {
+    return load().theme
+  } catch {
+    return nativeTheme.shouldUseDarkColors ? 'luna-dark' : 'luna-light'
+  }
 }

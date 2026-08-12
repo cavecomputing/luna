@@ -1,6 +1,13 @@
 /**
  * Every colour, radius and spacing step in Luna. Components reference these
- * and never hardcode a hex value, so dark mode is one block, not a hunt.
+ * and never hardcode a hex value, so a theme is one block, not a hunt.
+ *
+ * Four named themes (see shared/prefs.ts). `luna-light` is the default and
+ * lives in :root; `luna-dark` rides prefers-color-scheme, which main drives
+ * through nativeTheme.themeSource. The Gruvbox pair can't ride the media
+ * query, so lib/theme.ts pins the current theme on <html data-theme> and the
+ * attribute selectors below win on specificity. Gruvbox values follow the
+ * canonical palette (morhetz/gruvbox).
  */
 
 :root {
@@ -113,4 +120,75 @@
     --code-title: #d2a8ff;
     --code-attr: #79c0ff;
   }
+}
+
+:root[data-theme='gruvbox-light'] {
+  --accent: #076678;
+  --accent-hover: #458588;
+  --accent-soft: #d5c4a1;
+  --accent-on: #fbf1c7;
+
+  --bg: #f2e5bc;
+  --surface: #fbf1c7;
+  --surface-sunken: #f2e5bc;
+  --surface-hover: #ebdbb2;
+
+  --text: #3c3836;
+  --text-muted: #7c6f64;
+  --text-faint: #a89984;
+  --danger: #9d0006;
+
+  --line: #d5c4a1;
+  --line-soft: #ebdbb2;
+  --shadow-card: 0 1px 2px rgb(80 60 20 / 8%), 0 8px 24px rgb(80 60 20 / 8%);
+  --shadow-pop: 0 2px 6px rgb(80 60 20 / 10%), 0 12px 32px rgb(80 60 20 / 12%);
+
+  --bubble-user: #076678;
+  --bubble-user-text: #fbf1c7;
+  --bubble-bot: #fbf1c7;
+
+  --backdrop: rgb(60 50 30 / 20%);
+
+  --code-keyword: #9d0006;
+  --code-string: #79740e;
+  --code-number: #8f3f71;
+  --code-comment: #928374;
+  --code-title: #79740e;
+  --code-attr: #427b58;
+}
+
+:root[data-theme='gruvbox-dark'] {
+  --accent: #83a598;
+  /* The palette has no brighter blue; hover is bright_blue lifted toward white. */
+  --accent-hover: #9ab3a8;
+  --accent-soft: #504945;
+  --accent-on: #282828;
+
+  --bg: #282828;
+  --surface: #32302f;
+  --surface-sunken: #1d2021;
+  --surface-hover: #3c3836;
+
+  --text: #ebdbb2;
+  --text-muted: #bdae93;
+  --text-faint: #928374;
+  --danger: #fb4934;
+
+  --line: #504945;
+  --line-soft: #3c3836;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 30%), 0 8px 24px rgb(0 0 0 / 24%);
+  --shadow-pop: 0 2px 6px rgb(0 0 0 / 36%), 0 12px 32px rgb(0 0 0 / 32%);
+
+  --bubble-user: #458588;
+  --bubble-user-text: #fbf1c7;
+  --bubble-bot: #32302f;
+
+  --backdrop: rgb(0 0 0 / 44%);
+
+  --code-keyword: #fb4934;
+  --code-string: #b8bb26;
+  --code-number: #d3869b;
+  --code-comment: #928374;
+  --code-title: #b8bb26;
+  --code-attr: #8ec07c;
 }

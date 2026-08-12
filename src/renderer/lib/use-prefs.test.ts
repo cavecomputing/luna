@@ -22,7 +22,7 @@ function bridge(reads: Prefs[]): { get: ReturnType<typeof vi.fn> } {
 
 describe('usePrefs', () => {
   it('re-reads main after a failed write instead of restoring a stale value', async () => {
-    const authoritative = { ...defaultPrefs, theme: 'dark' } satisfies Prefs
+    const authoritative = { ...defaultPrefs, theme: 'luna-dark' } satisfies Prefs
     const { get } = bridge([defaultPrefs, authoritative])
     const { result } = renderHook(() => usePrefs())
 

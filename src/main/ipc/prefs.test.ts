@@ -17,8 +17,8 @@ function deps() {
 
 describe('clean', () => {
   it('accepts a well-formed payload', () => {
-    const r = clean({ ...defaultPrefs, theme: 'dark' })
-    expect(r.ok && r.value.theme).toBe('dark')
+    const r = clean({ ...defaultPrefs, theme: 'gruvbox-dark' })
+    expect(r.ok && r.value.theme).toBe('gruvbox-dark')
   })
 
   it('replaces a bad field with its default rather than failing', () => {
@@ -32,7 +32,7 @@ describe('clean', () => {
   })
 
   it('strips fields the renderer invented', () => {
-    const r = clean({ theme: 'dark', apiKey: 'test-injected' })
+    const r = clean({ theme: 'luna-dark', apiKey: 'test-injected' })
     expect(r.ok && Object.keys(r.value)).toEqual(Object.keys(defaultPrefs))
   })
 
@@ -45,8 +45,8 @@ describe('clean', () => {
 describe('applySet', () => {
   it('stores the cleaned payload', () => {
     const d = deps()
-    applySet({ ...defaultPrefs, theme: 'dark' }, d)
-    expect(d.stored).toEqual([{ ...defaultPrefs, theme: 'dark' }])
+    applySet({ ...defaultPrefs, theme: 'luna-dark' }, d)
+    expect(d.stored).toEqual([{ ...defaultPrefs, theme: 'luna-dark' }])
   })
 
   it('announces the change so every window can follow it', () => {

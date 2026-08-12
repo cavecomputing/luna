@@ -70,7 +70,7 @@ describe('write', () => {
   it('round-trips every field', () => {
     const conn = db()
     const prefs = {
-      theme: 'dark' as const,
+      theme: 'gruvbox-dark' as const,
       defaultMode: 'expert' as const,
       autoTitle: false,
       stream: false,
@@ -83,15 +83,20 @@ describe('write', () => {
 
   it('replaces an earlier value rather than adding a second row', () => {
     const conn = db()
-    write(conn, { ...defaultPrefs, theme: 'dark' })
-    write(conn, { ...defaultPrefs, theme: 'system' })
+    write(conn, { ...defaultPrefs, theme: 'luna-dark' })
+    write(conn, { ...defaultPrefs, theme: 'gruvbox-dark' })
 
-    expect(read(conn).theme).toBe('system')
+    expect(read(conn).theme).toBe('gruvbox-dark')
     expect(conn.prepare('SELECT count(*) AS n FROM prefs').get()).toEqual({
       n: Object.keys(defaultPrefs).length,
     })
   })
 
+  it('reads a theme written by an older build as its named equivalent', () => {
+    const conn = db()
+    conn.exec(`INSERT INTO prefs (key, value) VALUES ('theme', '"dark"')`)
+    expect(read(conn).theme).toBe('luna-dark')
+  })
 })
 
 describe('adoptLegacy', () => {
@@ -111,7 +116,7 @@ describe('adoptLegacy', () => {
     expect(await adoptLegacy(conn, file)).toBe(true)
 
     const got = read(conn)
-    expect(got.theme).toBe('dark')
+    expect(got.theme).toBe('luna-dark')
     expect(got).not.toHaveProperty('systemPrompt')
     expect(await exists(file)).toBe(false)
   })
@@ -135,10 +140,10 @@ describe('adoptLegacy', () => {
     await writeFile(file, JSON.stringify({ theme: 'dark' }))
 
     const conn = db()
-    write(conn, { ...defaultPrefs, theme: 'system' })
+    write(conn, { ...defaultPrefs, theme: 'gruvbox-light' })
 
     expect(await adoptLegacy(conn, file)).toBe(false)
-    expect(read(conn).theme).toBe('system')
+    expect(read(conn).theme).toBe('gruvbox-light')
     expect(await exists(file)).toBe(false)
   })
 

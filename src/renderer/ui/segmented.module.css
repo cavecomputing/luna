@@ -26,6 +26,15 @@
     transform var(--fast) var(--ease);
 }
 
+.grow {
+  display: flex;
+}
+
+.grow .seg {
+  flex: 1;
+  justify-content: center;
+}
+
 .compact {
   padding: 2px;
 }

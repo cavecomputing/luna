@@ -28,7 +28,7 @@ const provider: ProviderConfig = {
 }
 
 const preferences: Prefs = {
-  theme: 'light',
+  theme: 'luna-light',
   defaultMode: 'fast',
   autoTitle: false,
   stream: true,

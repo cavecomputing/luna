@@ -6,7 +6,7 @@
  * and are not part of prefs, which is a set of rows in the SQLite database.
  */
 
-export type Theme = 'light' | 'dark' | 'system'
+export type Theme = 'luna-light' | 'luna-dark' | 'gruvbox-light' | 'gruvbox-dark'
 
 export type Prefs = {
   theme: Theme
@@ -21,7 +21,7 @@ export type Prefs = {
 }
 
 export const defaultPrefs: Prefs = {
-  theme: 'light',
+  theme: 'luna-light',
   defaultMode: 'fast',
   autoTitle: true,
   stream: true,
@@ -32,8 +32,19 @@ export const defaultPrefs: Prefs = {
 export const SIDEBAR_MIN_WIDTH = 200
 export const SIDEBAR_MAX_WIDTH = 420
 
-const themes: Theme[] = ['light', 'dark', 'system']
+const themes: Theme[] = ['luna-light', 'luna-dark', 'gruvbox-light', 'gruvbox-dark']
 const modes: Prefs['defaultMode'][] = ['fast', 'expert']
+
+/**
+ * Theme names from before themes had families. Rows written by an older build
+ * (or a legacy prefs.json folded in by adoptLegacy) still land on their
+ * named equivalent; 'system' is gone, so it settles on the default.
+ */
+const legacyThemes = new Map<string, Theme>([
+  ['light', 'luna-light'],
+  ['dark', 'luna-dark'],
+  ['system', 'luna-light'],
+])
 
 /**
  * Never casts. A corrupt or hand-edited file falls back field by field, so one
@@ -44,7 +55,7 @@ export function parsePrefs(input: unknown): Prefs {
   const raw: Record<string, unknown> = { ...input }
 
   return {
-    theme: pick(raw.theme, themes, defaultPrefs.theme),
+    theme: theme(raw.theme),
     defaultMode: pick(raw.defaultMode, modes, defaultPrefs.defaultMode),
     autoTitle: bool(raw.autoTitle, defaultPrefs.autoTitle),
     stream: bool(raw.stream, defaultPrefs.stream),
@@ -59,6 +70,14 @@ export function parsePrefs(input: unknown): Prefs {
 
 function pick<T extends string>(value: unknown, allowed: T[], fallback: T): T {
   return allowed.find((a) => a === value) ?? fallback
+}
+
+function theme(value: unknown): Theme {
+  if (typeof value === 'string') {
+    const mapped = legacyThemes.get(value)
+    if (mapped !== undefined) return mapped
+  }
+  return pick(value, themes, defaultPrefs.theme)
 }
 
 function bool(value: unknown, fallback: boolean): boolean {
