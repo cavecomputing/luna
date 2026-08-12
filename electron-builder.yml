@@ -29,7 +29,7 @@ mac:
   notarize: false
 
 win:
-  icon: assets/LunaAppIcon/icon.png
+  icon: build/icon.ico
   target:
     - target: nsis
       arch:
