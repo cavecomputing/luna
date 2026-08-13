@@ -99,6 +99,10 @@ const api = {
     open: () => invoke('settings:open', undefined),
     close: () => invoke('settings:close', undefined),
   },
+  privacy: {
+    exportAll: () => invoke('privacy:export', undefined),
+    deleteAll: () => invoke('privacy:delete-all', undefined),
+  },
   onNewChat: (fn: () => void) => subscribe('shortcut:new-chat', fn),
   onCommandPalette: (fn: () => void) => subscribe('shortcut:command-palette', fn),
   onToggleSidebar: (fn: () => void) => subscribe('shortcut:toggle-sidebar', fn),

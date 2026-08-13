@@ -49,6 +49,17 @@ describe('PreviewCache', () => {
     expect(cache.read('two', 1)).toBeUndefined()
     expect(cache.read('other', 1)).toBe('other')
   })
+
+  it('clears previews for every owner', () => {
+    const cache = new PreviewCache()
+    cache.create(1, 'one', 0, 'one')
+    cache.create(2, 'two', 0, 'two')
+
+    cache.clearAll()
+
+    expect(cache.read('one', 1)).toBeUndefined()
+    expect(cache.read('two', 1)).toBeUndefined()
+  })
 })
 
 describe('previewDocument', () => {

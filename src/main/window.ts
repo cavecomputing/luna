@@ -224,7 +224,10 @@ function build(shape: Shape, kind: WindowKind, stateName: windowState.WindowName
   })
 
   win.on('close', () => {
-    windowState.save(db.handle(), stateName, win.getNormalBounds())
+    // A throw in a synchronous Electron listener is caught by nothing, and the
+    // connection is briefly absent while delete-all swaps the database. Losing
+    // one window's bounds to a reset that clears window_state anyway is fine.
+    if (db.ready()) windowState.save(db.handle(), stateName, win.getNormalBounds())
   })
 
   lockNavigation(win)

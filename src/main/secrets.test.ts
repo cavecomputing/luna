@@ -1,8 +1,8 @@
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { clearAt, hasAt, readAt, writeAt } from './secrets.js'
+import { clearAllAt, clearAt, hasAt, readAt, writeAt } from './secrets.js'
 
 const dirs: string[] = []
 
@@ -57,5 +57,17 @@ describe('provider secrets', () => {
   it('rejects provider ids that could escape the secret directory', async () => {
     const dir = await temp()
     await expect(writeAt(dir, '../escape', 'test-secret', cipher)).rejects.toThrow(/invalid/)
+  })
+
+  it('removes every stored key at once, orphans included', async () => {
+    const dir = await temp()
+    await writeAt(dir, 'example', 'test-secret', cipher)
+    await writeAt(dir, 'second', 'test-secret', cipher)
+    // An orphan a per-provider loop would miss, because no provider names it.
+    await writeFile(join(dir, 'forgotten.key'), 'test-leftover')
+
+    await clearAllAt(dir)
+
+    await expect(stat(dir)).rejects.toThrow()
   })
 })

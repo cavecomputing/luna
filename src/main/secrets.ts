@@ -73,6 +73,20 @@ export async function clearAt(dir: string, id: string, fs: Files = files): Promi
   await fs.rm(file(dir, id), { force: true })
 }
 
+/**
+ * Removes every stored key at once. The whole directory goes, rather than a
+ * file per known provider: that also takes an orphan left by an interrupted
+ * delete, which a loop over current provider ids would miss. `writeAt` recreates
+ * the directory on the next write.
+ *
+ * Unlike every other function here this does not check `available()`. Removing
+ * a file decrypts nothing, and a user whose secure storage is broken is exactly
+ * the one who most needs their keys gone.
+ */
+export async function clearAllAt(dir: string, fs: Files = files): Promise<void> {
+  await fs.rm(dir, { recursive: true, force: true })
+}
+
 export function directory(): string {
   return join(app.getPath('userData'), 'provider-keys')
 }
@@ -91,4 +105,8 @@ export function write(id: string, value: string): Promise<void> {
 
 export function clear(id: string): Promise<void> {
   return clearAt(directory(), id)
+}
+
+export function clearAll(): Promise<void> {
+  return clearAllAt(directory())
 }

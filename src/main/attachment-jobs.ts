@@ -171,8 +171,10 @@ try {
 }
 `
 
+const pending = new Set<Promise<JobResult>>()
+
 function run(job: Job): Promise<JobResult> {
-  return new Promise((resolve) => {
+  const task = new Promise<JobResult>((resolve) => {
     const worker = new Worker(source, { eval: true, workerData: job })
     let settled = false
     worker.once('message', (value: unknown) => {
@@ -191,6 +193,14 @@ function run(job: Job): Promise<JobResult> {
       if (!settled) resolve({ ok: false })
     })
   })
+  pending.add(task)
+  void task.finally(() => pending.delete(task))
+  return task
+}
+
+/** Resolves after every attachment worker already in flight has closed its database. */
+export async function settle(): Promise<void> {
+  while (pending.size > 0) await Promise.all([...pending])
 }
 
 function meta(input: unknown): AttachmentMeta | undefined {

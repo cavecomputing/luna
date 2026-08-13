@@ -11,7 +11,9 @@ import { DatabaseSync } from 'node:sqlite'
 import type { DatabaseRecoveryStatus } from '../shared/ipc.js'
 import { migrate } from './migrations.js'
 import {
+  closeQuietly,
   createSnapshot,
+  eraseDatabase,
   installFresh,
   installRecovery,
   snapshotDue,
@@ -66,8 +68,45 @@ export function handle(): DatabaseSync {
   return conn
 }
 
+/** Whether the connection is usable. Callers outside a request path check this. */
+export function ready(): boolean {
+  return conn !== undefined
+}
+
 export function recoveryStatus(): DatabaseRecoveryStatus | undefined {
   return recovery?.status
+}
+
+/**
+ * Replaces the database with an empty one and destroys the old files. Unlike
+ * `restore` and `startFresh`, which run from the recovery window, this runs
+ * from a live app — so it needs a connection rather than a recovery state.
+ *
+ * Two things hold whether it succeeds or throws: `conn` is always assigned
+ * again, so `handle()` is never left permanently broken, and the hourly backup
+ * timer is always running. `startBackups` returns early on a live timer, so
+ * clearing it here is what makes that restart real.
+ *
+ * A read arriving during the swap sees `handle()` throw, which `bus.handle`
+ * turns into an ipc/handler-threw error for that one call. The window is a few
+ * milliseconds and the broadcast that follows repairs the renderer, so there is
+ * deliberately no queue or resetting sentinel guarding it.
+ */
+export async function eraseAll(): Promise<void> {
+  if (conn === undefined) throw new Error('database is not initialized')
+  if (timer !== undefined) clearTimeout(timer)
+  timer = undefined
+  closeQuietly(conn)
+  conn = undefined
+
+  try {
+    conn = await eraseDatabase(paths())
+  } catch (error) {
+    conn = open(paths().active)
+    throw error
+  } finally {
+    startBackups()
+  }
 }
 
 export async function restore(now = Date.now()): Promise<void> {

@@ -1,11 +1,12 @@
 import { copyFile, mkdir, mkdtemp, readdir, rename, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { latest, migrate } from './migrations.js'
 import {
   createSnapshot,
+  eraseDatabase,
   installFresh,
   installRecovery,
   resumeInstall,
@@ -217,5 +218,105 @@ describe('database recovery', () => {
     const installed = new DatabaseSync(paths.active, { readOnly: true })
     expect(installed.prepare('PRAGMA user_version').get()).toEqual({ user_version: latest })
     installed.close()
+  })
+})
+
+describe('eraseDatabase', () => {
+  it('does not leave an installing file for the next launch to archive', async () => {
+    const paths = await temporary()
+    const db = open(paths.active)
+    db.close()
+
+    const replacement = await eraseDatabase(paths)
+    replacement.close()
+
+    // The repair path preserves the old bundle under recovery/. A privacy
+    // delete must never hand it back, so nothing may be left to resume.
+    expect(await resumeInstall(paths, Date.now())).toBe(false)
+    expect(await names(paths.recovery)).toEqual([])
+  })
+
+  it('replaces the database with an empty migrated one', async () => {
+    const paths = await temporary()
+    const db = open(paths.active)
+    db.exec(
+      `INSERT INTO conversations (id, title, icon, mode, pinned, created_at, updated_at)
+       VALUES ('chat-1', 'Synthetic', 'spark', 'fast', 0, 1, 1)`,
+    )
+    db.exec(`INSERT INTO prefs (key, value) VALUES ('theme', '"gruvbox-dark"')`)
+    db.close()
+
+    const replacement = await eraseDatabase(paths)
+
+    expect(replacement.prepare('PRAGMA user_version').get()).toEqual({ user_version: latest })
+    expect(replacement.prepare('SELECT count(*) AS n FROM conversations').get()).toEqual({ n: 0 })
+    expect(replacement.prepare('SELECT count(*) AS n FROM prefs').get()).toEqual({ n: 0 })
+    // A fresh install seeds these, so a reset lands on the same state.
+    expect(replacement.prepare('SELECT count(*) AS n FROM model_slots').get()).toEqual({ n: 2 })
+    expect(replacement.prepare('SELECT count(*) AS n FROM providers').get()).toEqual({ n: 1 })
+    replacement.close()
+  })
+
+  it('removes every snapshot, including a partial one', async () => {
+    const paths = await temporary()
+    const db = open(paths.active)
+    await createSnapshot(db, paths, Date.now())
+    db.close()
+    await writeFile(join(paths.backups, '.snapshot.pending'), 'partial conversation data')
+
+    const replacement = await eraseDatabase(paths)
+    replacement.close()
+
+    expect(await names(paths.backups)).toEqual([])
+  })
+
+  it('removes preserved archives left by an earlier recovery', async () => {
+    const paths = await temporary()
+    const db = open(paths.active)
+    db.close()
+    await mkdir(join(paths.recovery, 'preserved-earlier'), { recursive: true })
+    await writeFile(join(paths.recovery, 'preserved-earlier', 'luna.db'), 'old conversations')
+
+    const replacement = await eraseDatabase(paths)
+    replacement.close()
+
+    expect(await names(paths.recovery)).toEqual([])
+  })
+
+  it('leaves no write-ahead log or shared memory file behind', async () => {
+    const paths = await temporary()
+    const db = open(paths.active)
+    db.exec(
+      `INSERT INTO conversations (id, title, icon, mode, pinned, created_at, updated_at)
+       VALUES ('chat-1', 'Synthetic', 'spark', 'fast', 0, 1, 1)`,
+    )
+    db.close()
+
+    const replacement = await eraseDatabase(paths)
+    replacement.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+    replacement.close()
+
+    const remaining = await names(dirname(paths.active))
+    expect(remaining.filter((name) => name.startsWith('luna.db-'))).toEqual([])
+  })
+
+  it('leaves the database intact when the replacement cannot be built', async () => {
+    const paths = await temporary()
+    const db = open(paths.active)
+    db.exec(
+      `INSERT INTO conversations (id, title, icon, mode, pinned, created_at, updated_at)
+       VALUES ('chat-1', 'Synthetic', 'spark', 'fast', 0, 1, 1)`,
+    )
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+    db.close()
+    // A directory where the candidate file has to go: prepareCandidate fails.
+    await mkdir(`${paths.active}.candidate`, { recursive: true })
+    await writeFile(join(`${paths.active}.candidate`, 'blocker'), 'x')
+
+    await expect(eraseDatabase(paths)).rejects.toThrow()
+
+    const survivor = new DatabaseSync(paths.active, { readOnly: true })
+    expect(survivor.prepare('SELECT count(*) AS n FROM conversations').get()).toEqual({ n: 1 })
+    survivor.close()
   })
 })

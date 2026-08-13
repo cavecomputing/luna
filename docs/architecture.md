@@ -277,6 +277,67 @@ visible user and assistant rows.
 Keep message content out of anything that leaves the machine. Crash reports get the error code
 and the stack, never the conversation.
 
+### Export format
+
+Two paths write the same format. A conversation's context menu exports one file; Privacy settings
+exports every conversation into a folder the user picks:
+
+```
+Luna Export 2026-08-13/
+  manifest.json
+  conversations/
+    Weekend notes.json
+    Weekend notes 2.json      # titles collide; names are numbered, case-insensitively
+```
+
+Each conversation file is `{ format: 'luna-conversation', version: 1, exportedAt, conversation }`,
+where `conversation` carries `title`, `mode`, `updatedAt`, and `messages`. A message has `role`,
+`text`, optional `reasoning`, `status`, `at`, and `attachments` — each attachment inlined as
+`{ name, kind, mediaType, size, encoding: 'base64', data }`. Timestamps are ISO strings.
+
+`manifest.json` is `{ format: 'luna-export', version: 1, exportedAt, app, conversations }`, listing
+each written file with its title, `updatedAt`, and message count. It is written last, so an
+interrupted export is visibly incomplete.
+
+Never exported: API keys, provider metadata and base URLs, preferences, internal ids, unsent
+drafts, pinned state, and the Responses `provider_items` replay data. Filenames come from the
+conversation title, sanitized for both operating systems — control characters and `<>:"/\|?*`
+replaced, trailing dots and spaces trimmed, Windows reserved device names prefixed.
+
+Bulk export serializes one conversation at a time. Base64-encoding attachments is CPU work, and
+awaiting between conversations keeps the longest uninterrupted block down to a single conversation
+instead of the whole database. Attachment bytes are read through the `attachment-jobs` worker.
+
+### Deleting everything
+
+`privacy:delete-all` is a factory reset: conversations, messages, attachments, preferences,
+provider metadata, model slots, and encrypted keys. Confirmation is two gates — the Privacy panel
+requires the word `DELETE` to be typed, then main shows a native warning box. Cancelling at either
+returns success with `deleted: false`; the user did what they meant to.
+
+It deliberately does **not** reuse `commitCandidate`/`resumeInstall`. Those preserve the old
+database under `recovery/` so the next launch can archive it — the repair path. A privacy delete
+that crashed midway through them would resurrect the deleted conversations on the next launch.
+`eraseDatabase` instead builds the empty replacement first, then removes `backups/`, `recovery/`,
+and the `luna.db` + `-wal` + `-shm` bundle, then renames the replacement into place. Building
+first means the only step that fails for an ordinary reason fails while every byte is still
+intact.
+
+Snapshots and preserved archives are full copies of the conversations being deleted, so both
+directories go. So do Chromium's own caches — previews load over `app://`, so assistant output has
+passed through them — and the in-memory preview cache. Keys are removed before the database: a
+crash between them must never leave a decryptable credential on disk with nothing recording that
+it exists.
+
+Streams are aborted *and awaited* first. Aborting only starts the unwind, and the unwind writes the
+terminal message row; closing the database under it would lose that row. `ChatCoordinator.settle()`
+is that barrier.
+
+Afterwards main re-applies the theme and broadcasts `prefs:changed`, `providers:changed`,
+`models:changed`, `chats:changed` in that order, so both windows empty out live. The reset lands on
+the seeded state a fresh install starts from, not an empty schema — `model_slots` must keep its two
+rows.
+
 ### API keys
 
 `safeStorage.encryptString` / `decryptString`, backed by the macOS Keychain or Windows DPAPI.

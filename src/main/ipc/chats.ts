@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { writeFile } from 'node:fs/promises'
 import {
   BrowserWindow,
   dialog,
@@ -10,7 +11,10 @@ import {
 import { err, ok, type Result } from '../../shared/result.js'
 import type { Conversation, Mode } from '../../shared/types.js'
 import * as chats from '../chats.js'
+import * as jobs from '../attachment-jobs.js'
+import { saveExport } from '../chat-export.js'
 import * as db from '../db.js'
+import { ask } from '../dialogs.js'
 import { id, object, text } from '../parse.js'
 import { broadcast, emit, handle } from './bus.js'
 
@@ -34,13 +38,49 @@ type MenuDeps = {
   get: (id: string) => Conversation | undefined
   togglePinned: (id: string, pinned: boolean) => void
   rename: (id: string) => void
+  exportChat: (chat: Conversation) => void
   remove: (id: string) => void
   show: (
     chat: Conversation,
     togglePinned: () => void,
     rename: () => void,
+    exportChat: () => void,
     remove: () => void,
   ) => void
+}
+
+async function pickExport(name: string): Promise<string | undefined> {
+  const options = {
+    title: 'Export Conversation',
+    defaultPath: name,
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  }
+  const parent = BrowserWindow.getFocusedWindow()
+  const result =
+    process.platform === 'darwin' || parent === null
+      ? await dialog.showSaveDialog(options)
+      : await dialog.showSaveDialog(parent, options)
+  return result.canceled ? undefined : result.filePath
+}
+
+async function exportChat(chat: Conversation): Promise<void> {
+  const result = await saveExport(chat, {
+    pick: pickExport,
+    load: (id) => jobs.readHistory(db.filePath(), id),
+    write: (file, data) => writeFile(file, data, { encoding: 'utf8', mode: 0o600 }),
+    now: Date.now,
+  })
+  if (result.ok) return
+  const options: MessageBoxOptions = {
+    type: 'error',
+    buttons: ['OK'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+    message: 'Luna couldn’t export this conversation.',
+    detail: 'The export could not be completed. Please choose another location and try again.',
+  }
+  await ask(options)
 }
 
 async function confirmDelete(): Promise<boolean> {
@@ -53,12 +93,7 @@ async function confirmDelete(): Promise<boolean> {
     message: 'Delete this conversation?',
     detail: 'This cannot be undone.',
   }
-  const parent = BrowserWindow.getFocusedWindow()
-  const result =
-    process.platform === 'darwin' || parent === null
-      ? await dialog.showMessageBox(options)
-      : await dialog.showMessageBox(parent, options)
-  return result.response === 0
+  return (await ask(options)) === 0
 }
 
 const deps: Deps = {
@@ -173,6 +208,9 @@ export function showChatMenu(input: unknown, d: MenuDeps): Result<undefined> {
       d.rename(chat.id)
     },
     () => {
+      d.exportChat(chat)
+    },
+    () => {
       d.remove(chat.id)
     },
   )
@@ -184,11 +222,13 @@ function popup(
   chat: Conversation,
   togglePinned: () => void,
   rename: () => void,
+  exportChat: () => void,
   remove: () => void,
 ): void {
   const template: MenuItemConstructorOptions[] = [
     { label: chat.pinned ? 'Unpin Conversation' : 'Pin Conversation', click: togglePinned },
     { label: 'Rename Conversation', click: rename },
+    { label: 'Export Conversation…', click: exportChat },
     { type: 'separator' },
     { label: 'Delete Conversation', click: remove },
   ]
@@ -218,11 +258,14 @@ export function register(): void {
       rename: (id) => {
         emit(event.sender, 'chats:rename-requested', { id })
       },
+      exportChat: (chat) => {
+        void exportChat(chat).catch(() => undefined)
+      },
       remove: (id) => {
         void deleteChat({ id }, deps).catch(() => undefined)
       },
-      show: (chat, togglePinned, rename, remove) => {
-        popup(event.sender, chat, togglePinned, rename, remove)
+      show: (chat, togglePinned, rename, exportChat, remove) => {
+        popup(event.sender, chat, togglePinned, rename, exportChat, remove)
       },
     }),
   )

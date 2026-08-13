@@ -4,6 +4,7 @@ import * as chatIpc from './chat.js'
 import * as chatsIpc from './chats.js'
 import * as prefsIpc from './prefs.js'
 import * as previewIpc from './preview.js'
+import * as privacyIpc from './privacy.js'
 import * as providersIpc from './providers.js'
 import * as settingsIpc from './settings.js'
 import * as messagesIpc from './messages.js'
@@ -19,6 +20,13 @@ export function registerAll(): void {
   chatIpc.register()
   prefsIpc.register()
   previewIpc.register()
+  privacyIpc.setStreams({
+    stopAll: () => {
+      chatIpc.coordinator.stopAll()
+    },
+    settle: () => chatIpc.coordinator.settle(),
+  })
+  privacyIpc.register()
   providersIpc.register()
   messagesIpc.register()
   settingsIpc.register()

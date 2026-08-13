@@ -71,6 +71,15 @@ export class PreviewCache {
     }
   }
 
+  /**
+   * Drops every entry regardless of owner. Each one holds assistant HTML in
+   * memory behind a live capability URL, so a delete-everything that skipped
+   * this would keep serving deleted output to an open preview frame.
+   */
+  clearAll(): void {
+    this.#entries.clear()
+  }
+
   sweep(now = Date.now()): void {
     for (const [id, entry] of this.#entries) {
       if (entry.expiresAt <= now) this.#entries.delete(id)

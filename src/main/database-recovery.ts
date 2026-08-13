@@ -37,7 +37,7 @@ function configured(file: string): DatabaseSync {
   }
 }
 
-function closeQuietly(db: DatabaseSync | undefined): void {
+export function closeQuietly(db: DatabaseSync | undefined): void {
   try {
     db?.close()
   } catch {
@@ -274,6 +274,43 @@ function openReady(file: string): DatabaseSync {
   const db = configured(file)
   migrate(db)
   return db
+}
+
+/**
+ * Removes a file, retrying briefly. On Windows an attachment worker still
+ * holding the database open turns an unlink into EBUSY; on POSIX the retries
+ * never happen and cost nothing.
+ */
+async function erase(file: string): Promise<void> {
+  await rm(file, { force: true, maxRetries: 5, retryDelay: 100 })
+}
+
+/**
+ * Destroys the active database and everything that could reconstruct it, then
+ * installs an empty migrated one. Nothing is preserved — this is the privacy
+ * delete, not the repair path, so it deliberately avoids `commitCandidate` and
+ * the `.installing` file: `resumeInstall` archives the old database under
+ * `recovery/` so the next launch can get it back, which is the opposite of what
+ * is wanted here. Callers must have closed their handle first.
+ *
+ * The replacement is built before anything is removed. That first step is the
+ * only one that fails for an ordinary reason — a full disk, a migration bug —
+ * and failing there leaves every byte of the user's data untouched.
+ */
+export async function eraseDatabase(paths: DatabasePaths): Promise<DatabaseSync> {
+  const candidate = await prepareCandidate(paths)
+
+  // Snapshots and preserved archives are full copies of the conversations being
+  // deleted. Leaving either behind would make this a rename, not a delete.
+  await rm(paths.backups, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  await rm(paths.recovery, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+
+  await erase(paths.active)
+  await erase(`${paths.active}-wal`)
+  await erase(`${paths.active}-shm`)
+
+  await rename(candidate, paths.active)
+  return openReady(paths.active)
 }
 
 export async function startDatabase(paths: DatabasePaths, now: number): Promise<StartResult> {

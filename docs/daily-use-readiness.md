@@ -25,14 +25,19 @@ consent before restoring, preserves the database/WAL bundle, and resumes interru
 Migration failures and databases from newer Luna versions remain untouched. All database paths
 and contents stay in main.
 
-### 2. Export and delete-all
+### 2. Export and delete-all — completed
 
-The Privacy settings panel currently marks these controls as unfinished.
+Conversations export as readable per-conversation JSON with attachments inlined, either one at a
+time from the conversation context menu or all at once into a folder chosen from Privacy settings.
+The format is documented in [architecture.md](architecture.md#export-format) and excludes
+credentials, provider metadata, preferences, internal ids, and unsent drafts.
 
-- Export conversations in a documented portable format through a user-selected destination.
-- Add a deliberate, confirmed delete-all flow covering conversations, attachments, preferences,
-  provider metadata, and encrypted provider credentials.
-- Ensure neither operation exposes secrets or writes private data outside the chosen destination.
+Delete-all is a factory reset behind two gates: the word `DELETE` typed in the panel, then a native
+warning. It removes conversations, attachments, preferences, provider metadata, encrypted keys,
+local backups, preserved recovery archives, and Chromium's own caches, then broadcasts the empty
+state so both windows follow without a reload. The reset builds its replacement database before
+removing anything and never routes through the recovery path, so no interruption can resurrect
+deleted conversations.
 
 ### 3. Packaged-app smoke testing
 

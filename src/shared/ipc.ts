@@ -131,6 +131,8 @@ export type Invocations = {
   'preview:release': { req: { id: string }; res: undefined }
   'settings:open': { req: undefined; res: undefined }
   'settings:close': { req: undefined; res: undefined }
+  'privacy:export': { req: undefined; res: { written: number } }
+  'privacy:delete-all': { req: undefined; res: { deleted: boolean } }
 }
 
 /** One-way, main -> renderer. webContents.send / ipcRenderer.on. */

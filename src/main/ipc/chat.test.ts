@@ -114,6 +114,37 @@ function makeDeps(): TestDeps {
 }
 
 describe('ChatCoordinator', () => {
+  it('settles only after an aborted turn has finished writing', async () => {
+    const d = makeDeps()
+    let release = (): void => undefined
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    d.stream = vi.fn(async () => {
+      await held
+      return { ok: false as const, code: 'chat/cancelled', message: 'aborted' }
+    })
+    const chat = new ChatCoordinator(d)
+    expect(await chat.send({ conversationId: 'chat-1', text: 'Hello', attachmentIds: [] })).toMatchObject({ ok: true })
+
+    chat.stopAll()
+    let settled = false
+    void chat.settle().then(() => {
+      settled = true
+    })
+    for (let tick = 0; tick < 20; tick += 1) await Promise.resolve()
+
+    // Aborting only starts the unwind. While the turn is still in flight the
+    // terminal row is unwritten, and settle must not let a caller close the
+    // database out from under it.
+    expect(settled).toBe(false)
+    expect(d.finish).not.toHaveBeenCalled()
+
+    release()
+    await chat.settle()
+    expect(d.finish).toHaveBeenCalledWith('assistant-1', '', '', 'cancelled', 10)
+  })
+
   it('starts a persisted turn and publishes streaming completion', async () => {
     const d = makeDeps()
     const chat = new ChatCoordinator(d)

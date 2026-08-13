@@ -153,6 +153,7 @@ export class ChatCoordinator {
   private readonly active = new Map<string, Active>()
   private readonly background = new Set<AbortController>()
   private readonly starting = new Set<string>()
+  private readonly running = new Set<Promise<void>>()
 
   constructor(private readonly d: Deps) {}
 
@@ -259,6 +260,25 @@ export class ChatCoordinator {
     for (const controller of this.background) controller.abort()
   }
 
+  /**
+   * Resolves once every launched turn has finished unwinding. Aborting a
+   * controller only starts that: the turn still writes its terminal row
+   * afterwards, and a caller about to close the database has to wait for it.
+   */
+  async settle(): Promise<void> {
+    // Looped rather than awaited once: a turn launches its auto-title job while
+    // it is still running, so a single snapshot can miss the job it spawns.
+    while (this.running.size > 0) {
+      await Promise.allSettled([...this.running])
+    }
+  }
+
+  /** Runs a launched turn, tracked so `settle` can wait for it. */
+  private track(work: Promise<void>): void {
+    const task = work.catch(() => undefined).finally(() => this.running.delete(task))
+    this.running.add(task)
+  }
+
   private isBusy(conversationId: string): boolean {
     return (
       this.starting.has(conversationId) ||
@@ -275,7 +295,7 @@ export class ChatCoordinator {
     const controller = new AbortController()
     this.active.set(messageId, { conversationId, controller })
     this.d.notifyChats(this.d.list())
-    void this.prepare(conversationId, messageId, selected, apiKey, controller)
+    this.track(this.prepare(conversationId, messageId, selected, apiKey, controller))
   }
 
   private async prepare(
@@ -367,7 +387,7 @@ export class ChatCoordinator {
           const first = request.history.find((item) => item.role === 'user')
           const firstUser = first?.text !== '' ? first?.text : first?.attachments[0]?.name
           if (firstUser !== undefined) {
-            void this.title(conversationId, firstUser, parsed.text).catch(() => undefined)
+            this.track(this.title(conversationId, firstUser, parsed.text))
           }
         }
       }

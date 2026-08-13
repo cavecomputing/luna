@@ -77,18 +77,21 @@ function makeDeps(): TestDeps {
 }
 
 describe('conversation IPC actions', () => {
-  it('opens a conversation menu wired to pin, rename, and delete actions', () => {
+  it('opens a conversation menu wired to pin, rename, export, and delete actions', () => {
     const togglePinned = vi.fn()
     const rename = vi.fn()
+    const exportChat = vi.fn()
     const remove = vi.fn()
     const show = vi.fn((
       _chat: Conversation,
       pin: () => void,
       renameChat: () => void,
+      saveChat: () => void,
       deleteChat: () => void,
     ) => {
       pin()
       renameChat()
+      saveChat()
       deleteChat()
     })
 
@@ -96,11 +99,13 @@ describe('conversation IPC actions', () => {
       get: (id) => id === 'chat-1' ? chat() : undefined,
       togglePinned,
       rename,
+      exportChat,
       remove,
       show,
     })).toEqual({ ok: true, value: undefined })
     expect(togglePinned).toHaveBeenCalledWith('chat-1', true)
     expect(rename).toHaveBeenCalledWith('chat-1')
+    expect(exportChat).toHaveBeenCalledWith(chat())
     expect(remove).toHaveBeenCalledWith('chat-1')
   })
 
@@ -109,6 +114,7 @@ describe('conversation IPC actions', () => {
       get: vi.fn(() => undefined),
       togglePinned: vi.fn(),
       rename: vi.fn(),
+      exportChat: vi.fn(),
       remove: vi.fn(),
       show: vi.fn(),
     }
