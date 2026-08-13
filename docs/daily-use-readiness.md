@@ -49,13 +49,17 @@ deleted conversations.
 
 Items 1–3 are the daily-driver threshold.
 
-## Remaining work
+## Follow-up work
 
-### 4. Attachment storage controls
+### 4. Attachment storage controls — completed
 
-- Show total local attachment storage usage.
-- Add a safe cleanup or retention mechanism before database growth becomes surprising.
-- Preserve attachments referenced by retained messages and make destructive scope explicit.
+Privacy settings now shows logical attachment usage in the active database, split into sent and
+unsent files. A native-confirmed cleanup removes only unsent files currently staged in composers;
+attachments referenced by retained messages are never selected. Accounting and cleanup run in the
+attachment worker, and every window refreshes live after attachment or conversation changes.
+
+The display excludes rotating database snapshots and does not promise immediate physical file
+shrinkage: deleted SQLite pages are reusable, while recovery copies age out under the backup policy.
 
 ### 5. Release and update path
 
@@ -75,11 +79,10 @@ Items 1–3 are the daily-driver threshold.
 Use this prompt in a fresh chat:
 
 > Read `CLAUDE.md` and `docs/daily-use-readiness.md`. Item 1, database backup and recovery, is
-> complete. Plan and implement item 2, export and delete-all, as a focused change.
-> Inspect the Privacy settings panel, SQLite ownership, attachment storage, secure provider-key
-> storage, file-dialog IPC, and existing confirmation patterns before planning. Define and document
-> a portable export format that excludes credentials, write only to the destination the user chose,
-> and make delete-all an explicit confirmed action that removes conversations, attachments,
-> preferences, provider metadata, and encrypted provider credentials. Add deterministic main/IPC/UI
-> tests, visually verify the destructive confirmation flow, run typecheck/lint/test, and commit the
-> completed work separately. Do not begin packaged-app smoke testing or deferred command-palette work.
+> complete. Items 2 and 4, export/delete-all and attachment storage controls, are also complete.
+> Plan and execute item 3, packaged-app smoke testing, without changing product behavior unless a
+> test exposes a real defect. Exercise an installed build on macOS and Windows: first launch,
+> provider setup, sending and cancelling, attachments, restart, sleep/wake, database recovery,
+> secure-storage behavior, and uninstall/reinstall. Record exact builds, platforms, results, and any
+> defects. Do not treat `npm run dev` as release validation, and do not begin automatic updates or
+> deferred command-palette work.

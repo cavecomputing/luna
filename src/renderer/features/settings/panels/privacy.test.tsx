@@ -6,15 +6,36 @@ import { Privacy } from './privacy.js'
 type BridgeOptions = {
   exportAll?: ReturnType<typeof vi.fn>
   deleteAll?: ReturnType<typeof vi.fn>
+  storage?: ReturnType<typeof vi.fn>
+  clearUnsent?: ReturnType<typeof vi.fn>
 }
 
 function bridge({
   exportAll = vi.fn(() => Promise.resolve({ ok: true as const, value: { written: 3 } })),
   deleteAll = vi.fn(() => Promise.resolve({ ok: true as const, value: { deleted: true } })),
+  storage = vi.fn(() => Promise.resolve({
+    ok: true as const,
+    value: {
+      totalBytes: 1_572_864,
+      totalCount: 3,
+      sentBytes: 1_048_576,
+      sentCount: 2,
+      unsentBytes: 524_288,
+      unsentCount: 1,
+    },
+  })),
+  clearUnsent = vi.fn(() => Promise.resolve({
+    ok: true as const,
+    value: { removedBytes: 524_288, removedCount: 1 },
+  })),
 }: BridgeOptions = {}): void {
   Object.defineProperty(window, 'luna', {
     configurable: true,
-    value: { privacy: { exportAll, deleteAll } },
+    value: {
+      privacy: { exportAll, deleteAll },
+      attachments: { storage, clearUnsent },
+      onAttachmentStorage: () => () => undefined,
+    },
   })
 }
 
@@ -31,6 +52,58 @@ afterEach(() => {
 })
 
 describe('Privacy panel', () => {
+  it('shows total, sent, and unsent attachment storage', async () => {
+    bridge()
+    render(<Privacy />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/1.5 MiB/)).toBeTruthy()
+    })
+    expect(screen.getByText(/1.0 MiB sent · 512.0 KiB unsent/)).toBeTruthy()
+  })
+
+  it('removes unsent attachments while describing the preserved scope', async () => {
+    const clearUnsent = vi.fn(() => Promise.resolve({
+      ok: true as const,
+      value: { removedBytes: 524_288, removedCount: 1 },
+    }))
+    bridge({ clearUnsent })
+    render(<Privacy />)
+    const button = await screen.findByRole('button', { name: /Remove unsent attachments/ })
+
+    fireEvent.click(button)
+
+    await waitFor(() => {
+      expect(screen.getByText('Removed 1 unsent attachment (512.0 KiB).')).toBeTruthy()
+    })
+    expect(clearUnsent).toHaveBeenCalledOnce()
+    expect(screen.getByText(/already sent in messages are kept/)).toBeTruthy()
+  })
+
+  it('disables unsent cleanup when no unsent files exist', async () => {
+    bridge({
+      storage: vi.fn(() => Promise.resolve({
+        ok: true as const,
+        value: {
+          totalBytes: 10,
+          totalCount: 1,
+          sentBytes: 10,
+          sentCount: 1,
+          unsentBytes: 0,
+          unsentCount: 0,
+        },
+      })),
+    })
+    render(<Privacy />)
+
+    const button: HTMLButtonElement = await screen.findByRole('button', {
+      name: /Remove unsent attachments/,
+    })
+    await waitFor(() => {
+      expect(button.disabled).toBe(true)
+    })
+  })
+
   it('keeps delete disabled until the confirmation word is typed exactly', () => {
     bridge()
     render(<Privacy />)

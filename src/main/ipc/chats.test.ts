@@ -73,6 +73,7 @@ function makeDeps(): TestDeps {
     notify: vi.fn(),
     cancelConversation: vi.fn(),
     confirmDelete: vi.fn(() => Promise.resolve(true)),
+    notifyAttachmentStorage: vi.fn(),
   }
 }
 
@@ -166,6 +167,7 @@ describe('conversation IPC actions', () => {
     expect(await deleteChat({ id: 'chat-1' }, d)).toEqual({ ok: true, value: undefined })
     expect(d.cancelConversation).toHaveBeenCalledWith('chat-1')
     expect(d.remove).toHaveBeenCalledWith('chat-1')
+    expect(d.notifyAttachmentStorage).toHaveBeenCalledOnce()
   })
 
   it('keeps a conversation when deletion is cancelled', async () => {
@@ -176,6 +178,7 @@ describe('conversation IPC actions', () => {
     expect(d.cancelConversation).not.toHaveBeenCalled()
     expect(d.remove).not.toHaveBeenCalled()
     expect(d.notify).not.toHaveBeenCalled()
+    expect(d.notifyAttachmentStorage).not.toHaveBeenCalled()
   })
 
   it.each([

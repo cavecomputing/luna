@@ -68,3 +68,23 @@
   color: var(--danger);
   font-size: var(--t-sm);
 }
+
+.usage {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--s-2);
+  color: var(--text-muted);
+  font-size: var(--t-sm);
+}
+
+.usage strong {
+  color: var(--text);
+  font-size: var(--t-base);
+}
+
+.scope {
+  margin: var(--s-2) 0 0;
+  color: var(--text-muted);
+  font-size: var(--t-sm);
+}

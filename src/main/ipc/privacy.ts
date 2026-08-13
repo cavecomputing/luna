@@ -45,6 +45,7 @@ type Deps = {
   notifyProviders: (value: Provider[]) => void
   notifyModels: (value: ModelSlots) => void
   notifyChats: (value: Conversation[]) => void
+  notifyAttachmentStorage: () => void
 }
 
 /**
@@ -142,6 +143,9 @@ const deps: Deps = {
   notifyChats: (value) => {
     broadcast('chats:changed', value)
   },
+  notifyAttachmentStorage: () => {
+    broadcast('attachments:storage-changed', undefined)
+  },
 }
 
 export async function exportAll(d: Deps): Promise<Result<{ written: number }>> {
@@ -163,6 +167,7 @@ async function announce(d: Deps): Promise<void> {
   d.notifyProviders(await d.providers())
   d.notifyModels(d.slots())
   d.notifyChats(d.chats())
+  d.notifyAttachmentStorage()
 }
 
 export async function deleteAll(d: Deps): Promise<Result<{ deleted: boolean }>> {

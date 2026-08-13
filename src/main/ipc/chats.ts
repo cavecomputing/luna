@@ -32,6 +32,7 @@ type Deps = {
   notify: (value: Conversation[]) => void
   cancelConversation: (id: string) => void
   confirmDelete: () => Promise<boolean>
+  notifyAttachmentStorage: () => void
 }
 
 type MenuDeps = {
@@ -114,6 +115,9 @@ const deps: Deps = {
     void id
   },
   confirmDelete,
+  notifyAttachmentStorage: () => {
+    broadcast('attachments:storage-changed', undefined)
+  },
 }
 
 function announce(d: Deps): void {
@@ -191,6 +195,7 @@ export async function deleteChat(input: unknown, d: Deps): Promise<Result<undefi
   d.cancelConversation(chatId)
   d.remove(chatId)
   announce(d)
+  d.notifyAttachmentStorage()
   return ok(undefined)
 }
 

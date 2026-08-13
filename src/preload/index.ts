@@ -82,6 +82,8 @@ const api = {
       invoke('attachments:remove', { conversationId, id }),
     read: (conversationId: string, id: string) =>
       invoke('attachments:read', { conversationId, id }),
+    storage: () => invoke('attachments:storage', undefined),
+    clearUnsent: () => invoke('attachments:clear-unsent', undefined),
   },
   chat: {
     send: (conversationId: string, text: string, attachmentIds: string[]) =>
@@ -120,6 +122,7 @@ const api = {
     subscribe('chats:changed', fn),
   onAttachments: (fn: (data: EventData<'attachments:changed'>) => void) =>
     subscribe('attachments:changed', fn),
+  onAttachmentStorage: (fn: () => void) => subscribe('attachments:storage-changed', fn),
   onChatDelta: (fn: (data: EventData<'chat:delta'>) => void) =>
     subscribe('chat:delta', fn),
   onChatDone: (fn: (data: EventData<'chat:done'>) => void) =>

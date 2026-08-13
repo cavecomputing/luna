@@ -91,6 +91,9 @@ function makeDeps(order: string[] = []): TestDeps {
     notifyChats: vi.fn(() => {
       note('notifyChats')(undefined)
     }),
+    notifyAttachmentStorage: vi.fn(() => {
+      note('notifyAttachmentStorage')(undefined)
+    }),
   }
 }
 
@@ -143,11 +146,13 @@ describe('deleteAll', () => {
       'notifyProviders',
       'notifyModels',
       'notifyChats',
+      'notifyAttachmentStorage',
     ])
     expect(d.notifyPrefs).toHaveBeenCalledWith(preferences)
     expect(d.notifyProviders).toHaveBeenCalledWith([])
     expect(d.notifyModels).toHaveBeenCalledWith(slots)
     expect(d.notifyChats).toHaveBeenCalledWith([])
+    expect(d.notifyAttachmentStorage).toHaveBeenCalledOnce()
   })
 
   it('changes nothing when the confirmation is cancelled', async () => {

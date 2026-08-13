@@ -5,7 +5,7 @@ import {
   MAX_CONVERSATION_ATTACHMENT_BYTES,
   MAX_MESSAGE_ATTACHMENT_BYTES,
 } from '../shared/attachments.js'
-import type { AttachmentInput, AttachmentImport } from '../shared/ipc.js'
+import type { AttachmentInput, AttachmentImport, AttachmentStorage } from '../shared/ipc.js'
 import type { AttachmentKind, AttachmentMeta } from '../shared/types.js'
 import { object } from './parse.js'
 
@@ -37,11 +37,27 @@ type HistoryJob = {
   conversationId: string
 }
 
-type Job = AddJob | ReadJob | HistoryJob
+type StorageJob = {
+  operation: 'storage'
+  database: string
+}
+
+type ClearUnsentJob = {
+  operation: 'clear-unsent'
+  database: string
+}
+
+type Job = AddJob | ReadJob | HistoryJob | StorageJob | ClearUnsentJob
 
 export type HistoryAttachment = AttachmentMeta & {
   messageId: string
   data: Uint8Array
+}
+
+export type UnsentCleanup = {
+  conversationIds: string[]
+  removedBytes: number
+  removedCount: number
 }
 
 type JobResult =
@@ -155,6 +171,38 @@ function history(db, job) {
   }))
 }
 
+function storage(db) {
+  return db.prepare(
+    'SELECT count(*) AS totalCount, ' +
+    'coalesce(sum(byte_size), 0) AS totalBytes, ' +
+    'coalesce(sum(CASE WHEN message_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS sentCount, ' +
+    'coalesce(sum(CASE WHEN message_id IS NOT NULL THEN byte_size ELSE 0 END), 0) AS sentBytes, ' +
+    'coalesce(sum(CASE WHEN message_id IS NULL THEN 1 ELSE 0 END), 0) AS unsentCount, ' +
+    'coalesce(sum(CASE WHEN message_id IS NULL THEN byte_size ELSE 0 END), 0) AS unsentBytes ' +
+    'FROM attachments',
+  ).get()
+}
+
+function clearUnsent(db) {
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    const before = storage(db)
+    const conversationIds = db.prepare(
+      'SELECT DISTINCT conversation_id FROM attachments WHERE message_id IS NULL ORDER BY conversation_id',
+    ).all().map(row => row.conversation_id)
+    db.exec('DELETE FROM attachments WHERE message_id IS NULL')
+    db.exec('COMMIT')
+    return {
+      conversationIds,
+      removedBytes: before.unsentBytes,
+      removedCount: before.unsentCount,
+    }
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
 try {
   const db = new DatabaseSync(workerData.database)
   db.exec('PRAGMA foreign_keys = ON')
@@ -163,7 +211,11 @@ try {
     ? add(db, workerData)
     : workerData.operation === 'history'
       ? history(db, workerData)
-      : read(db, workerData)
+      : workerData.operation === 'storage'
+        ? storage(db)
+        : workerData.operation === 'clear-unsent'
+          ? clearUnsent(db)
+          : read(db, workerData)
   db.close()
   parentPort.postMessage({ ok: true, value })
 } catch {
@@ -299,4 +351,42 @@ export async function readHistory(
     return attachment === undefined ? [] : [attachment]
   })
   return parsed.length === result.value.length ? parsed : undefined
+}
+
+function natural(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined
+}
+
+function storageResult(input: unknown): AttachmentStorage | undefined {
+  const value = object(input)
+  const totalBytes = natural(value?.totalBytes)
+  const totalCount = natural(value?.totalCount)
+  const sentBytes = natural(value?.sentBytes)
+  const sentCount = natural(value?.sentCount)
+  const unsentBytes = natural(value?.unsentBytes)
+  const unsentCount = natural(value?.unsentCount)
+  if (
+    totalBytes === undefined || totalCount === undefined || sentBytes === undefined ||
+    sentCount === undefined || unsentBytes === undefined || unsentCount === undefined
+  ) return undefined
+  return { totalBytes, totalCount, sentBytes, sentCount, unsentBytes, unsentCount }
+}
+
+export async function storage(database: string): Promise<AttachmentStorage | undefined> {
+  const result = await run({ operation: 'storage', database })
+  return result.ok ? storageResult(result.value) : undefined
+}
+
+export async function clearUnsent(database: string): Promise<UnsentCleanup | undefined> {
+  const result = await run({ operation: 'clear-unsent', database })
+  if (!result.ok) return undefined
+  const value = object(result.value)
+  const removedBytes = natural(value?.removedBytes)
+  const removedCount = natural(value?.removedCount)
+  if (
+    !Array.isArray(value?.conversationIds) ||
+    !value.conversationIds.every((id) => typeof id === 'string') ||
+    removedBytes === undefined || removedCount === undefined
+  ) return undefined
+  return { conversationIds: value.conversationIds, removedBytes, removedCount }
 }

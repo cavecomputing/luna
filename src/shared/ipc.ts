@@ -38,6 +38,21 @@ export type AttachmentBytes = {
   data: Uint8Array
 }
 
+/** Logical attachment bytes in the active database, excluding backup copies. */
+export type AttachmentStorage = {
+  totalBytes: number
+  totalCount: number
+  sentBytes: number
+  sentCount: number
+  unsentBytes: number
+  unsentCount: number
+}
+
+export type AttachmentCleanup = {
+  removedBytes: number
+  removedCount: number
+}
+
 export type ChatStart = {
   conversation: Conversation
   userMessageId: string
@@ -121,6 +136,8 @@ export type Invocations = {
     req: { conversationId: string; id: string }
     res: AttachmentBytes
   }
+  'attachments:storage': { req: undefined; res: AttachmentStorage }
+  'attachments:clear-unsent': { req: undefined; res: AttachmentCleanup }
   'chat:send': {
     req: { conversationId: string; text: string; attachmentIds: string[] }
     res: ChatStart
@@ -153,6 +170,8 @@ export type Events = {
   'models:changed': ModelSlots
   'chats:changed': Conversation[]
   'attachments:changed': { conversationId: string; attachments: AttachmentMeta[] }
+  /** Attachment rows changed; Settings reloads worker-computed storage totals. */
+  'attachments:storage-changed': undefined
   'chat:delta': ChatDelta
   'chat:done': ChatFinal
   'chat:error': ChatFailure

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { AttachmentImport } from '../shared/ipc.js'
-import { addFiles, readFile, readHistory } from './attachment-jobs.js'
+import { addFiles, clearUnsent, readFile, readHistory, storage } from './attachment-jobs.js'
 import { migrate } from './migrations.js'
 
 const temporary: string[] = []
@@ -99,6 +99,69 @@ describe('attachment worker jobs', () => {
         2,
       ),
     ).toBeNull()
+  })
+
+  it('reports sent and unsent logical storage separately', async () => {
+    const file = await database()
+    await addFiles(
+      file,
+      'chat-1',
+      [
+        { name: 'sent.txt', mediaType: 'text/plain', data: new TextEncoder().encode('sent') },
+        { name: 'draft.txt', mediaType: 'text/plain', data: new TextEncoder().encode('draft') },
+      ],
+      ['sent-file', 'draft-file'],
+      2,
+    )
+    const db = new DatabaseSync(file)
+    db.exec(`INSERT INTO messages
+      (id, conversation_id, role, text, status, created_at, ordinal)
+      VALUES ('message-1', 'chat-1', 'user', '', 'complete', 2, 0);
+      UPDATE attachments SET message_id = 'message-1' WHERE id = 'sent-file';`)
+    db.close()
+
+    expect(await storage(file)).toEqual({
+      totalBytes: 9,
+      totalCount: 2,
+      sentBytes: 4,
+      sentCount: 1,
+      unsentBytes: 5,
+      unsentCount: 1,
+    })
+  })
+
+  it('removes unsent files while preserving attachments on retained messages', async () => {
+    const file = await database()
+    await addFiles(
+      file,
+      'chat-1',
+      [
+        { name: 'sent.txt', mediaType: 'text/plain', data: new TextEncoder().encode('sent') },
+        { name: 'draft.txt', mediaType: 'text/plain', data: new TextEncoder().encode('draft') },
+      ],
+      ['sent-file', 'draft-file'],
+      2,
+    )
+    const db = new DatabaseSync(file)
+    db.exec(`INSERT INTO messages
+      (id, conversation_id, role, text, status, created_at, ordinal)
+      VALUES ('message-1', 'chat-1', 'user', '', 'complete', 2, 0);
+      UPDATE attachments SET message_id = 'message-1' WHERE id = 'sent-file';`)
+    db.close()
+
+    expect(await clearUnsent(file)).toEqual({
+      conversationIds: ['chat-1'],
+      removedBytes: 5,
+      removedCount: 1,
+    })
+    expect(await storage(file)).toEqual({
+      totalBytes: 4,
+      totalCount: 1,
+      sentBytes: 4,
+      sentCount: 1,
+      unsentBytes: 0,
+      unsentCount: 0,
+    })
   })
 })
 

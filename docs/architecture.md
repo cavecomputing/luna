@@ -308,6 +308,25 @@ Bulk export serializes one conversation at a time. Base64-encoding attachments i
 awaiting between conversations keeps the longest uninterrupted block down to a single conversation
 instead of the whole database. Attachment bytes are read through the `attachment-jobs` worker.
 
+### Attachment storage controls
+
+Privacy settings reports logical attachment content in the active database, split into sent and
+unsent files. The aggregate runs in the attachment worker so scanning a large attachment table
+does not block either window. It deliberately excludes rotating database snapshots: those are
+recovery copies, not active attachment rows, and age out under the backup policy.
+
+Cleanup removes only rows whose `message_id` is `NULL`. Those are files currently staged in a
+composer but not sent. The native confirmation names that scope explicitly. Attachments referenced
+by retained messages are never selected, and the worker performs the selection and deletion in one
+transaction. Every affected composer receives a fresh `attachments:changed` payload, while
+`attachments:storage-changed` tells Settings to reload the aggregate after imports, individual
+removals, conversation deletion, cleanup, or a factory reset.
+
+The displayed byte count is logical content, not the SQLite file's physical size. Deleted pages
+remain available for SQLite to reuse, and recovery snapshots can temporarily retain older copies;
+the UI therefore does not claim that cleanup immediately returns the same number of bytes to the
+filesystem.
+
 ### Deleting everything
 
 `privacy:delete-all` is a factory reset: conversations, messages, attachments, preferences,
