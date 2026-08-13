@@ -3,6 +3,31 @@
   display: flex;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+}
+
+.thread::before,
+.thread::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  left: 0;
+  height: var(--s-6);
+  pointer-events: none;
+  backdrop-filter: blur(2px);
+}
+
+.thread::before {
+  top: calc(-1 * var(--s-2));
+  background: linear-gradient(to bottom, var(--bg) 25%, transparent);
+  mask-image: linear-gradient(to bottom, black 25%, transparent);
+}
+
+.thread::after {
+  bottom: calc(-1 * var(--s-2));
+  background: linear-gradient(to top, var(--bg) 25%, transparent);
+  mask-image: linear-gradient(to top, black 25%, transparent);
 }
 
 .scroll {
@@ -13,6 +38,7 @@
 
 .latest {
   position: absolute;
+  z-index: 2;
   right: var(--s-5);
   bottom: var(--s-3);
   padding: var(--s-2) var(--s-3);
@@ -56,5 +82,5 @@
   gap: var(--s-4);
   max-width: 860px;
   margin: 0 auto;
-  padding: var(--s-4) var(--s-6) var(--s-5);
+  padding: var(--s-4) var(--s-6) var(--s-6);
 }
