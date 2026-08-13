@@ -92,10 +92,11 @@ export function exportName(title: string): string {
     const code = character.charCodeAt(0)
     return code <= 31 || code === 127 || '<>:"/\\|?*'.includes(character) ? '-' : character
   }).join('')
-  const cleaned = safe
-    .replace(/\s+/g, ' ')
-    .replace(/^[. ]+|[. ]+$/g, '')
+  const cleaned = Array.from(
+    safe.replace(/\s+/g, ' ').replace(/^[. ]+|[. ]+$/g, ''),
+  )
     .slice(0, 120)
+    .join('')
     .replace(/[. ]+$/g, '')
   const reserved = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(cleaned)
   const name = cleaned === '' ? 'Luna conversation' : reserved ? `Luna - ${cleaned}` : cleaned
@@ -148,8 +149,15 @@ async function makeArchiveDir(root: string, now: number, d: ArchiveDeps): Promis
     try {
       await d.makeDir(dir)
       return dir
-    } catch {
-      continue
+    } catch (error) {
+      if (
+        typeof error !== 'object' ||
+        error === null ||
+        !('code' in error) ||
+        error.code !== 'EEXIST'
+      ) {
+        throw error
+      }
     }
   }
 

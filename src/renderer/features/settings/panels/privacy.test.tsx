@@ -63,11 +63,22 @@ describe('Privacy panel', () => {
   })
 
   it('removes unsent attachments while describing the preserved scope', async () => {
+    const storage = vi.fn(() => Promise.resolve({
+      ok: true as const,
+      value: {
+        totalBytes: 1_572_864,
+        totalCount: 3,
+        sentBytes: 1_048_576,
+        sentCount: 2,
+        unsentBytes: 524_288,
+        unsentCount: 1,
+      },
+    }))
     const clearUnsent = vi.fn(() => Promise.resolve({
       ok: true as const,
       value: { removedBytes: 524_288, removedCount: 1 },
     }))
-    bridge({ clearUnsent })
+    bridge({ storage, clearUnsent })
     render(<Privacy />)
     const button = await screen.findByRole('button', { name: /Remove unsent attachments/ })
 
@@ -77,6 +88,7 @@ describe('Privacy panel', () => {
       expect(screen.getByText('Removed 1 unsent attachment (512.0 KiB).')).toBeTruthy()
     })
     expect(clearUnsent).toHaveBeenCalledOnce()
+    expect(storage).toHaveBeenCalledOnce()
     expect(screen.getByText(/already sent in messages are kept/)).toBeTruthy()
   })
 

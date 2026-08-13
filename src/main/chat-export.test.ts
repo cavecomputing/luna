@@ -98,6 +98,10 @@ describe('conversation export', () => {
     expect(exportName('...')).toBe('Luna conversation.json')
   })
 
+  it('does not split an emoji at the filename length limit', () => {
+    expect(exportName(`${'a'.repeat(119)}🌙z`)).toBe(`${'a'.repeat(119)}🌙.json`)
+  })
+
   it('writes the selected export and treats cancellation as success', async () => {
     const write = vi.fn(() => Promise.resolve())
     const saved = await saveExport(chat(), {
@@ -279,9 +283,10 @@ describe('saveArchive', () => {
   })
 
   it('numbers a second folder rather than merging into an existing export', async () => {
+    const exists = Object.assign(new Error('exists'), { code: 'EEXIST' })
     const makeDir = vi.fn((dir: string) =>
       dir === '/tmp/destination/Luna Export 2023-11-14'
-        ? Promise.reject(new Error('exists'))
+        ? Promise.reject(exists)
         : Promise.resolve(),
     )
     const write = vi.fn<ArchiveDeps['write']>(() => Promise.resolve())
@@ -292,6 +297,16 @@ describe('saveArchive', () => {
     expect(write.mock.calls[0]?.[0]).toBe(
       '/tmp/destination/Luna Export 2023-11-14 2/conversations/Weekend - notes.json',
     )
+  })
+
+  it('does not retry a folder error that is not a name collision', async () => {
+    const denied = Object.assign(new Error('denied'), { code: 'EPERM' })
+    const makeDir = vi.fn(() => Promise.reject(denied))
+
+    const result = await saveArchive([chat()], archiveDeps({ makeDir }))
+
+    expect(result).toMatchObject({ ok: false, code: 'privacy/export' })
+    expect(makeDir).toHaveBeenCalledOnce()
   })
 
   it.each([

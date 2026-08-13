@@ -41,16 +41,6 @@ export function Privacy(): React.JSX.Element {
   const [storageError, setStorageError] = useState('')
   const [cleanupStatus, setCleanupStatus] = useState('')
 
-  async function loadStorage(): Promise<void> {
-    const result = await window.luna.attachments.storage()
-    if (result.ok) {
-      setStorage(result.value)
-      setStorageError('')
-    } else {
-      setStorageError(message(result.code))
-    }
-  }
-
   useEffect(() => {
     let live = true
     const refresh = (): void => {
@@ -117,7 +107,6 @@ export function Privacy(): React.JSX.Element {
         ? ''
         : `Removed ${String(removedCount)} unsent attachment${removedCount === 1 ? '' : 's'} (${size(removedBytes)}).`,
     )
-    await loadStorage()
   }
 
   return (
