@@ -33,17 +33,19 @@ function ChatGroup({
   return (
     <section className={styles.group} aria-labelledby={id}>
       <h2 className={styles.groupLabel} id={id}>{label}</h2>
-      {chats.map((chat) => (
-        <ChatItem
-          key={chat.id}
-          chat={chat}
-          active={chat.id === openId}
-          renaming={chat.id === renameId}
-          onSelect={onSelect}
-          onRename={onRename}
-          onCancelRename={onCancelRename}
-        />
-      ))}
+      <div className={styles.items}>
+        {chats.map((chat) => (
+          <ChatItem
+            key={chat.id}
+            chat={chat}
+            active={chat.id === openId}
+            renaming={chat.id === renameId}
+            onSelect={onSelect}
+            onRename={onRename}
+            onCancelRename={onCancelRename}
+          />
+        ))}
+      </div>
     </section>
   )
 }
