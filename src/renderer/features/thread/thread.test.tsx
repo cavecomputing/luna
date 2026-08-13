@@ -65,6 +65,7 @@ describe('Thread', () => {
       clientHeight: { configurable: true, value: 500 },
       scrollHeight: { configurable: true, value: 1400 },
     })
+    fireEvent.scroll(scroll)
 
     rerender(<Thread chat={chat([message('one'), message('two')])} />)
 
