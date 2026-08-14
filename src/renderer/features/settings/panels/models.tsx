@@ -5,11 +5,13 @@ import {
   type Mode,
   type Provider,
   type ProviderModel,
+  type SamplerSettings,
 } from '../../../../shared/types.js'
 import { useDebouncedValue } from '../../../lib/use-debounced-value.js'
 import { Bolt } from '../../../ui/icons/bolt.js'
 import { Crescent } from '../../../ui/icons/crescent.js'
 import { Panel } from '../panel.js'
+import { Toggle } from '../../../ui/toggle.js'
 import styles from './models.module.css'
 
 function errorMessage(code: string): string {
@@ -65,6 +67,106 @@ type CardProps = {
   onProvider: (id: string | null) => void
   onModel: (value: string) => void
   onRefresh: () => void
+  onSampling: (sampling: SamplerSettings) => void
+}
+
+type SamplingFieldProps = {
+  label: string
+  value: number
+  min: number
+  max: number
+  step: number
+  disabled?: boolean
+  onChange: (value: number) => void
+}
+
+function SamplingField({
+  label,
+  value,
+  min,
+  max,
+  step,
+  disabled = false,
+  onChange,
+}: SamplingFieldProps): React.JSX.Element {
+  function change(raw: string): void {
+    const next = Number(raw)
+    if (Number.isFinite(next) && next >= min && next <= max) onChange(next)
+  }
+
+  return (
+    <label className={styles.samplingField}>
+      <span>{label}</span>
+      <div className={styles.rangeRow}>
+        <input
+          aria-label={`${label} slider`}
+          type="range"
+          value={value}
+          min={min}
+          max={max}
+          step={step}
+          disabled={disabled}
+          onChange={(event) => {
+            change(event.target.value)
+          }}
+        />
+        <input
+          aria-label={label}
+          className={styles.number}
+          type="number"
+          value={value}
+          min={min}
+          max={max}
+          step={step}
+          disabled={disabled}
+          onChange={(event) => {
+            change(event.target.value)
+          }}
+        />
+      </div>
+    </label>
+  )
+}
+
+type OptionalFieldProps = {
+  label: string
+  value: number | null
+  min: number
+  max: number
+  step: number
+  onChange: (value: number | null) => void
+}
+
+function OptionalField({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: OptionalFieldProps): React.JSX.Element {
+  return (
+    <label className={styles.optionalField}>
+      <span>{label}</span>
+      <input
+        aria-label={label}
+        type="number"
+        value={value ?? ''}
+        min={min}
+        max={max}
+        step={step}
+        placeholder="Not sent"
+        onChange={(event) => {
+          if (event.target.value === '') {
+            onChange(null)
+            return
+          }
+          const next = Number(event.target.value)
+          if (Number.isFinite(next) && next >= min && next <= max) onChange(next)
+        }}
+      />
+    </label>
+  )
 }
 
 function ModelCard({
@@ -80,6 +182,7 @@ function ModelCard({
   onProvider,
   onModel,
   onRefresh,
+  onSampling,
 }: CardProps): React.JSX.Element {
   const selected = providers.find((provider) => provider.id === value.providerId)
   const listId = `${slot}-models`
@@ -145,6 +248,135 @@ function ModelCard({
         </small>
       </label>
 
+      <div className={styles.sampling}>
+        <div className={styles.samplingHead}>
+          <div>
+            <strong>Sampler overrides</strong>
+            <span>{value.sampling.enabled ? 'Added to each request' : 'Use server defaults'}</span>
+          </div>
+          <Toggle
+            label={`${title} sampler overrides`}
+            checked={value.sampling.enabled}
+            onChange={(enabled) => {
+              onSampling({ ...value.sampling, enabled })
+            }}
+          />
+        </div>
+
+        {value.sampling.enabled && (
+          <div className={styles.samplingBody}>
+            <div className={styles.samplingGrid}>
+              <SamplingField
+                label="Temperature"
+                value={value.sampling.temperature}
+                min={0}
+                max={2}
+                step={0.05}
+                onChange={(temperature) => {
+                  onSampling({ ...value.sampling, temperature })
+                }}
+              />
+              <SamplingField
+                label="Top P"
+                value={value.sampling.topP}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={(topP) => {
+                  onSampling({ ...value.sampling, topP })
+                }}
+              />
+              <SamplingField
+                label="Frequency penalty"
+                value={value.sampling.frequencyPenalty}
+                min={-2}
+                max={2}
+                step={0.1}
+                disabled={selected?.api === 'responses'}
+                onChange={(frequencyPenalty) => {
+                  onSampling({ ...value.sampling, frequencyPenalty })
+                }}
+              />
+              <SamplingField
+                label="Presence penalty"
+                value={value.sampling.presencePenalty}
+                min={-2}
+                max={2}
+                step={0.1}
+                disabled={selected?.api === 'responses'}
+                onChange={(presencePenalty) => {
+                  onSampling({ ...value.sampling, presencePenalty })
+                }}
+              />
+              <label className={styles.seedField}>
+                <span>Seed</span>
+                <input
+                  aria-label="Seed"
+                  type="number"
+                  min={0}
+                  max={Number.MAX_SAFE_INTEGER}
+                  step={1}
+                  value={value.sampling.seed ?? ''}
+                  placeholder="Random"
+                  disabled={selected?.api === 'responses'}
+                  onChange={(event) => {
+                    const seed = event.target.value === '' ? null : Number(event.target.value)
+                    if (seed === null || (Number.isSafeInteger(seed) && seed >= 0)) {
+                      onSampling({ ...value.sampling, seed })
+                    }
+                  }}
+                />
+              </label>
+            </div>
+
+            {selected?.api === 'chat-completions' && (
+              <details className={styles.advanced}>
+                <summary>Advanced server parameters</summary>
+                <p>Optional extensions for llama.cpp and similar Chat Completions servers.</p>
+                <div className={styles.optionalGrid}>
+                  <OptionalField
+                    label="Top K"
+                    value={value.sampling.topK}
+                    min={0}
+                    max={1_000_000}
+                    step={1}
+                    onChange={(topK) => {
+                      onSampling({ ...value.sampling, topK })
+                    }}
+                  />
+                  <OptionalField
+                    label="Min P"
+                    value={value.sampling.minP}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    onChange={(minP) => {
+                      onSampling({ ...value.sampling, minP })
+                    }}
+                  />
+                  <OptionalField
+                    label="Repeat penalty"
+                    value={value.sampling.repeatPenalty}
+                    min={0}
+                    max={10}
+                    step={0.05}
+                    onChange={(repeatPenalty) => {
+                      onSampling({ ...value.sampling, repeatPenalty })
+                    }}
+                  />
+                </div>
+              </details>
+            )}
+
+            <p className={styles.samplingNote}>
+              {selected?.api === 'responses'
+                ? 'Responses sends Temperature and Top P. Chat-only fields are disabled.'
+                : 'Only configured values are sent. Unsupported extensions may be rejected by the server.'}
+            </p>
+          </div>
+        )}
+      </div>
+
       {status !== '' && <p className={styles.status}>{status}</p>}
     </section>
   )
@@ -179,7 +411,7 @@ export function Models({ registerFlush }: ModelsProps = {}): React.JSX.Element {
       const model = current.drafts[slot]
       const value = current.slots[slot]
       if (model === value.model) return []
-      saved.current[slot] = { providerId: value.providerId, model }
+      saved.current[slot] = { ...value, model }
       return [window.luna.models.set(slot, value.providerId, model)]
     })
     await Promise.all(pending)
@@ -236,7 +468,7 @@ export function Models({ registerFlush }: ModelsProps = {}): React.JSX.Element {
     for (const slot of ['fast', 'expert'] as const) {
       const debounced = slot === 'fast' ? fast : expert
       if (debounced !== drafts[slot] || debounced === slots[slot].model) continue
-      saved.current[slot] = { providerId: slots[slot].providerId, model: debounced }
+      saved.current[slot] = { ...slots[slot], model: debounced }
       void window.luna.models.set(slot, slots[slot].providerId, debounced).then((result) => {
         if (!result.ok) {
           setStatus((current) => ({ ...current, [slot]: 'Model choice could not be saved.' }))
@@ -248,7 +480,7 @@ export function Models({ registerFlush }: ModelsProps = {}): React.JSX.Element {
   async function choose(slot: Mode, providerId: string | null): Promise<void> {
     setDrafts((current) => ({ ...current, [slot]: '' }))
     setStatus((current) => ({ ...current, [slot]: '' }))
-    saved.current[slot] = { providerId, model: '' }
+    saved.current[slot] = { ...slots[slot], providerId, model: '' }
     const result = await window.luna.models.set(slot, providerId, '')
     if (!result.ok) {
       setStatus((current) => ({ ...current, [slot]: 'Provider choice could not be saved.' }))
@@ -270,6 +502,19 @@ export function Models({ registerFlush }: ModelsProps = {}): React.JSX.Element {
     } else {
       setStatus((current) => ({ ...current, [slot]: errorMessage(result.code) }))
     }
+  }
+
+  function saveSampling(slot: Mode, sampling: SamplerSettings): void {
+    setSlots((current) => ({
+      ...current,
+      [slot]: { ...current[slot], sampling },
+    }))
+    setStatus((current) => ({ ...current, [slot]: '' }))
+    void window.luna.models.setSampling(slot, sampling).then((result) => {
+      if (!result.ok) {
+        setStatus((current) => ({ ...current, [slot]: 'Sampler settings could not be saved.' }))
+      }
+    })
   }
 
   return (
@@ -301,6 +546,9 @@ export function Models({ registerFlush }: ModelsProps = {}): React.JSX.Element {
         onRefresh={() => {
           void refresh('fast', slots.fast.providerId)
         }}
+        onSampling={(sampling) => {
+          saveSampling('fast', sampling)
+        }}
       />
 
       <ModelCard
@@ -322,6 +570,9 @@ export function Models({ registerFlush }: ModelsProps = {}): React.JSX.Element {
         }}
         onRefresh={() => {
           void refresh('expert', slots.expert.providerId)
+        }}
+        onSampling={(sampling) => {
+          saveSampling('expert', sampling)
         }}
       />
     </Panel>

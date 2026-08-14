@@ -26,17 +26,44 @@ export type ProviderModel = {
   created?: number
 }
 
+/** Optional request-level sampling overrides for one model slot. */
+export type SamplerSettings = {
+  enabled: boolean
+  temperature: number
+  topP: number
+  frequencyPenalty: number
+  presencePenalty: number
+  seed: number | null
+  /** OpenAI-compatible server extensions. Omitted when null. */
+  topK: number | null
+  minP: number | null
+  repeatPenalty: number | null
+}
+
+export const defaultSamplerSettings: SamplerSettings = {
+  enabled: false,
+  temperature: 0.7,
+  topP: 0.95,
+  frequencyPenalty: 0,
+  presencePenalty: 0,
+  seed: null,
+  topK: null,
+  minP: null,
+  repeatPenalty: null,
+}
+
 export type ModelSlot = {
   providerId: string | null
   model: string
+  sampling: SamplerSettings
 }
 
 export type ModelSlots = Record<Mode, ModelSlot>
 
 /** Both slots unassigned — the shape a fresh install starts from. */
 export const emptyModelSlots: ModelSlots = {
-  fast: { providerId: null, model: '' },
-  expert: { providerId: null, model: '' },
+  fast: { providerId: null, model: '', sampling: { ...defaultSamplerSettings } },
+  expert: { providerId: null, model: '', sampling: { ...defaultSamplerSettings } },
 }
 
 export type Role = 'user' | 'assistant'

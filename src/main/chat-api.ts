@@ -2,6 +2,7 @@ import { err, ok, type Result } from '../shared/result.js'
 import { providerHeaders } from './openai.js'
 import type { ProviderConfig } from './providers.js'
 import type { StoredMessage } from './chats.js'
+import type { SamplerSettings } from '../shared/types.js'
 import { object } from './parse.js'
 import { SseParser, type SseEvent } from './sse.js'
 
@@ -13,6 +14,7 @@ export type ChatRequest = {
   model: string
   systemPrompt: string
   history: StoredMessage[]
+  sampling: SamplerSettings
 }
 
 export type ChatCompletion = {
@@ -69,6 +71,7 @@ function responseContent(message: StoredMessage): string | Record<string, unknow
 }
 
 export function requestBody(request: ChatRequest): Record<string, unknown> {
+  const sampling = samplingBody(request.sampling, request.provider.api)
   if (request.provider.api === 'chat-completions') {
     const messages: Record<string, unknown>[] = []
     if (request.systemPrompt !== '') {
@@ -81,7 +84,7 @@ export function requestBody(request: ChatRequest): Record<string, unknown> {
         content: message.role === 'user' ? chatContent(message) : message.text,
       })
     }
-    return { model: request.model, messages, stream: true, store: false }
+    return { model: request.model, messages, stream: true, store: false, ...sampling }
   }
 
   const input: unknown[] = []
@@ -108,6 +111,28 @@ export function requestBody(request: ChatRequest): Record<string, unknown> {
     stream: true,
     store: false,
     include: ['reasoning.encrypted_content'],
+    ...sampling,
+  }
+}
+
+export function samplingBody(
+  sampling: SamplerSettings,
+  api: ProviderConfig['api'],
+): Record<string, unknown> {
+  if (!sampling.enabled) return {}
+  const common: Record<string, unknown> = {
+    temperature: sampling.temperature,
+    top_p: sampling.topP,
+  }
+  if (api === 'responses') return common
+  return {
+    ...common,
+    frequency_penalty: sampling.frequencyPenalty,
+    presence_penalty: sampling.presencePenalty,
+    ...(sampling.seed === null ? {} : { seed: sampling.seed }),
+    ...(sampling.topK === null ? {} : { top_k: sampling.topK }),
+    ...(sampling.minP === null ? {} : { min_p: sampling.minP }),
+    ...(sampling.repeatPenalty === null ? {} : { repeat_penalty: sampling.repeatPenalty }),
   }
 }
 

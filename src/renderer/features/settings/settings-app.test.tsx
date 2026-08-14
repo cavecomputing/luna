@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { defaultPrefs } from '../../../shared/prefs.js'
 import type { ModelSlots, Provider } from '../../../shared/types.js'
+import { defaultSamplerSettings } from '../../../shared/types.js'
 import { SettingsApp } from './settings-app.js'
 
 const provider: Provider = {
@@ -16,8 +17,8 @@ const provider: Provider = {
 }
 
 const slots: ModelSlots = {
-  fast: { providerId: 'openai', model: '' },
-  expert: { providerId: 'openai', model: '' },
+  fast: { providerId: 'openai', model: '', sampling: { ...defaultSamplerSettings } },
+  expert: { providerId: 'openai', model: '', sampling: { ...defaultSamplerSettings } },
 }
 
 type BridgeOptions = {

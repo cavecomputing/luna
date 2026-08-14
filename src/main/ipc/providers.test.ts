@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ModelSlots, Mode, ProviderDraft } from '../../shared/types.js'
+import type { ModelSlots, Mode, ProviderDraft, SamplerSettings } from '../../shared/types.js'
+import { defaultSamplerSettings } from '../../shared/types.js'
 import type { ProviderConfig } from '../providers.js'
 import {
   cleanDraft,
+  cleanSampling,
   createProvider,
   deleteProvider,
   getModels,
@@ -10,6 +12,7 @@ import {
   listProviders,
   setKey,
   updateProvider,
+  updateSampling,
   updateSlot,
 } from './providers.js'
 
@@ -23,8 +26,8 @@ const draft: ProviderDraft = {
 
 const config: ProviderConfig = { id: 'example', ...draft }
 const initialSlots: ModelSlots = {
-  fast: { providerId: 'example', model: 'model-small' },
-  expert: { providerId: 'example', model: 'model-large' },
+  fast: { providerId: 'example', model: 'model-small', sampling: { ...defaultSamplerSettings } },
+  expert: { providerId: 'example', model: 'model-large', sampling: { ...defaultSamplerSettings } },
 }
 
 type TestDeps = Parameters<typeof createProvider>[1]
@@ -63,7 +66,11 @@ function makeDeps(): TestDeps {
     }),
     slots: vi.fn(() => slots),
     setSlot: vi.fn((slot: Mode, providerId: string | null, model: string) => {
-      slots = { ...slots, [slot]: { providerId, model } }
+      slots = { ...slots, [slot]: { ...slots[slot], providerId, model } }
+      return slots
+    }),
+    setSampling: vi.fn((slot: Mode, sampling: SamplerSettings) => {
+      slots = { ...slots, [slot]: { ...slots[slot], sampling } }
       return slots
     }),
     hasKey: vi.fn(() => Promise.resolve(false)),
@@ -187,8 +194,8 @@ describe('provider IPC actions', () => {
     expect(d.clearKey).toHaveBeenCalledWith('example')
     expect(d.notifyProviders).toHaveBeenCalledTimes(1)
     expect(d.notifyModels).toHaveBeenCalledWith({
-      fast: { providerId: null, model: 'model-small' },
-      expert: { providerId: null, model: 'model-large' },
+      fast: { providerId: null, model: 'model-small', sampling: defaultSamplerSettings },
+      expert: { providerId: null, model: 'model-large', sampling: defaultSamplerSettings },
     })
   })
 
@@ -273,6 +280,28 @@ describe('model IPC actions', () => {
       value: { fast: { providerId: 'example', model: 'custom-model' } },
     })
     expect(d.notifyModels).toHaveBeenCalledTimes(1)
+  })
+
+  it('validates, stores, and broadcasts sampler settings', () => {
+    const d = makeDeps()
+    const sampling = { ...defaultSamplerSettings, enabled: true, temperature: 0.5, topK: 40 }
+
+    expect(updateSampling({ slot: 'fast', sampling }, d)).toMatchObject({
+      ok: true,
+      value: { fast: { sampling } },
+    })
+    expect(d.setSampling).toHaveBeenCalledWith('fast', sampling)
+    expect(d.notifyModels).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects malformed or out-of-range sampler settings', () => {
+    expect(cleanSampling({ ...defaultSamplerSettings, temperature: 3 })).toMatchObject({
+      ok: false,
+      code: 'model/invalid',
+    })
+    expect(
+      updateSampling({ slot: 'fast', sampling: { ...defaultSamplerSettings, seed: 1.5 } }, makeDeps()),
+    ).toMatchObject({ ok: false, code: 'model/invalid' })
   })
 
   it.each([

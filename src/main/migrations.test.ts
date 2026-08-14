@@ -14,6 +14,22 @@ function tables(db: DatabaseSync): string[] {
   })
 }
 
+function dropSampling(db: DatabaseSync): void {
+  for (const column of [
+    'sampling_enabled',
+    'temperature',
+    'top_p',
+    'frequency_penalty',
+    'presence_penalty',
+    'seed',
+    'top_k',
+    'min_p',
+    'repeat_penalty',
+  ]) {
+    db.exec(`ALTER TABLE model_slots DROP COLUMN ${column}`)
+  }
+}
+
 describe('version', () => {
   it('reports 0 for a database that has never been migrated', () => {
     expect(version(fresh())).toBe(0)
@@ -72,8 +88,9 @@ describe('migrate', () => {
   it('removes the retired editable system prompt preference', () => {
     const db = fresh()
     migrate(db)
+    dropSampling(db)
     db.exec(`INSERT INTO prefs (key, value) VALUES ('systemPrompt', '"Replace Luna"');
-      PRAGMA user_version = ${String(latest - 1)};`)
+      PRAGMA user_version = ${String(latest - 2)};`)
 
     migrate(db)
 
@@ -140,6 +157,7 @@ describe('migrate', () => {
       ALTER TABLE messages DROP COLUMN reasoning;
       ALTER TABLE messages DROP COLUMN provider_id;
       ALTER TABLE conversations DROP COLUMN draft;`)
+    dropSampling(db)
 
     migrate(db)
 
@@ -163,6 +181,7 @@ describe('migrate', () => {
       DROP TABLE attachments;
       ALTER TABLE messages DROP COLUMN reasoning;
       ALTER TABLE conversations DROP COLUMN draft;`)
+    dropSampling(db)
 
     migrate(db)
 
@@ -182,6 +201,7 @@ describe('migrate', () => {
       DROP TABLE window_state;
       DROP TABLE attachments;
       ALTER TABLE conversations DROP COLUMN draft;`)
+    dropSampling(db)
 
     migrate(db)
 
@@ -203,6 +223,17 @@ describe('migrate', () => {
         expect.objectContaining({ name: 'height', type: 'INTEGER', notnull: 1 }),
       ]),
     )
+  })
+
+  it('adds disabled sampler defaults to both model slots', () => {
+    const db = fresh()
+    migrate(db)
+
+    expect(db.prepare(`SELECT slot, sampling_enabled, temperature, top_p
+      FROM model_slots ORDER BY slot`).all()).toEqual([
+      { slot: 'expert', sampling_enabled: 0, temperature: 0.7, top_p: 0.95 },
+      { slot: 'fast', sampling_enabled: 0, temperature: 0.7, top_p: 0.95 },
+    ])
   })
 
   it('refuses a database written by a newer build', () => {

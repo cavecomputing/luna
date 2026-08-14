@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ProviderConfig } from './providers.js'
+import { defaultSamplerSettings } from '../shared/types.js'
 import { requestBody, streamChat, type ChatRequest } from './chat-api.js'
 
 const provider: ProviderConfig = {
@@ -31,6 +32,7 @@ function request(api: ProviderConfig['api'] = 'responses'): ChatRequest {
       },
       { id: 'u2', role: 'user', text: 'Again', status: 'complete', at: 3, attachments: [] },
     ],
+    sampling: { ...defaultSamplerSettings },
   }
 }
 
@@ -106,6 +108,57 @@ describe('requestBody', () => {
       ],
       stream: true,
       store: false,
+    })
+  })
+
+  it('omits every sampler field while overrides are disabled', () => {
+    const body = requestBody(request('chat-completions'))
+    expect(body).not.toHaveProperty('temperature')
+    expect(body).not.toHaveProperty('top_p')
+  })
+
+  it('sends portable sampling fields to Responses', () => {
+    const configured = request()
+    configured.sampling = {
+      enabled: true,
+      temperature: 0.4,
+      topP: 0.8,
+      frequencyPenalty: 1,
+      presencePenalty: 1,
+      seed: 42,
+      topK: 20,
+      minP: 0.05,
+      repeatPenalty: 1.1,
+    }
+
+    expect(requestBody(configured)).toMatchObject({ temperature: 0.4, top_p: 0.8 })
+    expect(requestBody(configured)).not.toHaveProperty('frequency_penalty')
+    expect(requestBody(configured)).not.toHaveProperty('top_k')
+  })
+
+  it('sends standard and configured extension fields to Chat Completions', () => {
+    const configured = request('chat-completions')
+    configured.sampling = {
+      enabled: true,
+      temperature: 0.6,
+      topP: 0.9,
+      frequencyPenalty: 0.2,
+      presencePenalty: -0.1,
+      seed: 7,
+      topK: 40,
+      minP: 0.05,
+      repeatPenalty: 1.1,
+    }
+
+    expect(requestBody(configured)).toMatchObject({
+      temperature: 0.6,
+      top_p: 0.9,
+      frequency_penalty: 0.2,
+      presence_penalty: -0.1,
+      seed: 7,
+      top_k: 40,
+      min_p: 0.05,
+      repeat_penalty: 1.1,
     })
   })
 

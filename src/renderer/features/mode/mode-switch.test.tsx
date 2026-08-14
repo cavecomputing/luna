@@ -2,6 +2,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { ModeSwitch } from './mode-switch.js'
+import { defaultSamplerSettings } from '../../../shared/types.js'
 
 describe('ModeSwitch', () => {
   it('identifies the configured model in each mode tooltip', () => {
@@ -9,8 +10,8 @@ describe('ModeSwitch', () => {
       <ModeSwitch
         value="fast"
         models={{
-          fast: { providerId: 'provider-1', model: 'fast-model' },
-          expert: { providerId: 'provider-1', model: 'expert-model' },
+          fast: { providerId: 'provider-1', model: 'fast-model', sampling: { ...defaultSamplerSettings } },
+          expert: { providerId: 'provider-1', model: 'expert-model', sampling: { ...defaultSamplerSettings } },
         }}
         onChange={vi.fn()}
       />,

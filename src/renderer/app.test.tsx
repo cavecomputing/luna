@@ -2,6 +2,7 @@
 import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Conversation } from '../shared/types.js'
+import { defaultSamplerSettings } from '../shared/types.js'
 import type { Chats } from './features/chats/use-chats.js'
 import { App, ConversationSurface } from './app.js'
 
@@ -89,8 +90,8 @@ describe('ConversationSurface', () => {
     })
     const existing = conversation('existing', 'Previous conversation content')
     const models = {
-      fast: { providerId: 'provider-1', model: 'fast-model' },
-      expert: { providerId: 'provider-1', model: 'expert-model' },
+      fast: { providerId: 'provider-1', model: 'fast-model', sampling: { ...defaultSamplerSettings } },
+      expert: { providerId: 'provider-1', model: 'expert-model', sampling: { ...defaultSamplerSettings } },
     }
     const { container, rerender } = render(<ConversationSurface chats={chats(existing)} models={models} />)
 

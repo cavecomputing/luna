@@ -7,6 +7,7 @@ import type {
   Provider,
   ProviderDraft,
   ProviderModel,
+  SamplerSettings,
 } from '../../shared/types.js'
 import { discoverModels } from '../openai.js'
 import { id, object, text } from '../parse.js'
@@ -23,6 +24,7 @@ type Deps = {
   drop: (id: string) => boolean
   slots: () => ModelSlots
   setSlot: (slot: Mode, providerId: string | null, model: string) => ModelSlots
+  setSampling: (slot: Mode, sampling: SamplerSettings) => ModelSlots
   hasKey: (id: string) => Promise<boolean>
   readKey: (id: string) => Promise<string | undefined>
   writeKey: (id: string, value: string) => Promise<void>
@@ -44,6 +46,7 @@ const deps: Deps = {
   drop: providers.drop,
   slots: providers.slots,
   setSlot: providers.setSlot,
+  setSampling: providers.setSampling,
   hasKey: secrets.has,
   readKey: secrets.read,
   writeKey: secrets.write,
@@ -230,6 +233,73 @@ export function updateSlot(input: unknown, d: Deps): Result<ModelSlots> {
   return ok(value)
 }
 
+function bounded(value: unknown, min: number, max: number): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
+    ? value
+    : undefined
+}
+
+function optionalBounded(
+  value: unknown,
+  min: number,
+  max: number,
+  integer = false,
+): number | null | undefined {
+  if (value === null) return null
+  const parsed = bounded(value, min, max)
+  return parsed !== undefined && (!integer || Number.isSafeInteger(parsed)) ? parsed : undefined
+}
+
+export function cleanSampling(input: unknown): Result<SamplerSettings> {
+  const value = object(input)
+  if (value === undefined || typeof value.enabled !== 'boolean') {
+    return err('model/invalid', 'sampler settings were invalid')
+  }
+  const temperature = bounded(value.temperature, 0, 2)
+  const topP = bounded(value.topP, 0, 1)
+  const frequencyPenalty = bounded(value.frequencyPenalty, -2, 2)
+  const presencePenalty = bounded(value.presencePenalty, -2, 2)
+  const seed = optionalBounded(value.seed, 0, Number.MAX_SAFE_INTEGER, true)
+  const topK = optionalBounded(value.topK, 0, 1_000_000, true)
+  const minP = optionalBounded(value.minP, 0, 1)
+  const repeatPenalty = optionalBounded(value.repeatPenalty, 0, 10)
+  if (
+    temperature === undefined ||
+    topP === undefined ||
+    frequencyPenalty === undefined ||
+    presencePenalty === undefined ||
+    seed === undefined ||
+    topK === undefined ||
+    minP === undefined ||
+    repeatPenalty === undefined
+  ) {
+    return err('model/invalid', 'sampler settings were out of range')
+  }
+  return ok({
+    enabled: value.enabled,
+    temperature,
+    topP,
+    frequencyPenalty,
+    presencePenalty,
+    seed,
+    topK,
+    minP,
+    repeatPenalty,
+  })
+}
+
+export function updateSampling(input: unknown, d: Deps): Result<ModelSlots> {
+  const req = object(input)
+  if (req === undefined || (req.slot !== 'fast' && req.slot !== 'expert')) {
+    return err('model/invalid', 'model slot was invalid')
+  }
+  const sampling = cleanSampling(req.sampling)
+  if (!sampling.ok) return sampling
+  const value = d.setSampling(req.slot, sampling.value)
+  d.notifyModels(value)
+  return ok(value)
+}
+
 export function register(): void {
   handle('providers:list', () => listProviders(deps))
   handle('providers:create', (_event, req) => createProvider(req, deps))
@@ -239,4 +309,5 @@ export function register(): void {
   handle('providers:models', (_event, req) => getModels(req, deps))
   handle('models:get', () => getSlots(deps))
   handle('models:set', (_event, req) => updateSlot(req, deps))
+  handle('models:set-sampling', (_event, req) => updateSampling(req, deps))
 }

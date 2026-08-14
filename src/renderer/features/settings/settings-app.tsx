@@ -9,6 +9,21 @@ import { Privacy } from './panels/privacy.js'
 import { Providers } from './panels/providers.js'
 import { cx } from '../../lib/cx.js'
 import styles from './settings-app.module.css'
+import { Server } from '../../ui/icons/server.js'
+import { Cube } from '../../ui/icons/cube.js'
+import { ChatBubble } from '../../ui/icons/chat-bubble.js'
+import { Brush } from '../../ui/icons/brush.js'
+import { Shield } from '../../ui/icons/shield.js'
+import { Info } from '../../ui/icons/info.js'
+
+const icons: Record<SectionId, React.ReactNode> = {
+  providers: <Server size={18} />,
+  models: <Cube size={18} />,
+  chat: <ChatBubble size={18} />,
+  appearance: <Brush size={18} />,
+  privacy: <Shield size={18} />,
+  about: <Info size={18} />,
+}
 
 function noFlush(): Promise<void> {
   return Promise.resolve()
@@ -57,6 +72,7 @@ export function SettingsApp(): React.JSX.Element {
               setActive(section.id)
             }}
           >
+            <span className={styles.icon}>{icons[section.id]}</span>
             {section.label}
           </button>
         ))}

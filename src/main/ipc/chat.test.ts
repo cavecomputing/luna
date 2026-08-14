@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Prefs } from '../../shared/prefs.js'
 import type { Result } from '../../shared/result.js'
 import type { Conversation, Message, MessageStatus } from '../../shared/types.js'
+import { defaultSamplerSettings } from '../../shared/types.js'
 import type { ChatChunk, ChatCompletion, ChatRequest } from '../chat-api.js'
 import type { ProviderConfig } from '../providers.js'
 import { LUNA_SYSTEM_PROMPT } from '../system-prompt.js'
@@ -54,8 +55,8 @@ function makeDeps(): TestDeps {
   return {
     getChat: vi.fn((id: string) => (id === conversation.id ? conversation : undefined)),
     slots: vi.fn(() => ({
-      fast: { providerId: provider.id, model: 'model-fast' },
-      expert: { providerId: provider.id, model: 'model-expert' },
+      fast: { providerId: provider.id, model: 'model-fast', sampling: { ...defaultSamplerSettings } },
+      expert: { providerId: provider.id, model: 'model-expert', sampling: { ...defaultSamplerSettings } },
     })),
     getProvider: vi.fn((id: string) => (id === provider.id ? provider : undefined)),
     readKey: vi.fn(() => Promise.resolve('secret')),
@@ -349,8 +350,8 @@ describe('ChatCoordinator', () => {
   it('reports unconfigured model slots before writing a message', async () => {
     const d = makeDeps()
     d.slots = vi.fn(() => ({
-      fast: { providerId: provider.id, model: '' },
-      expert: { providerId: null, model: '' },
+      fast: { providerId: provider.id, model: '', sampling: { ...defaultSamplerSettings } },
+      expert: { providerId: null, model: '', sampling: { ...defaultSamplerSettings } },
     }))
     expect(
       await new ChatCoordinator(d).send({ conversationId: 'chat-1', text: 'Hello', attachmentIds: [] }),

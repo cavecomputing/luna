@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { join } from 'node:path'
 import type { Conversation } from '../shared/types.js'
 import type { HistoryAttachment } from './attachment-jobs.js'
 import {
@@ -243,9 +244,9 @@ describe('saveArchive', () => {
     expect(result).toEqual({ ok: true, value: 2 })
     const written = write.mock.calls.map((call) => call[0])
     expect(written).toEqual([
-      '/tmp/destination/Luna Export 2023-11-14/conversations/Weekend - notes.json',
-      '/tmp/destination/Luna Export 2023-11-14/conversations/Weekend - notes 2.json',
-      '/tmp/destination/Luna Export 2023-11-14/manifest.json',
+      join('/tmp/destination', 'Luna Export 2023-11-14', 'conversations', 'Weekend - notes.json'),
+      join('/tmp/destination', 'Luna Export 2023-11-14', 'conversations', 'Weekend - notes 2.json'),
+      join('/tmp/destination', 'Luna Export 2023-11-14', 'manifest.json'),
     ])
     const manifest: unknown = JSON.parse(String(write.mock.calls[2]?.[1]))
     expect(manifest).toMatchObject({
@@ -285,7 +286,7 @@ describe('saveArchive', () => {
   it('numbers a second folder rather than merging into an existing export', async () => {
     const exists = Object.assign(new Error('exists'), { code: 'EEXIST' })
     const makeDir = vi.fn((dir: string) =>
-      dir === '/tmp/destination/Luna Export 2023-11-14'
+      dir === join('/tmp/destination', 'Luna Export 2023-11-14')
         ? Promise.reject(exists)
         : Promise.resolve(),
     )
@@ -295,7 +296,12 @@ describe('saveArchive', () => {
 
     expect(result).toEqual({ ok: true, value: 1 })
     expect(write.mock.calls[0]?.[0]).toBe(
-      '/tmp/destination/Luna Export 2023-11-14 2/conversations/Weekend - notes.json',
+      join(
+        '/tmp/destination',
+        'Luna Export 2023-11-14 2',
+        'conversations',
+        'Weekend - notes.json',
+      ),
     )
   })
 

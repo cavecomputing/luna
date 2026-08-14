@@ -15,6 +15,7 @@ import type {
   Provider,
   ProviderDraft,
   ProviderModel,
+  SamplerSettings,
 } from './types.js'
 
 export type AttachmentInput = {
@@ -116,6 +117,10 @@ export type Invocations = {
   'models:get': { req: undefined; res: ModelSlots }
   'models:set': {
     req: { slot: Mode; providerId: string | null; model: string }
+    res: ModelSlots
+  }
+  'models:set-sampling': {
+    req: { slot: Mode; sampling: SamplerSettings }
     res: ModelSlots
   }
   'chats:list': { req: undefined; res: Conversation[] }

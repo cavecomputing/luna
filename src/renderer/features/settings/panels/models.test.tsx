@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ModelSlots, Provider } from '../../../../shared/types.js'
+import { defaultSamplerSettings } from '../../../../shared/types.js'
 import { Models, mergeDrafts } from './models.js'
 
 const provider: Provider = {
@@ -16,8 +17,8 @@ const provider: Provider = {
 
 function slots(fast: string, expert: string): ModelSlots {
   return {
-    fast: { providerId: 'openai', model: fast },
-    expert: { providerId: 'openai', model: expert },
+    fast: { providerId: 'openai', model: fast, sampling: { ...defaultSamplerSettings } },
+    expert: { providerId: 'openai', model: expert, sampling: { ...defaultSamplerSettings } },
   }
 }
 
@@ -97,5 +98,47 @@ describe('Models', () => {
       expect(screen.getByDisplayValue('gpt-expert')).toBeTruthy()
     })
     expect(set).not.toHaveBeenCalled()
+  })
+
+  it('enables sampler overrides for only the selected model slot', async () => {
+    const persisted = slots('gpt-fast', 'gpt-expert')
+    const setSampling = vi.fn(() =>
+      Promise.resolve({
+        ok: true as const,
+        value: {
+          ...persisted,
+          fast: {
+            ...persisted.fast,
+            sampling: { ...persisted.fast.sampling, enabled: true },
+          },
+        },
+      }),
+    )
+    Object.defineProperty(window, 'luna', {
+      configurable: true,
+      value: {
+        providers: {
+          list: () => Promise.resolve({ ok: true, value: [provider] }),
+          models: () => Promise.resolve({ ok: true, value: [] }),
+        },
+        models: {
+          get: () => Promise.resolve({ ok: true, value: persisted }),
+          set: () => Promise.resolve({ ok: true, value: persisted }),
+          setSampling,
+        },
+        onProviders: () => () => undefined,
+        onModels: () => () => undefined,
+      },
+    })
+
+    render(<Models />)
+    const toggle = await screen.findByRole('switch', { name: 'Fast sampler overrides' })
+    fireEvent.click(toggle)
+
+    expect(setSampling).toHaveBeenCalledWith('fast', {
+      ...defaultSamplerSettings,
+      enabled: true,
+    })
+    expect(screen.getByRole('spinbutton', { name: 'Temperature' })).toBeTruthy()
   })
 })

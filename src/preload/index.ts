@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import type { Channel, EventData, EventName, Req, Res } from '../shared/ipc.js'
 import type { Prefs } from '../shared/prefs.js'
 import type { Result } from '../shared/result.js'
-import type { Mode, ProviderDraft } from '../shared/types.js'
+import type { Mode, ProviderDraft, SamplerSettings } from '../shared/types.js'
 import type { AttachmentInput } from '../shared/ipc.js'
 
 function invoke<C extends Channel>(channel: C, req: Req<C>): Promise<Result<Res<C>>> {
@@ -62,6 +62,8 @@ const api = {
     get: () => invoke('models:get', undefined),
     set: (slot: Mode, providerId: string | null, model: string) =>
       invoke('models:set', { slot, providerId, model }),
+    setSampling: (slot: Mode, sampling: SamplerSettings) =>
+      invoke('models:set-sampling', { slot, sampling }),
   },
   chats: {
     list: () => invoke('chats:list', undefined),

@@ -2,12 +2,13 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { ModelSlots } from '../../../shared/types.js'
+import { defaultSamplerSettings } from '../../../shared/types.js'
 import { ok } from '../../../shared/result.js'
 import { useModels } from './use-models.js'
 
 const initial: ModelSlots = {
-  fast: { providerId: 'provider-1', model: 'fast-model' },
-  expert: { providerId: 'provider-1', model: 'expert-model' },
+  fast: { providerId: 'provider-1', model: 'fast-model', sampling: { ...defaultSamplerSettings } },
+  expert: { providerId: 'provider-1', model: 'expert-model', sampling: { ...defaultSamplerSettings } },
 }
 
 describe('useModels', () => {
@@ -30,7 +31,10 @@ describe('useModels', () => {
     })
 
     act(() => {
-      notify?.({ ...initial, fast: { providerId: 'provider-2', model: 'new-fast' } })
+      notify?.({
+        ...initial,
+        fast: { ...initial.fast, providerId: 'provider-2', model: 'new-fast' },
+      })
     })
     expect(result.current.fast.model).toBe('new-fast')
   })

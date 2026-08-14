@@ -89,6 +89,26 @@ const steps: readonly string[] = [
    CREATE INDEX attachments_by_conversation
    ON attachments (conversation_id, message_id, ordinal);`,
   `DELETE FROM prefs WHERE key = 'systemPrompt';`,
+  `ALTER TABLE model_slots
+   ADD COLUMN sampling_enabled INTEGER NOT NULL DEFAULT 0 CHECK (sampling_enabled IN (0, 1));
+   ALTER TABLE model_slots
+   ADD COLUMN temperature REAL NOT NULL DEFAULT 0.7 CHECK (temperature BETWEEN 0 AND 2);
+   ALTER TABLE model_slots
+   ADD COLUMN top_p REAL NOT NULL DEFAULT 0.95 CHECK (top_p BETWEEN 0 AND 1);
+   ALTER TABLE model_slots
+   ADD COLUMN frequency_penalty REAL NOT NULL DEFAULT 0 CHECK (frequency_penalty BETWEEN -2 AND 2);
+   ALTER TABLE model_slots
+   ADD COLUMN presence_penalty REAL NOT NULL DEFAULT 0 CHECK (presence_penalty BETWEEN -2 AND 2);
+   ALTER TABLE model_slots
+   ADD COLUMN seed INTEGER CHECK (seed IS NULL OR seed BETWEEN 0 AND 9007199254740991);
+   ALTER TABLE model_slots
+   ADD COLUMN top_k INTEGER CHECK (top_k IS NULL OR top_k BETWEEN 0 AND 1000000);
+   ALTER TABLE model_slots
+   ADD COLUMN min_p REAL CHECK (min_p IS NULL OR min_p BETWEEN 0 AND 1);
+   ALTER TABLE model_slots
+   ADD COLUMN repeat_penalty REAL CHECK (
+     repeat_penalty IS NULL OR repeat_penalty BETWEEN 0 AND 10
+   );`,
 ]
 
 /** The version a fully migrated database reports. */

@@ -2,10 +2,11 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Composer } from './composer.js'
+import { defaultSamplerSettings } from '../../../shared/types.js'
 
 const models = {
-  fast: { providerId: 'provider-1', model: 'fast-model' },
-  expert: { providerId: 'provider-1', model: 'expert-model' },
+  fast: { providerId: 'provider-1', model: 'fast-model', sampling: { ...defaultSamplerSettings } },
+  expert: { providerId: 'provider-1', model: 'expert-model', sampling: { ...defaultSamplerSettings } },
 }
 
 function renderComposer(): HTMLTextAreaElement {

@@ -5,7 +5,9 @@ import type {
   Mode,
   Provider,
   ProviderDraft,
+  SamplerSettings,
 } from '../shared/types.js'
+import { defaultSamplerSettings } from '../shared/types.js'
 import * as db from './db.js'
 import { object } from './parse.js'
 
@@ -114,32 +116,90 @@ export function remove(conn: DatabaseSync, id: string): boolean {
   return conn.prepare('DELETE FROM providers WHERE id = ?').run(id).changes > 0
 }
 
-function slotRow(row: unknown): [Mode, { providerId: string | null; model: string }] | undefined {
+function optionalNumber(value: unknown): number | null | undefined {
+  return value === null || typeof value === 'number' ? value : undefined
+}
+
+function slotRow(row: unknown): [Mode, ModelSlots[Mode]] | undefined {
   const cell = object(row)
   if (cell === undefined) return undefined
+  const seed = optionalNumber(cell.seed)
+  const topK = optionalNumber(cell.top_k)
+  const minP = optionalNumber(cell.min_p)
+  const repeatPenalty = optionalNumber(cell.repeat_penalty)
   if (
     (cell.slot !== 'fast' && cell.slot !== 'expert') ||
     (typeof cell.provider_id !== 'string' && cell.provider_id !== null) ||
-    typeof cell.model !== 'string'
+    typeof cell.model !== 'string' ||
+    (cell.sampling_enabled !== 0 && cell.sampling_enabled !== 1) ||
+    typeof cell.temperature !== 'number' ||
+    typeof cell.top_p !== 'number' ||
+    typeof cell.frequency_penalty !== 'number' ||
+    typeof cell.presence_penalty !== 'number' ||
+    seed === undefined ||
+    topK === undefined ||
+    minP === undefined ||
+    repeatPenalty === undefined
   ) {
     return undefined
   }
 
-  return [cell.slot, { providerId: cell.provider_id, model: cell.model }]
+  return [
+    cell.slot,
+    {
+      providerId: cell.provider_id,
+      model: cell.model,
+      sampling: {
+        enabled: cell.sampling_enabled === 1,
+        temperature: cell.temperature,
+        topP: cell.top_p,
+        frequencyPenalty: cell.frequency_penalty,
+        presencePenalty: cell.presence_penalty,
+        seed,
+        topK,
+        minP,
+        repeatPenalty,
+      },
+    },
+  ]
 }
 
 export function readSlots(conn: DatabaseSync): ModelSlots {
   const slots: ModelSlots = {
-    fast: { providerId: null, model: '' },
-    expert: { providerId: null, model: '' },
+    fast: { providerId: null, model: '', sampling: { ...defaultSamplerSettings } },
+    expert: { providerId: null, model: '', sampling: { ...defaultSamplerSettings } },
   }
 
-  for (const row of conn.prepare('SELECT slot, provider_id, model FROM model_slots').all()) {
+  for (const row of conn.prepare(`SELECT slot, provider_id, model, sampling_enabled,
+    temperature, top_p, frequency_penalty, presence_penalty, seed, top_k, min_p,
+    repeat_penalty FROM model_slots`).all()) {
     const parsed = slotRow(row)
     if (parsed !== undefined) slots[parsed[0]] = parsed[1]
   }
 
   return slots
+}
+
+export function writeSampling(
+  conn: DatabaseSync,
+  slot: Mode,
+  sampling: SamplerSettings,
+): ModelSlots {
+  conn.prepare(`UPDATE model_slots SET sampling_enabled = ?, temperature = ?, top_p = ?,
+    frequency_penalty = ?, presence_penalty = ?, seed = ?, top_k = ?, min_p = ?,
+    repeat_penalty = ? WHERE slot = ?`).run(
+    sampling.enabled ? 1 : 0,
+    sampling.temperature,
+    sampling.topP,
+    sampling.frequencyPenalty,
+    sampling.presencePenalty,
+    sampling.seed,
+    sampling.topK,
+    sampling.minP,
+    sampling.repeatPenalty,
+    slot,
+  )
+  return readSlots(conn)
 }
 
 export function writeSlot(
@@ -180,4 +240,8 @@ export function slots(): ModelSlots {
 
 export function setSlot(slot: Mode, providerId: string | null, model: string): ModelSlots {
   return writeSlot(db.handle(), slot, providerId, model)
+}
+
+export function setSampling(slot: Mode, sampling: SamplerSettings): ModelSlots {
+  return writeSampling(db.handle(), slot, sampling)
 }

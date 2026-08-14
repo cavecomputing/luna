@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Prefs } from '../../shared/prefs.js'
 import type { Conversation, ModelSlots, Provider } from '../../shared/types.js'
+import { defaultSamplerSettings } from '../../shared/types.js'
 import { deleteAll, exportAll } from './privacy.js'
 
 type TestDeps = Parameters<typeof deleteAll>[0]
@@ -25,8 +26,8 @@ const preferences: Prefs = {
 }
 
 const slots: ModelSlots = {
-  fast: { providerId: null, model: '' },
-  expert: { providerId: null, model: '' },
+  fast: { providerId: null, model: '', sampling: { ...defaultSamplerSettings } },
+  expert: { providerId: null, model: '', sampling: { ...defaultSamplerSettings } },
 }
 
 /**

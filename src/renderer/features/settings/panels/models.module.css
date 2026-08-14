@@ -33,6 +33,138 @@
   margin: 0;
 }
 
+.sampling {
+  border-top: 1px solid var(--line-soft);
+  padding-top: var(--s-3);
+}
+
+.samplingHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+}
+
+.samplingHead > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.samplingHead strong {
+  font-size: var(--t-base);
+  font-weight: 600;
+}
+
+.samplingHead span,
+.advanced p,
+.samplingNote {
+  color: var(--text-muted);
+  font-size: var(--t-sm);
+}
+
+.samplingBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding-top: var(--s-4);
+}
+
+.samplingGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3) var(--s-4);
+}
+
+.samplingField,
+.seedField,
+.optionalField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+  font-size: var(--t-md);
+  font-weight: 500;
+}
+
+.rangeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.rangeRow input[type='range'] {
+  width: 100%;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.number,
+.seedField input,
+.optionalField input {
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  background: var(--surface);
+}
+
+.number {
+  width: 72px;
+  flex: none;
+  padding: 0 var(--s-2);
+}
+
+.seedField input,
+.optionalField input {
+  width: 100%;
+  padding: 0 var(--s-3);
+}
+
+.samplingField input:disabled,
+.seedField input:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.advanced {
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  padding: var(--s-3) 0;
+}
+
+.advanced summary {
+  cursor: pointer;
+  font-size: var(--t-md);
+  font-weight: 600;
+}
+
+.advanced p,
+.samplingNote {
+  margin: var(--s-2) 0 0;
+}
+
+.optionalGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+}
+
+.samplingNote {
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--r-sm);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+@media (max-width: 720px) {
+  .samplingGrid,
+  .optionalGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .cardHead h2 {
   font-size: var(--t-lg);
 }

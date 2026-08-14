@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import type { Prefs } from '../../shared/prefs.js'
 import { err, ok, type Result } from '../../shared/result.js'
 import type { ChatStart } from '../../shared/ipc.js'
-import type { ApiKind, Conversation, Message, ModelSlots } from '../../shared/types.js'
+import type { ApiKind, Conversation, Message, ModelSlots, Mode } from '../../shared/types.js'
 import { parseThinkingTags } from '../../shared/thinking.js'
 import { streamChat, type ChatChunk, type ChatCompletion, type ChatRequest } from '../chat-api.js'
 import * as chats from '../chats.js'
@@ -136,6 +136,7 @@ type Active = {
 type Selection = {
   provider: ProviderConfig
   model: string
+  sampling: ModelSlots[Mode]['sampling']
 }
 
 function selection(conversation: Conversation, d: Deps): Result<Selection> {
@@ -146,7 +147,7 @@ function selection(conversation: Conversation, d: Deps): Result<Selection> {
   if (slot.model.trim() === '') return err('chat/no-model', 'conversation mode has no model')
   const provider = d.getProvider(slot.providerId)
   if (provider === undefined) return err('chat/no-provider', 'configured provider was not found')
-  return ok({ provider, model: slot.model })
+  return ok({ provider, model: slot.model, sampling: slot.sampling })
 }
 
 export class ChatCoordinator {
@@ -321,6 +322,7 @@ export class ChatCoordinator {
       model: selected.model,
       systemPrompt: LUNA_SYSTEM_PROMPT,
       history,
+      sampling: selected.sampling,
     }
     await this.run(
       conversationId,
@@ -444,6 +446,7 @@ export class ChatCoordinator {
             attachments: [],
           },
         ],
+        sampling: slot.sampling,
       },
       controller.signal,
       () => undefined,
