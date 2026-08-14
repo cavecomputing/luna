@@ -8,8 +8,8 @@ function database(): DatabaseSync {
   db.exec('PRAGMA foreign_keys = ON')
   migrate(db)
   db.exec(`INSERT INTO conversations
-    (id, title, icon, mode, pinned, created_at, updated_at)
-    VALUES ('chat-1', 'Chat', 'spark', 'fast', 0, 1, 1)`)
+    (id, title, mode, pinned, created_at, updated_at)
+    VALUES ('chat-1', 'Chat', 'fast', 0, 1, 1)`)
   return db
 }
 

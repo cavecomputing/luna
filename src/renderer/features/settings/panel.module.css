@@ -68,13 +68,3 @@
 .rowBlock .control {
   flex: 1;
 }
-
-.notYet {
-  margin: 0;
-  padding: var(--s-5);
-  border: 1px dashed var(--line);
-  border-radius: var(--r-lg);
-  font-size: var(--t-md);
-  color: var(--text-muted);
-  text-align: center;
-}

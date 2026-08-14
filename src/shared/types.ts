@@ -94,26 +94,11 @@ export type Message = {
   attachments: AttachmentMeta[]
 }
 
-/**
- * Names a conversation's list icon. A closed set rather than a free string so
- * a bad value is a compile error, not a blank square at runtime.
- */
-export type ChatIcon =
-  | 'wave'
-  | 'bowl'
-  | 'book'
-  | 'dumbbell'
-  | 'leaf'
-  | 'gift'
-  | 'camera'
-  | 'spark'
-
 export type Conversation = {
   id: string
   title: string
   /** Unsent composer text, persisted separately for each conversation. */
   draft: string
-  icon: ChatIcon
   mode: Mode
   /** Pinned conversations sort ahead of unpinned conversations. */
   pinned: boolean

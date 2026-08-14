@@ -16,7 +16,6 @@ function chat(id = 'chat-1'): Conversation {
     id,
     title: 'New chat',
     draft: '',
-    icon: 'spark',
     mode: 'fast',
     pinned: false,
     updatedAt: 10,

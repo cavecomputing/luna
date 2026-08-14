@@ -31,7 +31,7 @@ vi.mock('./features/chats/use-chats.js', () => ({
     cancel: vi.fn(),
     setDraft: vi.fn(),
     setMode: vi.fn(),
-    setOpenId: vi.fn(),
+    openChat: vi.fn(),
   }),
 }))
 
@@ -52,7 +52,6 @@ function conversation(id: string, text?: string): Conversation {
     id,
     title: text === undefined ? 'New chat' : 'Existing chat',
     draft: '',
-    icon: 'spark',
     mode: 'fast',
     pinned: false,
     updatedAt: 1,

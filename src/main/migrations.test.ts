@@ -30,6 +30,11 @@ function dropSampling(db: DatabaseSync): void {
   }
 }
 
+/** Puts back the conversation glyph column so a rewound replay can drop it again. */
+function restoreIcon(db: DatabaseSync): void {
+  db.exec("ALTER TABLE conversations ADD COLUMN icon TEXT NOT NULL DEFAULT 'spark'")
+}
+
 describe('version', () => {
   it('reports 0 for a database that has never been migrated', () => {
     expect(version(fresh())).toBe(0)
@@ -89,8 +94,9 @@ describe('migrate', () => {
     const db = fresh()
     migrate(db)
     dropSampling(db)
+    restoreIcon(db)
     db.exec(`INSERT INTO prefs (key, value) VALUES ('systemPrompt', '"Replace Luna"');
-      PRAGMA user_version = ${String(latest - 2)};`)
+      PRAGMA user_version = ${String(latest - 3)};`)
 
     migrate(db)
 
@@ -158,6 +164,7 @@ describe('migrate', () => {
       ALTER TABLE messages DROP COLUMN provider_id;
       ALTER TABLE conversations DROP COLUMN draft;`)
     dropSampling(db)
+    restoreIcon(db)
 
     migrate(db)
 
@@ -171,8 +178,8 @@ describe('migrate', () => {
     const db = fresh()
     migrate(db)
     db.exec(`INSERT INTO conversations
-      (id, title, icon, mode, pinned, created_at, updated_at)
-      VALUES ('chat-1', 'Chat', 'spark', 'fast', 0, 1, 1);
+      (id, title, mode, pinned, created_at, updated_at)
+      VALUES ('chat-1', 'Chat', 'fast', 0, 1, 1);
       INSERT INTO messages
       (id, conversation_id, role, text, status, created_at, ordinal)
       VALUES ('message-1', 'chat-1', 'assistant', 'Answer', 'complete', 1, 0);
@@ -182,6 +189,7 @@ describe('migrate', () => {
       ALTER TABLE messages DROP COLUMN reasoning;
       ALTER TABLE conversations DROP COLUMN draft;`)
     dropSampling(db)
+    restoreIcon(db)
 
     migrate(db)
 
@@ -195,13 +203,14 @@ describe('migrate', () => {
     const db = fresh()
     migrate(db)
     db.exec(`INSERT INTO conversations
-      (id, title, icon, mode, pinned, created_at, updated_at, draft)
-      VALUES ('chat-1', 'Chat', 'spark', 'fast', 0, 1, 1, 'temporary');
+      (id, title, mode, pinned, created_at, updated_at, draft)
+      VALUES ('chat-1', 'Chat', 'fast', 0, 1, 1, 'temporary');
       PRAGMA user_version = 5;
       DROP TABLE window_state;
       DROP TABLE attachments;
       ALTER TABLE conversations DROP COLUMN draft;`)
     dropSampling(db)
+    restoreIcon(db)
 
     migrate(db)
 
@@ -234,6 +243,29 @@ describe('migrate', () => {
       { slot: 'expert', sampling_enabled: 0, temperature: 0.7, top_p: 0.95 },
       { slot: 'fast', sampling_enabled: 0, temperature: 0.7, top_p: 0.95 },
     ])
+  })
+
+  it('drops the conversation glyph column and keeps existing chats', () => {
+    const db = fresh()
+    migrate(db)
+    restoreIcon(db)
+    db.exec(`INSERT INTO conversations
+      (id, title, mode, pinned, created_at, updated_at)
+      VALUES ('chat-1', 'Chat', 'fast', 0, 1, 1);
+      INSERT INTO messages
+      (id, conversation_id, role, text, status, created_at, ordinal)
+      VALUES ('message-1', 'chat-1', 'user', 'Hello', 'complete', 1, 0);
+      PRAGMA user_version = 10;`)
+
+    migrate(db)
+
+    const columns = db.prepare('PRAGMA table_info(conversations)').all()
+    expect(columns.map((row) => ({ ...row }).name)).not.toContain('icon')
+    expect(db.prepare('SELECT title FROM conversations').get()).toEqual({ title: 'Chat' })
+    // The cascade onto messages has to survive the column rewrite.
+    expect(db.prepare('SELECT count(*) AS n FROM messages').get()).toEqual({ n: 1 })
+    db.exec("DELETE FROM conversations WHERE id = 'chat-1'")
+    expect(db.prepare('SELECT count(*) AS n FROM messages').get()).toEqual({ n: 0 })
   })
 
   it('refuses a database written by a newer build', () => {

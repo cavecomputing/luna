@@ -109,6 +109,10 @@ const steps: readonly string[] = [
    ADD COLUMN repeat_penalty REAL CHECK (
      repeat_penalty IS NULL OR repeat_penalty BETWEEN 0 AND 10
    );`,
+  // The per-conversation list glyph was dropped from the product. SQLite 3.53.1
+  // (Electron 43) removes the column's own CHECK with it, and messages' foreign
+  // key onto conversations survives the rewrite.
+  `ALTER TABLE conversations DROP COLUMN icon;`,
 ]
 
 /** The version a fully migrated database reports. */

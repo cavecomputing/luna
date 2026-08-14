@@ -91,7 +91,7 @@ export function Sidebar({
             chats={groups.pinned}
             openId={chats.openId}
             renameId={chats.renameId}
-            onSelect={chats.setOpenId}
+            onSelect={chats.openChat}
             onRename={chats.rename}
             onCancelRename={chats.cancelRename}
           />
@@ -104,7 +104,7 @@ export function Sidebar({
             chats={groups.recent}
             openId={chats.openId}
             renameId={chats.renameId}
-            onSelect={chats.setOpenId}
+            onSelect={chats.openChat}
             onRename={chats.rename}
             onCancelRename={chats.cancelRename}
           />

@@ -7,7 +7,7 @@ export const keyboardShortcuts = {
     match: { key: 'n', code: 'KeyN', shift: false },
   },
   commandPalette: {
-    label: 'Command palette (WIP)',
+    label: 'Command palette',
     accelerator: 'CmdOrCtrl+P',
     macKeys: ['⌘', 'P'],
     otherKeys: ['Ctrl', 'P'],

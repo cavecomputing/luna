@@ -2,7 +2,6 @@ import type { DatabaseSync } from 'node:sqlite'
 import type {
   ApiKind,
   AttachmentMeta,
-  ChatIcon,
   Conversation,
   Message,
   MessageStatus,
@@ -31,20 +30,9 @@ export type MessageAction = Pick<Message, 'id' | 'role' | 'text' | 'status'> & {
   retryable: boolean
 }
 
-const icons: readonly ChatIcon[] = [
-  'wave',
-  'bowl',
-  'book',
-  'dumbbell',
-  'leaf',
-  'gift',
-  'camera',
-  'spark',
-]
-
 /** What a rendered message needs. history() adds the provider columns on top. */
 const MESSAGE_COLUMNS = 'id, conversation_id, role, text, reasoning, status, created_at'
-const CONVERSATION_COLUMNS = 'id, title, draft, icon, mode, pinned, updated_at'
+const CONVERSATION_COLUMNS = 'id, title, draft, mode, pinned, updated_at'
 
 function mode(input: unknown): Mode | undefined {
   return input === 'fast' || input === 'expert' ? input : undefined
@@ -61,10 +49,6 @@ function status(input: unknown): MessageStatus | undefined {
     input === 'cancelled'
     ? input
     : undefined
-}
-
-function icon(input: unknown): ChatIcon | undefined {
-  return icons.find((value) => value === input)
 }
 
 function api(input: unknown): ApiKind | undefined {
@@ -121,14 +105,12 @@ function messageRow(row: unknown): (StoredMessage & { conversationId: string }) 
 function conversationRow(row: unknown, messages: Message[]): Conversation | undefined {
   const cell = object(row)
   if (cell === undefined) return undefined
-  const parsedIcon = icon(cell.icon)
   const parsedMode = mode(cell.mode)
   if (
     typeof cell.id !== 'string' ||
     typeof cell.title !== 'string' ||
     typeof cell.draft !== 'string' ||
     cell.draft.length > 100_000 ||
-    parsedIcon === undefined ||
     parsedMode === undefined ||
     (cell.pinned !== 0 && cell.pinned !== 1) ||
     typeof cell.updated_at !== 'number' ||
@@ -141,7 +123,6 @@ function conversationRow(row: unknown, messages: Message[]): Conversation | unde
     id: cell.id,
     title: cell.title,
     draft: cell.draft,
-    icon: parsedIcon,
     mode: parsedMode,
     pinned: cell.pinned === 1,
     updatedAt: cell.updated_at,
@@ -308,15 +289,14 @@ export function create(
 ): Conversation {
   conn
     .prepare(
-      `INSERT INTO conversations (id, title, icon, mode, pinned, created_at, updated_at)
-       VALUES (?, 'New chat', 'spark', ?, 0, ?, ?)`,
+      `INSERT INTO conversations (id, title, mode, pinned, created_at, updated_at)
+       VALUES (?, 'New chat', ?, 0, ?, ?)`,
     )
     .run(id, selectedMode, now, now)
   return {
     id,
     title: 'New chat',
     draft: '',
-    icon: 'spark',
     mode: selectedMode,
     pinned: false,
     updatedAt: now,

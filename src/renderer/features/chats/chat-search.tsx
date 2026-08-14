@@ -1,7 +1,6 @@
 import type { Conversation } from '../../../shared/types.js'
 import { relative } from '../../lib/time.js'
 import { useDebouncedValue } from '../../lib/use-debounced-value.js'
-import { ChatGlyph } from '../../ui/chat-glyph.js'
 import { Dialog, DialogClose, DialogHead } from '../../ui/dialog.js'
 import { Pin } from '../../ui/icons/pin.js'
 import { SearchInput } from '../../ui/search-input.js'
@@ -87,9 +86,6 @@ export function ChatSearch({ chats, now, onClose, onSelect }: Props): React.JSX.
                 onSelect(chat.id)
               }}
             >
-              <span className={styles.glyph}>
-                <ChatGlyph icon={chat.icon} />
-              </span>
               <span className={styles.resultText}>
                 <span className={styles.title}>{chat.title}</span>
                 {excerpt !== undefined && <span className={styles.excerpt}>{excerpt}</span>}

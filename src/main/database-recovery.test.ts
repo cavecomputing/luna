@@ -240,8 +240,8 @@ describe('eraseDatabase', () => {
     const paths = await temporary()
     const db = open(paths.active)
     db.exec(
-      `INSERT INTO conversations (id, title, icon, mode, pinned, created_at, updated_at)
-       VALUES ('chat-1', 'Synthetic', 'spark', 'fast', 0, 1, 1)`,
+      `INSERT INTO conversations (id, title, mode, pinned, created_at, updated_at)
+       VALUES ('chat-1', 'Synthetic', 'fast', 0, 1, 1)`,
     )
     db.exec(`INSERT INTO prefs (key, value) VALUES ('theme', '"gruvbox-dark"')`)
     db.close()
@@ -287,8 +287,8 @@ describe('eraseDatabase', () => {
     const paths = await temporary()
     const db = open(paths.active)
     db.exec(
-      `INSERT INTO conversations (id, title, icon, mode, pinned, created_at, updated_at)
-       VALUES ('chat-1', 'Synthetic', 'spark', 'fast', 0, 1, 1)`,
+      `INSERT INTO conversations (id, title, mode, pinned, created_at, updated_at)
+       VALUES ('chat-1', 'Synthetic', 'fast', 0, 1, 1)`,
     )
     db.close()
 
@@ -304,8 +304,8 @@ describe('eraseDatabase', () => {
     const paths = await temporary()
     const db = open(paths.active)
     db.exec(
-      `INSERT INTO conversations (id, title, icon, mode, pinned, created_at, updated_at)
-       VALUES ('chat-1', 'Synthetic', 'spark', 'fast', 0, 1, 1)`,
+      `INSERT INTO conversations (id, title, mode, pinned, created_at, updated_at)
+       VALUES ('chat-1', 'Synthetic', 'fast', 0, 1, 1)`,
     )
     db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
     db.close()

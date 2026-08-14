@@ -224,6 +224,15 @@ export function useChats(defaultMode: Mode) {
     if (!result.ok && result.code !== 'chat/not-active') setError(friendlyError(result.code))
   }
 
+  /**
+   * The notice belongs to the send that failed, not to the window. Carrying it
+   * into the next conversation would blame a thread that never made a request.
+   */
+  function openChat(id: string): void {
+    setError(undefined)
+    setOpenId(id)
+  }
+
   function setMode(mode: Mode): void {
     setError(undefined)
     if (open === undefined) {
@@ -288,7 +297,7 @@ export function useChats(defaultMode: Mode) {
     streamingMessage,
     error,
     renameId,
-    setOpenId,
+    openChat,
     start,
     ensure,
     send,

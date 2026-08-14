@@ -38,8 +38,3 @@ export function Row({ label, hint, block = false, children }: RowProps): React.J
     </div>
   )
 }
-
-/** Placeholder for a section whose behaviour isn't built yet. */
-export function NotYet({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <p className={styles.notYet}>{children}</p>
-}

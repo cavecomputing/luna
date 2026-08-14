@@ -27,23 +27,29 @@ branching on user data, just typed wrappers.
 
 `src/shared/ipc.ts` is the single source of truth. Everything else derives from it.
 
+The shape, using real channels from that file:
+
 ```ts
 export type Invocations = {
-  'prefs:get': { req: void; res: Prefs }
-  'prefs:set': { req: Partial<Prefs>; res: Prefs }
-  'files:pick': { req: { exts: string[] }; res: string | null }
-  'files:read': { req: { path: string }; res: string }
+  'prefs:get': { req: undefined; res: Prefs }
+  'prefs:set': { req: Prefs; res: Prefs }
+  'chats:create': { req: { mode: Mode }; res: Conversation }
+  'chats:delete': { req: { id: string }; res: undefined }
 }
 
 export type Events = {
   'theme:changed': { dark: boolean }
-  'update:progress': { pct: number }
+  'prefs:changed': Prefs
 }
 
 export type Channel = keyof Invocations
 export type Req<C extends Channel> = Invocations[C]['req']
 export type Res<C extends Channel> = Invocations[C]['res']
 ```
+
+A channel with no request payload declares `req: undefined`, not `void`. `prefs:set` takes a
+complete `Prefs`, not a partial one: the renderer sends the whole set it wants stored, so a
+write can never depend on merge order.
 
 Adding a feature = adding a line here. The compiler then flags the missing handler and the
 missing bridge method.
@@ -69,18 +75,15 @@ and never contains a path or user content.
 One file per domain under `src/main/ipc/`, each exporting `register()`.
 
 ```ts
-// src/main/ipc/files.ts
-export function register() {
-  handle('files:read', async (_e, { path }) => {
-    if (!isAllowed(path)) return err('file/denied', 'path outside allowed roots')
-    try {
-      return ok(await readFile(path, 'utf8'))
-    } catch {
-      return err('file/not-found', 'read failed')
-    }
-  })
+// src/main/ipc/chats.ts
+export function register(): void {
+  handle('chats:create', (_event, req) => createChat(req, deps))
 }
 ```
+
+Handler bodies are plain functions of their inputs, taking every side effect as an injected
+`deps` object. That is what lets the tests call `createChat` directly, with no Electron running
+and no database on disk.
 
 `handle` is a thin typed wrapper over `ipcMain.handle` living in `src/main/ipc/bus.ts`. It
 does three things: types the channel against `Invocations`, checks `event.senderFrame`
@@ -142,41 +145,54 @@ types. It never imports `electron`.
 
 ```ts
 const win = new BrowserWindow({
-  width, height, x, y,
-  minWidth: 720, minHeight: 480,
+  ...shape,
+  ...bounds,
   show: false,
-  titleBarStyle: 'hiddenInset',
-  trafficLightPosition: { x: 16, y: 16 },
-  backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1c1e' : '#f5f5f7',
+  ...chromeOptions(process.platform, theme),
+  backgroundColor: background(theme),
   webPreferences: {
     preload,
     contextIsolation: true,
     sandbox: true,
     nodeIntegration: false,
+    nodeIntegrationInSubFrames: false,
+    webSecurity: true,
   },
 })
 
 win.once('ready-to-show', () => win.show())
 ```
 
-`show: false` + `ready-to-show` avoids the white flash on launch. Set `backgroundColor` to
-match the theme so the pre-paint frame isn't wrong either.
+`show: false` + `ready-to-show` avoids the white flash on launch. `backgroundColor` comes from
+the stored theme so the pre-paint frame isn't wrong either.
 
-Bounds are saved debounced on `resize`/`move` and validated against
-`screen.getAllDisplays()` on restore — a saved position from a disconnected monitor puts the
-window off-screen.
+`chromeOptions` in `window-chrome.ts` is what keeps the platform branch out of this function.
+On darwin it returns `titleBarStyle: 'hiddenInset'` and a `trafficLightPosition`. On win32 it
+returns the title-bar overlay instead. Neither option can change after construction, which is
+why `updateChrome` recolors the Windows overlay in place rather than rebuilding the window.
+
+Bounds are saved on the window's `close` event and validated against each display's `workArea`
+on restore — a saved position from a monitor that is no longer attached would otherwise put the
+window off-screen. The save is skipped when the database connection is absent, because
+`privacy:delete-all` briefly swaps it.
 
 Navigation lockdown, applied to every window:
 
 ```ts
 win.webContents.setWindowOpenHandler(({ url }) => {
-  if (url.startsWith('https://')) shell.openExternal(url)
+  if (url.startsWith('https://')) void shell.openExternal(url)
   return { action: 'deny' }
 })
-win.webContents.on('will-navigate', (e, url) => {
-  if (new URL(url).origin !== APP_ORIGIN) e.preventDefault()
+win.webContents.on('will-navigate', (event, url) => {
+  if (!url.startsWith(devUrl() ?? APP_ORIGIN)) event.preventDefault()
+})
+win.webContents.on('will-frame-navigate', (details) => {
+  if (!canFrameLoad(details.url, details.isMainFrame)) details.preventDefault()
 })
 ```
+
+`will-navigate` covers the top-level document. `will-frame-navigate` covers subframes, which is
+what confines the HTML preview iframe to a single `app://preview/<uuid>` capability URL.
 
 ---
 
@@ -189,11 +205,31 @@ from it. This gives a real origin, so CSP, service workers, and same-origin chec
 normally — `file://` gives you none of that and grants broader read access if the renderer is
 ever compromised.
 
-CSP, set as a response header from the protocol handler:
+Two different CSPs are set as response headers by the protocol handler in `main/protocol.ts`.
+
+The app document, served from `app://luna`:
 
 ```
-default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'
+default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:;
+connect-src 'self'; frame-src app://preview; object-src 'none'; base-uri 'none';
+frame-ancestors 'none'
 ```
+
+The HTML preview document, served from `app://preview/<uuid>`, is stricter and is not the same
+policy:
+
+```
+default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data: blob:;
+font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none';
+object-src 'none'; form-action 'none'; base-uri 'none';
+frame-ancestors app://luna; sandbox allow-popups
+```
+
+`style-src 'unsafe-inline'` appears only in the preview policy. Model-authored HTML is mostly
+inline styles, and this document has `script-src 'none'`, no same-origin access, and no network
+reach, so inline CSS cannot escalate into anything. This is also why the preview cannot use
+`srcdoc`: a `srcdoc` frame inherits the app document's CSP, which correctly forbids inline
+styles.
 
 If a feature needs a wider CSP, that's a design conversation, not a quick edit.
 
@@ -203,8 +239,10 @@ If a feature needs a wider CSP, that's a design conversation, not a quick edit.
 
 - **Ephemeral UI state** → React `useState` inside the feature folder.
 - **Shared UI state** → a context per feature. Not one global store.
-- **Persisted prefs** → main owns them, on disk under `app.getPath('userData')`. Renderer reads
-  via `prefs:get` and writes via `prefs:set`. Main is the only writer.
+- **Persisted prefs** → main owns them, as one row per field in the `prefs` table of `luna.db`
+  under `app.getPath('userData')`. There is no separate preferences file and no in-memory
+  cache. Renderer reads via `prefs:get` and writes via `prefs:set`. Main is the only writer,
+  and it broadcasts `prefs:changed` to every window after each write.
 - **Anything the OS knows** (theme, window size, online status) → main pushes it over an event
   channel; renderer subscribes.
 
@@ -234,21 +272,35 @@ Channels:
 
 ```ts
 export type Invocations = {
-  'chat:send':   { req: { conversationId: string; text: string }; res: ChatStart }
+  'chat:send': {
+    req: { conversationId: string; text: string; attachmentIds: string[] }
+    res: ChatStart
+  }
   'chat:cancel': { req: { messageId: string }; res: undefined }
 }
 
 export type Events = {
-  'chat:delta': { conversationId: string; messageId: string; text: string; seq: number }
+  'chat:delta': {
+    conversationId: string
+    messageId: string
+    text: string
+    reasoning: string
+    seq: number
+  }
   'chat:done':  { conversationId: string; message: Message }
   'chat:error': { conversationId: string; message: Message; code: string }
 }
 ```
 
 `chat:send` first inserts the user message and an assistant placeholder in one SQLite
-transaction, then returns their ids. Delta events carry the full text accumulated so far and a
-monotonic sequence number. Replacing by id and ignoring older sequence numbers keeps delayed
-IPC events from corrupting the visible reply.
+transaction, binds the selected draft attachments to the user row in that same transaction, then
+returns their ids. Delta events carry the full text accumulated so far and a monotonic sequence
+number. Replacing by id and ignoring older sequence numbers keeps delayed IPC events from
+corrupting the visible reply.
+
+`text` and `reasoning` travel as separate accumulated strings, so the Thinking disclosure never
+has to re-split a combined blob, and a `<think>` tag straddling two SSE chunks cannot leak into
+the answer.
 
 Every stream must be cancellable. Main keeps an `AbortController` per `msgId`; `chat:cancel`
 aborts it. A stream that can't be stopped is a stuck UI and a wasted bill.
@@ -383,12 +435,14 @@ all expose the same catalog, so the model field always accepts a manually typed 
 `require`/`import` at the top of `main/index.ts` is synchronous and blocks the first paint.
 Rules that follow from that:
 
-- `main/index.ts` imports only what's needed to open the first window.
-- Updater, telemetry, database, heavy parsers → `await import()` after `ready-to-show`.
+- `main/index.ts` imports only what's needed to open the first window. Today that is every
+  module it imports: the database has to be open and migrated before a window exists, so it is
+  deliberately *not* lazy.
+- Anything that is not on the path to the first window — a future updater, a heavy parser —
+  should be `await import()`ed after `ready-to-show` rather than added to the top of the file.
 - The bundler (electron-vite) handles the rest; keep `asar: true` in the builder config so
   startup is a few large reads instead of thousands of small ones.
-- Never `await` a network call before creating the window. Update checks get a timeout and
-  run after the UI is visible.
+- Never `await` a network call before creating the window.
 
 Budget: window visible in under 800ms cold on Apple silicon. If a change pushes past that,
 find out what got imported.
@@ -400,13 +454,18 @@ find out what got imported.
 electron-builder targets macOS and Windows. Build release artifacts on their native operating
 systems so signing and platform tooling stay predictable.
 
-- `arch: ['arm64', 'x64']`, universal DMG.
-- Hardened runtime on, notarization via `notarytool` (2–10 min typical).
+- macOS builds `arch: ['arm64', 'x64']` as **two separate DMGs**, not one universal binary.
+  `Luna-<version>-arm64.dmg` and `Luna-<version>-x64.dmg`. Users pick the one for their Mac.
+- `hardenedRuntime: true` is set. **`notarize` is currently `false`**, so released DMGs are
+  neither signed nor notarized, and Gatekeeper blocks them until the user allows the app
+  explicitly in System Settings. Turning this on requires an Apple Developer account, a
+  Developer ID Application certificate in the login keychain, and `APPLE_ID`,
+  `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID` in the environment. Notarization then adds
+  roughly 2–10 minutes to `npm run dist`.
 - Entitlements start empty. Add one only when a shipped feature needs it, with a comment.
   `com.apple.security.cs.allow-unsigned-executable-memory` is not a default — if something
   asks for it, find out why first.
-- Credentials come from the environment (`APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`,
-  `APPLE_TEAM_ID`). Never in the repo.
+- Credentials come from the environment. Never in the repo.
 - Windows ships as an x64 NSIS installer. The Windows icon is generated by electron-builder
   from the committed PNG source; code-signing credentials stay outside the repo.
 - Verify a build with `codesign -dv --verbose=4` and `spctl -a -vvv -t install` before shipping.

@@ -17,15 +17,22 @@ Surfaces, in build order:
 1. **Chat thread** — user and assistant messages, timestamps, streamed assistant output,
    markdown rendering (lists, code blocks, links) **and HTML rendering**. Both are required,
    not optional polish. See **Rendering model output** below.
-2. **Conversation list** — searchable, relative timestamps, per-conversation icon, new-chat
-   button, collapsible sidebar.
+2. **Conversation list** — searchable, relative timestamps, new-chat button, collapsible
+   sidebar.
 3. **Composer** — multiline input, attachments, send. Enter sends, Shift+Enter newlines.
 4. **Mode switch** — `Fast` and `Expert`, a per-conversation model choice.
 5. **Settings** — a separate window (`CmdOrCtrl+,`), not an in-app pane. Providers, the two model
    slots, sampling, appearance, privacy.
+6. **Command palette** — a centered `CmdOrCtrl+P` dialog listing the actions the shell already
+   owns, each with its own accelerator. It reuses `Dialog`, `SearchInput`, and the same listbox
+   interaction as conversation search; don't build a second dialog pattern for it. Commands are
+   assembled in `app.tsx`, because that is where the state each one touches lives.
 
-Deliberately not built: suggestion chips under assistant messages. Removed once the
-model config took shape — don't reintroduce without asking.
+Deliberately not built, and not to be reintroduced without asking:
+
+- **Suggestion chips** under assistant messages. Removed once the model config took shape.
+- **Per-conversation list icons.** The `ChatGlyph` set, the `ChatIcon` type, and the
+  `conversations.icon` column are all gone; conversation rows and search results are text.
 
 Identity: blue `#2563EB` accent, white surfaces, rounded cards, generous whitespace, a fox
 mascot. Four named themes ship: Luna Light (the default), Luna Dark, Gruvbox Light, and
@@ -299,8 +306,7 @@ it also holds the `window.luna` bridge.
   `"undefined"` when a CSS module key misses, because `noUncheckedIndexedAccess` types those
   lookups as `string | undefined`.
 - **One file per icon** in `ui/icons/`. They take `size` and draw in `currentColor` so they
-  re-tint for dark mode. `ui/chat-glyph.tsx` holds the per-conversation set and is the single
-  swap point if those become raster art.
+  re-tint for dark mode.
 - `ui/` is dumb and reusable and holds no feature knowledge. `features/<name>/` owns its own
   components, hooks and state. State shared by two features is lifted to `app.tsx`, not put
   in a store.

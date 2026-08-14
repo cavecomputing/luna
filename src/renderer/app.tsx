@@ -13,6 +13,7 @@ import { cx } from './lib/cx.js'
 import { isSearchShortcut } from './features/chats/search-shortcut.js'
 import { ChatSearch } from './features/chats/chat-search.js'
 import { CommandPalette } from './features/commands/command-palette.js'
+import type { Command } from './features/commands/commands.js'
 import { matchesShortcutKey } from '../shared/keyboard-shortcuts.js'
 import {
   clampSidebarWidth,
@@ -177,6 +178,55 @@ export function App(): React.JSX.Element {
     setPref('sidebarWidth', width)
   }
 
+  // Built here because the shell owns every surface a command touches. Read at
+  // render time, so the mode entry names the mode you'd actually switch to.
+  const commands: Command[] = [
+    {
+      id: 'new-chat',
+      label: 'New chat',
+      shortcut: 'newChat',
+      run: () => {
+        void chats.start()
+      },
+    },
+    {
+      id: 'search',
+      label: 'Search conversations',
+      hint: 'find chats',
+      shortcut: 'search',
+      run: () => {
+        setSearchOpen(true)
+      },
+    },
+    {
+      id: 'toggle-sidebar',
+      label: open ? 'Hide sidebar' : 'Show sidebar',
+      hint: 'toggle',
+      shortcut: 'toggleSidebar',
+      run: () => {
+        setOpen((value) => !value)
+      },
+    },
+    {
+      id: 'toggle-mode',
+      label: chats.currentMode === 'fast' ? 'Switch to Expert' : 'Switch to Fast',
+      hint: 'model mode',
+      shortcut: 'toggleMode',
+      run: () => {
+        chats.setMode(chats.currentMode === 'fast' ? 'expert' : 'fast')
+      },
+    },
+    {
+      id: 'settings',
+      label: 'Open Settings',
+      hint: 'preferences providers models',
+      shortcut: 'settings',
+      run: () => {
+        void window.luna.settings.open()
+      },
+    },
+  ]
+
   // One ticking clock for the whole shell, so every row agrees.
   const now = useNow()
   const sidebarButton = (
@@ -267,7 +317,7 @@ export function App(): React.JSX.Element {
           now={now}
           onClose={closeSearch}
           onSelect={(id) => {
-            chats.setOpenId(id)
+            chats.openChat(id)
             closeSearch()
           }}
         />
@@ -275,6 +325,7 @@ export function App(): React.JSX.Element {
 
       {paletteOpen && (
         <CommandPalette
+          commands={commands}
           onClose={() => {
             setPaletteOpen(false)
           }}

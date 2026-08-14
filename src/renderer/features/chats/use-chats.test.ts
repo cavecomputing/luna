@@ -1,15 +1,23 @@
 // @vitest-environment jsdom
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import type { ChatDelta } from '../../../shared/ipc.js'
+import type { ChatDelta, ChatFailure } from '../../../shared/ipc.js'
 import type { Conversation } from '../../../shared/types.js'
-import { applyDelta, applyDeltas, applyFinal, mergeChats, queueDelta } from './use-chats.js'
+import { ok } from '../../../shared/result.js'
+import {
+  applyDelta,
+  applyDeltas,
+  applyFinal,
+  mergeChats,
+  queueDelta,
+  useChats,
+} from './use-chats.js'
 
 function chat(status: 'streaming' | 'complete' = 'streaming'): Conversation {
   return {
     id: 'chat-1',
     title: 'Chat',
     draft: '',
-    icon: 'spark',
     mode: 'fast',
     pinned: false,
     updatedAt: 1,
@@ -130,5 +138,63 @@ describe('stream event reducers', () => {
       reasoning: 'Done checking',
       streamSeq: 3,
     })
+  })
+})
+
+/** Captures the main -> renderer subscriptions so a test can push events. */
+function bridge(chats: Conversation[]): { fail: (event: ChatFailure) => void } {
+  let onError: (event: ChatFailure) => void = () => undefined
+  Object.defineProperty(window, 'luna', {
+    configurable: true,
+    value: {
+      chats: { list: () => Promise.resolve(ok(chats)) },
+      onChats: () => () => undefined,
+      onChatDelta: () => () => undefined,
+      onChatDone: () => () => undefined,
+      onChatError: (fn: (event: ChatFailure) => void) => {
+        onError = fn
+        return () => undefined
+      },
+      onRenameChat: () => () => undefined,
+    },
+  })
+  return {
+    fail: (event) => {
+      onError(event)
+    },
+  }
+}
+
+describe('useChats', () => {
+  it('drops a failed send notice when a different conversation is opened', async () => {
+    const other: Conversation = { ...chat('complete'), id: 'chat-2', messages: [] }
+    const { fail } = bridge([chat('complete'), other])
+    const { result } = renderHook(() => useChats('fast'))
+
+    await waitFor(() => {
+      expect(result.current.openId).toBe('chat-1')
+    })
+
+    act(() => {
+      fail({
+        conversationId: 'chat-1',
+        message: {
+          id: 'assistant-1',
+          role: 'assistant',
+          text: '',
+          status: 'error',
+          at: 1,
+          attachments: [],
+        },
+        code: 'chat/rate-limit',
+      })
+    })
+    expect(result.current.error).toBe('The provider rate limit was reached. Try again shortly.')
+
+    act(() => {
+      result.current.openChat('chat-2')
+    })
+    expect(result.current.openId).toBe('chat-2')
+    expect(result.current.error).toBeUndefined()
   })
 })

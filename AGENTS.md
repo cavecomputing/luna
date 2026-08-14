@@ -12,10 +12,34 @@ Before reporting a code change complete, run `npm run typecheck`, `npm run lint`
 `npm.ps1`. For UI or window changes, launch and visually verify the application as required by
 `CLAUDE.md`.
 
-## Visual verification workflow
+## Visual verification workflows
 
-Use this workflow for renderer UI changes so visual checks are repeatable and never expose real
-conversation data or Luna's preload bridge:
+Two workflows exist. Pick by what the change touches.
+
+### A. Run the real application against a scratch data directory
+
+Prefer this whenever the change involves Electron itself: window chrome, menus, dialogs, IPC,
+storage, migrations, or anything that reads `window.luna`. It exercises the real main process,
+the real preload bridge, and the real database, while being unable to read or modify the user's
+conversations.
+
+1. `npm run build`
+2. Launch with a throwaway data directory:
+   `./node_modules/.bin/electron out/main/index.js --user-data-dir=<scratch>/luna-data`
+   Electron's `--user-data-dir` switch redirects everything Luna stores, so `app.getPath('userData')`
+   points there instead of at the real profile.
+3. The first launch creates and migrates an empty database at `<scratch>/luna-data/luna.db`. To
+   see populated states, quit the app, insert invented conversations and messages into that
+   database with `node:sqlite`, then launch again.
+4. Screenshot the result, then stop the process and delete `<scratch>/luna-data`.
+
+Use invented data only. Never copy the real `luna.db` into a scratch directory, and never
+screenshot the real one. A screenshot may not contain a real conversation, name, email address,
+file path, or provider account detail, and no such screenshot may be committed.
+
+### B. Render one component with Vite, without Electron
+
+Use this for a purely presentational renderer change, where booting Electron adds nothing:
 
 1. Build a temporary synthetic fixture in `src/renderer/main.tsx` that renders the actual changed
    component and its real CSS with invented messages or other non-personal test data. Do not render
@@ -34,9 +58,16 @@ conversation data or Luna's preload bridge:
    `test ! -e visual.vite.config.ts` before the final checks. The main-entry diff must be empty and
    the temporary config must be gone so no fixture code can survive into the change.
 
-For native window or chrome changes, also launch the real application with `npm run dev` and inspect
-the affected platform behavior. Do not enable Electron remote debugging: its port can expose private
-chat data and the renderer bridge to local clients.
+For native window or chrome changes, use workflow A rather than this one.
 
-Never use a full-desktop screenshot for this check, and never save or commit a screenshot that may
-contain a real conversation, name, email address, file path, or other personal data.
+Do not enable Electron remote debugging: its port can expose private chat data and the renderer
+bridge to local clients.
+
+Prefer a window-scoped screenshot over a full-desktop one. If only a full-desktop capture is
+available, workflow A's scratch data directory is what keeps real conversations out of it —
+never point it at the real profile. Never save or commit a screenshot that may contain a real
+conversation, name, email address, file path, or other personal data.
+
+Do not run `npm run dev` for a visual check. It opens the real profile, and Luna's
+single-instance lock means a second launch focuses the existing window instead of starting the
+build you just made.

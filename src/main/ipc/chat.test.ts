@@ -12,7 +12,6 @@ const conversation: Conversation = {
   id: 'chat-1',
   title: 'New chat',
   draft: '',
-  icon: 'spark',
   mode: 'fast',
   pinned: false,
   updatedAt: 1,
