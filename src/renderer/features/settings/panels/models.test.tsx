@@ -15,6 +15,13 @@ const provider: Provider = {
   hasApiKey: true,
 }
 
+const localProvider: Provider = {
+  ...provider,
+  id: 'local',
+  name: 'Local llama.cpp',
+  api: 'chat-completions',
+}
+
 function slots(fast: string, expert: string): ModelSlots {
   return {
     fast: { providerId: 'openai', model: fast, sampling: { ...defaultSamplerSettings } },
@@ -140,5 +147,39 @@ describe('Models', () => {
       enabled: true,
     })
     expect(screen.getByRole('spinbutton', { name: 'Temperature' })).toBeTruthy()
+  })
+
+  it('shows llama.cpp-style samplers without another disclosure', async () => {
+    const persisted = slots('qwen3-8b', '')
+    persisted.fast = {
+      providerId: localProvider.id,
+      model: 'qwen3-8b',
+      sampling: { ...defaultSamplerSettings, enabled: true },
+    }
+    Object.defineProperty(window, 'luna', {
+      configurable: true,
+      value: {
+        providers: {
+          list: () => Promise.resolve({ ok: true, value: [localProvider] }),
+          models: () => Promise.resolve({ ok: true, value: [] }),
+        },
+        models: {
+          get: () => Promise.resolve({ ok: true, value: persisted }),
+          set: () => Promise.resolve({ ok: true, value: persisted }),
+          setSampling: () => Promise.resolve({ ok: true, value: persisted }),
+        },
+        onProviders: () => () => undefined,
+        onModels: () => () => undefined,
+      },
+    })
+
+    render(<Models />)
+
+    expect(await screen.findByRole('spinbutton', { name: 'Top K (top_k)' })).toBeTruthy()
+    expect(screen.getByRole('spinbutton', { name: 'Min P (min_p)' })).toBeTruthy()
+    expect(screen.getByRole('spinbutton', { name: 'Repeat penalty (repeat_penalty)' })).toBeTruthy()
+    expect(screen.queryByText('Advanced server parameters')).toBeNull()
+    expect(document.querySelector('select')).toBeNull()
+    expect(document.querySelector('datalist')).toBeNull()
   })
 })

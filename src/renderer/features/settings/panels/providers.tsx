@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Provider, ProviderDraft } from '../../../../shared/types.js'
+import { SelectMenu } from '../../../ui/select-menu.js'
 import { Panel } from '../panel.js'
 import styles from './providers.module.css'
 
@@ -265,22 +266,25 @@ export function Providers(): React.JSX.Element {
             <small>Luna appends /models for discovery. HTTP is allowed but is not encrypted.</small>
           </label>
 
-          <label className={styles.field}>
+          <div className={styles.field}>
             <span>Conversation API</span>
-            <select
+            <SelectMenu
+              label="Conversation API"
               value={editor.provider.api}
-              onChange={(event) => {
+              placeholder="Choose an API"
+              options={[
+                { value: 'responses', label: 'Responses API (recommended)' },
+                { value: 'chat-completions', label: 'Chat Completions (compatibility)' },
+              ]}
+              onChange={(value) => {
                 field(
                   'api',
-                  event.target.value === 'chat-completions' ? 'chat-completions' : 'responses',
+                  value === 'chat-completions' ? 'chat-completions' : 'responses',
                 )
               }}
-            >
-              <option value="responses">Responses API (recommended)</option>
-              <option value="chat-completions">Chat Completions (compatibility)</option>
-            </select>
+            />
             <small>Chat requests to this server use the selected API.</small>
-          </label>
+          </div>
 
           <div className={styles.columns}>
             <label className={styles.field}>

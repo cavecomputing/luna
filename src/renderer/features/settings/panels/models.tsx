@@ -11,7 +11,9 @@ import { useDebouncedValue } from '../../../lib/use-debounced-value.js'
 import { Bolt } from '../../../ui/icons/bolt.js'
 import { Crescent } from '../../../ui/icons/crescent.js'
 import { Panel } from '../panel.js'
+import { SelectMenu } from '../../../ui/select-menu.js'
 import { Toggle } from '../../../ui/toggle.js'
+import { ModelCombobox } from './model-combobox.js'
 import styles from './models.module.css'
 
 function errorMessage(code: string): string {
@@ -185,7 +187,6 @@ function ModelCard({
   onSampling,
 }: CardProps): React.JSX.Element {
   const selected = providers.find((provider) => provider.id === value.providerId)
-  const listId = `${slot}-models`
 
   return (
     <section className={styles.card}>
@@ -197,41 +198,34 @@ function ModelCard({
         </div>
       </header>
 
-      <label className={styles.field}>
+      <div className={styles.field}>
         <span>Provider</span>
-        <select
+        <SelectMenu
+          label={`${title} provider`}
           value={value.providerId ?? ''}
-          onChange={(event) => {
-            onProvider(event.target.value === '' ? null : event.target.value)
+          placeholder="Choose a provider"
+          options={[
+            { value: '', label: 'Choose a provider' },
+            ...providers.map((provider) => ({ value: provider.id, label: provider.name })),
+          ]}
+          onChange={(providerId) => {
+            onProvider(providerId === '' ? null : providerId)
           }}
-        >
-          <option value="">Choose a provider</option>
-          {providers.map((provider) => (
-            <option value={provider.id} key={provider.id}>
-              {provider.name}
-            </option>
-          ))}
-        </select>
-      </label>
+        />
+      </div>
 
-      <label className={styles.field}>
+      <div className={styles.field}>
         <span>Model</span>
         <div className={styles.modelRow}>
-          <input
-            list={listId}
+          <ModelCombobox
             value={draft}
             disabled={value.providerId === null}
             placeholder={value.providerId === null ? 'Choose a provider first' : 'Select or type a model ID'}
-            spellCheck={false}
-            onChange={(event) => {
-              onModel(event.target.value)
+            models={models}
+            onChange={(model) => {
+              onModel(model)
             }}
           />
-          <datalist id={listId}>
-            {models.map((model) => (
-              <option value={model.id} key={model.id} />
-            ))}
-          </datalist>
           <button
             type="button"
             className={styles.refresh}
@@ -246,7 +240,7 @@ function ModelCard({
             ? 'Fast and Expert are configured independently.'
             : `${selected.api === 'responses' ? 'Responses API' : 'Chat Completions'} · Server models appear as suggestions; any exact model ID is accepted.`}
         </small>
-      </label>
+      </div>
 
       <div className={styles.sampling}>
         <div className={styles.samplingHead}>
@@ -330,12 +324,14 @@ function ModelCard({
             </div>
 
             {selected?.api === 'chat-completions' && (
-              <details className={styles.advanced}>
-                <summary>Advanced server parameters</summary>
-                <p>Optional extensions for llama.cpp and similar Chat Completions servers.</p>
+              <section className={styles.serverSamplers} aria-labelledby={`${slot}-server-samplers`}>
+                <div className={styles.serverHead}>
+                  <strong id={`${slot}-server-samplers`}>Server samplers</strong>
+                  <span>Optional llama.cpp-style request fields.</span>
+                </div>
                 <div className={styles.optionalGrid}>
                   <OptionalField
-                    label="Top K"
+                    label="Top K (top_k)"
                     value={value.sampling.topK}
                     min={0}
                     max={1_000_000}
@@ -345,7 +341,7 @@ function ModelCard({
                     }}
                   />
                   <OptionalField
-                    label="Min P"
+                    label="Min P (min_p)"
                     value={value.sampling.minP}
                     min={0}
                     max={1}
@@ -355,7 +351,7 @@ function ModelCard({
                     }}
                   />
                   <OptionalField
-                    label="Repeat penalty"
+                    label="Repeat penalty (repeat_penalty)"
                     value={value.sampling.repeatPenalty}
                     min={0}
                     max={10}
@@ -365,7 +361,7 @@ function ModelCard({
                     }}
                   />
                 </div>
-              </details>
+              </section>
             )}
 
             <p className={styles.samplingNote}>

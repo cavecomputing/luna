@@ -146,8 +146,7 @@
   font-weight: 600;
 }
 
-.field input,
-.field select {
+.field input {
   width: 100%;
   min-height: 36px;
   padding: 0 var(--s-3);
@@ -157,8 +156,7 @@
   background: var(--surface);
 }
 
-.field input:focus,
-.field select:focus {
+.field input:focus {
   outline: none;
   border-color: var(--accent);
 }

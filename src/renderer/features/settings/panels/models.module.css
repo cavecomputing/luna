@@ -56,7 +56,7 @@
 }
 
 .samplingHead span,
-.advanced p,
+.serverHead span,
 .samplingNote {
   color: var(--text-muted);
   font-size: var(--t-sm);
@@ -126,19 +126,22 @@
   opacity: 0.5;
 }
 
-.advanced {
+.serverSamplers {
   border-top: 1px solid var(--line-soft);
   border-bottom: 1px solid var(--line-soft);
   padding: var(--s-3) 0;
 }
 
-.advanced summary {
-  cursor: pointer;
-  font-size: var(--t-md);
+.serverHead {
+  display: flex;
+  flex-direction: column;
+}
+
+.serverHead strong {
+  font-size: var(--t-base);
   font-weight: 600;
 }
 
-.advanced p,
 .samplingNote {
   margin: var(--s-2) 0 0;
 }
@@ -178,14 +181,23 @@
 }
 
 .field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-1);
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s-1) var(--s-3);
   font-size: var(--t-md);
   font-weight: 600;
 }
 
-.field select,
+.field > span {
+  grid-column: 1;
+}
+
+.field > .modelRow,
+.field > small {
+  grid-column: 2;
+}
+
 .field input {
   width: 100%;
   min-height: 38px;
@@ -196,7 +208,6 @@
   background: var(--surface);
 }
 
-.field select:focus,
 .field input:focus {
   outline: none;
   border-color: var(--accent);
