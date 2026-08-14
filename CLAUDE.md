@@ -5,6 +5,8 @@ commands, security boundaries, and platform rules below are the contract for ong
 
 Deep reference (read on demand, do not preload): [docs/architecture.md](docs/architecture.md).
 Windows setup and packaging reference: [docs/windows.md](docs/windows.md).
+Planned direction after 1.0: [docs/roadmap.md](docs/roadmap.md) — read it before starting
+anything that sounds like a roadmap item, and keep it current (see **The roadmap** below).
 
 ## What Luna is
 
@@ -541,6 +543,24 @@ personal or secret is staged.
 - Write a barrel `index.ts` that re-exports a whole folder — it wrecks tree-shaking and
   creates import cycles.
 - Bump Electron or a major dep as a side effect of another task.
+
+## The roadmap — YOU MUST
+
+[docs/roadmap.md](docs/roadmap.md) holds the plan after 1.0. It goes stale the moment work
+lands and nobody updates it, and a stale roadmap is worse than none: it will confidently tell
+you a prerequisite exists when it doesn't.
+
+Keep it current **in the same change as the work**, never as a follow-up:
+
+- A roadmap item ships → move it to **Shipped**, with the version it shipped in.
+- An **Open decision** gets decided → delete the entry and write the outcome into the version it
+  belonged to. If it changes a rule here, change that rule in the same commit.
+- Work uncovers a new prerequisite → add it under **Foundations**, not buried in a version.
+- The order changes → say so in the file, and say why. Don't silently renumber.
+
+Before starting anything that looks like a roadmap item, read that file first. Several planned
+versions depend on infrastructure Luna does not have yet — tool calling above all — and the
+dependency order there is the point of the document.
 
 ## Working with me
 

@@ -172,6 +172,7 @@ See [Development](docs/development.md) for the full contributor workflow.
 - [Getting started](docs/getting-started.md) — installing, configuring a provider, daily use.
 - [Development](docs/development.md) — building, testing, and packaging Luna.
 - [Architecture](docs/architecture.md) — how Luna is built internally.
+- [Roadmap](docs/roadmap.md) — what is planned after 1.0.
 - [Windows](docs/windows.md) — Windows-specific setup and packaging.
 - [CLAUDE.md](CLAUDE.md) — the project's engineering, security, and privacy contract.
 
