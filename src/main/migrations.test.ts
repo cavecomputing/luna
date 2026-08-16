@@ -52,8 +52,14 @@ function dropToolColumns(db: DatabaseSync): void {
   }
 }
 
+/** Takes the tool grant table back off, so its creating step can run again. */
+function dropToolGrants(db: DatabaseSync): void {
+  db.exec('DROP TABLE tool_grants')
+}
+
 /** Every rewind helper, for a replay that goes back before the newest steps. */
 function rewind(db: DatabaseSync): void {
+  dropToolGrants(db)
   dropToolColumns(db)
   dropSampling(db)
   restoreIcon(db)
@@ -277,6 +283,7 @@ describe('migrate', () => {
       (id, conversation_id, role, text, status, created_at, ordinal)
       VALUES ('message-1', 'chat-1', 'assistant', 'Answer', 'complete', 1, 0);`)
     dropToolColumns(db)
+    dropToolGrants(db)
     db.exec('PRAGMA user_version = 11;')
 
     migrate(db)
@@ -321,6 +328,7 @@ describe('migrate', () => {
     migrate(db)
     restoreIcon(db)
     dropToolColumns(db)
+    dropToolGrants(db)
     db.exec(`INSERT INTO conversations
       (id, title, mode, pinned, created_at, updated_at)
       VALUES ('chat-1', 'Chat', 'fast', 0, 1, 1);

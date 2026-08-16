@@ -6,6 +6,7 @@
  */
 
 import type { Prefs } from './prefs.js'
+import type { ToolInfo, ToolPolicy } from './tools.js'
 import type {
   AttachmentMeta,
   Conversation,
@@ -123,6 +124,11 @@ export type Invocations = {
     req: { slot: Mode; sampling: SamplerSettings }
     res: ModelSlots
   }
+  /** Connects to every tool source and returns the catalog with its grants. */
+  'tools:list': { req: undefined; res: ToolInfo[] }
+  'tools:set-enabled': { req: { source: string; name: string; enabled: boolean }; res: ToolInfo[] }
+  /** Whether an enabled tool still asks before each call. */
+  'tools:set-policy': { req: { source: string; name: string; policy: ToolPolicy }; res: ToolInfo[] }
   'chats:list': { req: undefined; res: Conversation[] }
   'chats:create': { req: { mode: Mode }; res: Conversation }
   'chats:set-mode': { req: { id: string; mode: Mode }; res: Conversation }
@@ -173,6 +179,8 @@ export type Events = {
   'providers:changed': Provider[]
   /** Fast or Expert was assigned to a different provider/model pair. */
   'models:changed': ModelSlots
+  /** A tool was enabled, disabled, or re-discovered with a changed definition. */
+  'tools:changed': ToolInfo[]
   'chats:changed': Conversation[]
   'attachments:changed': { conversationId: string; attachments: AttachmentMeta[] }
   /** Attachment rows changed; Settings reloads worker-computed storage totals. */

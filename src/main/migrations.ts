@@ -124,6 +124,20 @@ const steps: readonly string[] = [
    ALTER TABLE messages ADD COLUMN output_tokens INTEGER;
    ALTER TABLE messages ADD COLUMN reasoning_tokens INTEGER;
    ALTER TABLE messages ADD COLUMN cached_tokens INTEGER;`,
+  // Which tools may run. No row means never approved, and `enabled` defaults to
+  // 0 so a tool that appears without anyone looking cannot execute. `digest`
+  // fingerprints the definition that was approved, so a server that rewrites a
+  // tool's description or annotations loses the grant. Nothing here is secret.
+  `CREATE TABLE tool_grants (
+     source      TEXT NOT NULL,
+     tool_name   TEXT NOT NULL CHECK (length(tool_name) BETWEEN 1 AND 128),
+     enabled     INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+     policy      TEXT NOT NULL DEFAULT 'ask' CHECK (policy IN ('ask', 'allow')),
+     digest      TEXT NOT NULL,
+     seen_at     INTEGER NOT NULL,
+     approved_at INTEGER,
+     PRIMARY KEY (source, tool_name)
+   ) STRICT;`,
 ]
 
 /** The version a fully migrated database reports. */

@@ -138,6 +138,37 @@ Three things follow that Luna has no answer for today:
 
 This remains the item most likely to be skipped and most expensive to add later.
 
+### Consent model — decided
+
+Per-tool approval, default off, in the `tool_grants` table (migration step 14). Absence of a row
+means no; a newly discovered tool is written disabled, so a server that quietly gains a tool gains
+no capability with it.
+
+Approval is of a **definition**, not a name. `digest` covers the description, the schemas, and the
+annotations, so a server that rewrites what a tool claims to do — the injection route that leaves
+the name untouched — loses the grant and has to ask again. Disabling a tool also drops any
+standing permission, so re-enabling never silently restores "never ask me again".
+
+**The prompt is a native dialog driven from main**, not a renderer one. `bus.ts` checks the sender
+on every channel because a compromised page can send anything, which means a consent decision
+arriving over IPC is a decision a compromised page can forge — the same reasoning that already put
+delete-all and clear-attachments on `ask()`. Tool descriptions and arguments are also
+attacker-controlled text, and a native box takes plain strings where the renderer would run them
+through the markdown pipeline. Deny is both `defaultId` and `cancelId`: elsewhere in Luna the
+destructive verb is the affirmative answer, but here the safe answer *is* cancel.
+
+Prompts are queued so only one box is ever open, and the wait races the turn's abort signal.
+Electron cannot dismiss a message box programmatically, so an abort stops waiting and answers deny
+while the box stays on screen; without that, `stopAll()` and the privacy delete would deadlock
+behind an unanswered modal.
+
+**Annotations are shown, never trusted.** `readOnlyHint` and friends make far better consent copy
+than a bare tool name, and the specification requires clients to treat them as untrusted. So they
+appear in the dialog attributed to the tool, they are inside the digest, and no code branches on
+them: a tool claiming `readOnlyHint` gets exactly the same gate as one that claims nothing.
+
+Still to come, with the tool loop: enforcing the grant at dispatch, and the Settings panel.
+
 ### F5. Update path
 
 **Needed by:** every version after 1.0, in practice.
@@ -210,9 +241,7 @@ a smaller first release and covers most existing servers. Remote servers add a n
 boundary and an auth story that F4 would have to cover in its first version rather than its
 second.
 
-**Open decision:** how much of a server's tool surface is exposed by default. Enabling every
-discovered tool is the simplest thing to build and the hardest to reason about once a server
-updates and quietly gains a tool the user never approved.
+The default-exposure question is decided and built. See **Consent model** under Foundations.
 
 ### v1.2 — Reusable skills
 

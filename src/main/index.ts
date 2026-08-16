@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import * as chats from './chats.js'
 import { registerAll } from './ipc/index.js'
 import { coordinator } from './ipc/chat.js'
+import { registry as toolRegistry } from './ipc/tools.js'
 import { emit } from './ipc/bus.js'
 import * as db from './db.js'
 import * as dock from './dock.js'
@@ -95,6 +96,10 @@ app.on('child-process-gone', (_event, details) => {
 // Checkpoints the WAL, so the next launch doesn't replay one.
 app.on('will-quit', () => {
   coordinator.stopAll()
+  // Tool sources are in-process today, so closing them is synchronous and
+  // belongs here. A subprocess source needs a graceful stop that cannot be
+  // awaited from this handler, and will hook into before-quit instead.
+  void toolRegistry.stopAll()
   db.close()
 })
 
