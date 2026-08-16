@@ -2,7 +2,8 @@ import { err, ok, type Result } from '../shared/result.js'
 import { providerHeaders } from './openai.js'
 import type { ProviderConfig } from './providers.js'
 import type { StoredMessage } from './chats.js'
-import type { SamplerSettings } from '../shared/types.js'
+import type { SamplerSettings, TokenUsage, ToolStep } from '../shared/types.js'
+import type { ToolDefinition } from '../shared/tools.js'
 import { object } from './parse.js'
 import { SseParser, type SseEvent } from './sse.js'
 
@@ -15,12 +16,34 @@ export type ChatRequest = {
   systemPrompt: string
   history: StoredMessage[]
   sampling: SamplerSettings
+  /** Tools the model may call this turn. Names must already be unique. */
+  tools?: readonly ToolDefinition[]
+  /**
+   * Calls and results from earlier iterations of this same turn.
+   *
+   * They are not in `history` because nothing mid-turn is written to the
+   * database — the assistant row stays `streaming` until the loop ends, and
+   * requestBody skips rows that are not complete.
+   */
+  pendingSteps?: readonly ToolStep[]
+  /** The partial answer text the model produced before calling those tools. */
+  pendingText?: string
+}
+
+/** One tool call the model asked for, reassembled from stream fragments. */
+export type StreamToolCall = {
+  callId: string
+  name: string
+  /** Accumulated JSON text. Deliberately not parsed here — see chatEvent. */
+  arguments: string
 }
 
 export type ChatCompletion = {
   text: string
   reasoning: string
   providerItems?: unknown[]
+  toolCalls?: StreamToolCall[]
+  usage?: TokenUsage
 }
 
 export type ChatChunk = {
@@ -70,8 +93,83 @@ function responseContent(message: StoredMessage): string | Record<string, unknow
   return content
 }
 
+/** The two shapes the same tool list takes on the two request surfaces. */
+function toolsBody(
+  tools: readonly ToolDefinition[],
+  api: ProviderConfig['api'],
+): Record<string, unknown> {
+  if (tools.length === 0) return {}
+  if (api === 'chat-completions') {
+    return {
+      tools: tools.map((tool) => ({
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.inputSchema,
+        },
+      })),
+    }
+  }
+  return {
+    tools: tools.map((tool) => ({
+      type: 'function',
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.inputSchema,
+    })),
+  }
+}
+
+/**
+ * Replays tool steps as a Chat Completions assistant turn plus its results.
+ *
+ * The call and its result are always emitted together. One without the other is
+ * a hard 400 from the provider, so there is no branch here that can produce a
+ * half pair.
+ */
+function chatSteps(
+  steps: readonly ToolStep[],
+  text: string,
+  messages: Record<string, unknown>[],
+): void {
+  if (steps.length === 0) return
+  messages.push({
+    role: 'assistant',
+    content: text,
+    tool_calls: steps.map((step) => ({
+      id: step.callId,
+      type: 'function',
+      function: { name: step.name, arguments: step.arguments },
+    })),
+  })
+  for (const step of steps) {
+    messages.push({ role: 'tool', tool_call_id: step.callId, content: step.text })
+  }
+}
+
+/** The same pair, as Responses input items. */
+function responseSteps(steps: readonly ToolStep[], input: unknown[], withCalls: boolean): void {
+  for (const step of steps) {
+    // When provider items were replayed verbatim the function_call is already
+    // in the input, so emitting it again would duplicate the call.
+    if (withCalls) {
+      input.push({
+        type: 'function_call',
+        call_id: step.callId,
+        name: step.name,
+        arguments: step.arguments,
+      })
+    }
+    input.push({ type: 'function_call_output', call_id: step.callId, output: step.text })
+  }
+}
+
 export function requestBody(request: ChatRequest): Record<string, unknown> {
   const sampling = samplingBody(request.sampling, request.provider.api)
+  const tools = toolsBody(request.tools ?? [], request.provider.api)
+  const pending = request.pendingSteps ?? []
+
   if (request.provider.api === 'chat-completions') {
     const messages: Record<string, unknown>[] = []
     if (request.systemPrompt !== '') {
@@ -79,12 +177,26 @@ export function requestBody(request: ChatRequest): Record<string, unknown> {
     }
     for (const message of request.history) {
       if (message.status !== 'complete') continue
+      if (message.role === 'assistant' && message.toolSteps !== undefined) {
+        chatSteps(message.toolSteps, message.text, messages)
+        continue
+      }
       messages.push({
         role: message.role,
         content: message.role === 'user' ? chatContent(message) : message.text,
       })
     }
-    return { model: request.model, messages, stream: true, store: false, ...sampling }
+    chatSteps(pending, request.pendingText ?? '', messages)
+    return {
+      model: request.model,
+      messages,
+      stream: true,
+      store: false,
+      // Usage arrives on a final chunk only when this is asked for.
+      ...(tools.tools === undefined ? {} : { stream_options: { include_usage: true } }),
+      ...tools,
+      ...sampling,
+    }
   }
 
   const input: unknown[] = []
@@ -97,13 +209,26 @@ export function requestBody(request: ChatRequest): Record<string, unknown> {
       message.providerItems !== undefined
     ) {
       input.push(...message.providerItems)
-    } else {
-      input.push({
-        role: message.role,
-        content: message.role === 'user' ? responseContent(message) : message.text,
-      })
+      // The stored items carry the calls; only their outputs are missing.
+      if (message.toolSteps !== undefined) responseSteps(message.toolSteps, input, false)
+      continue
+    }
+    input.push({
+      role: message.role,
+      content: message.role === 'user' ? responseContent(message) : message.text,
+    })
+    // Falling back to plain text loses the calls too, so synthesize both halves.
+    if (message.role === 'assistant' && message.toolSteps !== undefined) {
+      responseSteps(message.toolSteps, input, true)
     }
   }
+  if (pending.length > 0) {
+    if ((request.pendingText ?? '') !== '') {
+      input.push({ role: 'assistant', content: request.pendingText })
+    }
+    responseSteps(pending, input, true)
+  }
+
   return {
     model: request.model,
     ...(request.systemPrompt === '' ? {} : { instructions: request.systemPrompt }),
@@ -111,6 +236,7 @@ export function requestBody(request: ChatRequest): Record<string, unknown> {
     stream: true,
     store: false,
     include: ['reasoning.encrypted_content'],
+    ...tools,
     ...sampling,
   }
 }
@@ -210,6 +336,76 @@ type StreamState = {
   reasoning: string
   done: boolean
   providerItems?: unknown[]
+  /**
+   * Tool calls under construction, keyed by whatever the API uses to correlate
+   * fragments. `order` preserves arrival order, because a Map keyed by item id
+   * does not tell you which call the model asked for first.
+   */
+  toolCalls: Map<string, { order: number; call: StreamToolCall }>
+  usage?: TokenUsage
+}
+
+/** Finds or starts the entry a fragment belongs to. */
+function callSlot(state: StreamState, key: string): StreamToolCall {
+  const existing = state.toolCalls.get(key)
+  if (existing !== undefined) return existing.call
+  // A fragment can arrive before the item that names it, so start empty and let
+  // the naming event fill it in later.
+  const call: StreamToolCall = { callId: '', name: '', arguments: '' }
+  state.toolCalls.set(key, { order: state.toolCalls.size, call })
+  return call
+}
+
+function orderedCalls(state: StreamState): StreamToolCall[] {
+  return [...state.toolCalls.values()]
+    .sort((a, b) => a.order - b.order)
+    .map((entry) => entry.call)
+    // A call with no name was never completed and cannot be dispatched.
+    .filter((call) => call.name !== '')
+    .map((call) => ({ ...call, callId: call.callId === '' ? call.name : call.callId }))
+}
+
+/** First report wins; a later chunk repeating it must not overwrite it. */
+function recordUsage(state: StreamState, parsed: TokenUsage | undefined): void {
+  if (parsed !== undefined && state.usage === undefined) state.usage = parsed
+}
+
+function positive(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined
+}
+
+/** Responses reports totals under its own names, with details one level down. */
+function responseUsage(value: unknown): TokenUsage | undefined {
+  const cell = object(value)
+  if (cell === undefined) return undefined
+  const input = positive(cell.input_tokens)
+  const output = positive(cell.output_tokens)
+  const reasoning = positive(object(cell.output_tokens_details)?.reasoning_tokens)
+  const cached = positive(object(cell.input_tokens_details)?.cached_tokens)
+  if ([input, output, reasoning, cached].every((entry) => entry === undefined)) return undefined
+  return {
+    ...(input === undefined ? {} : { inputTokens: input }),
+    ...(output === undefined ? {} : { outputTokens: output }),
+    ...(reasoning === undefined ? {} : { reasoningTokens: reasoning }),
+    ...(cached === undefined ? {} : { cachedTokens: cached }),
+  }
+}
+
+/** Chat Completions uses prompt/completion for the same two numbers. */
+function chatUsage(value: unknown): TokenUsage | undefined {
+  const cell = object(value)
+  if (cell === undefined) return undefined
+  const input = positive(cell.prompt_tokens)
+  const output = positive(cell.completion_tokens)
+  const reasoning = positive(object(cell.completion_tokens_details)?.reasoning_tokens)
+  const cached = positive(object(cell.prompt_tokens_details)?.cached_tokens)
+  if ([input, output, reasoning, cached].every((entry) => entry === undefined)) return undefined
+  return {
+    ...(input === undefined ? {} : { inputTokens: input }),
+    ...(output === undefined ? {} : { outputTokens: output }),
+    ...(reasoning === undefined ? {} : { reasoningTokens: reasoning }),
+    ...(cached === undefined ? {} : { cachedTokens: cached }),
+  }
 }
 
 type EventDelta = {
@@ -222,6 +418,43 @@ function parseJson(data: string): Record<string, unknown> | undefined {
     return object(JSON.parse(data))
   } catch {
     return undefined
+  }
+}
+
+/**
+ * Correlates a fragment to its call.
+ *
+ * `item_id` is the reliable key; `output_index` is the fallback for servers
+ * that omit it. Both are used consistently so a delta arriving before its
+ * `output_item.added` still lands in the same slot.
+ */
+function itemKey(body: Record<string, unknown>, item: Record<string, unknown> | undefined): string {
+  const id = item?.id ?? body.item_id
+  if (typeof id === 'string' && id !== '') return id
+  return indexKey(body.output_index)
+}
+
+/** A positional fallback key. Anything that is not a number collapses to zero. */
+function indexKey(value: unknown): string {
+  return typeof value === 'number' && Number.isFinite(value) ? `index:${String(value)}` : 'index:0'
+}
+
+/** Picks up any call the deltas missed, from the final output array. */
+function sweepCalls(state: StreamState, output: unknown[]): void {
+  for (const entry of output) {
+    const item = object(entry)
+    if (item?.type !== 'function_call' || typeof item.name !== 'string') continue
+    const key = typeof item.id === 'string' && item.id !== '' ? item.id : `call:${item.name}`
+    const existing = [...state.toolCalls.values()].some(
+      (slot) => slot.call.name === item.name && slot.call.arguments !== '',
+    )
+    if (existing) continue
+    const call = callSlot(state, key)
+    call.name = item.name
+    if (typeof item.call_id === 'string') call.callId = item.call_id
+    if (call.arguments === '' && typeof item.arguments === 'string') {
+      call.arguments = item.arguments
+    }
   }
 }
 
@@ -260,13 +493,41 @@ function responseEvent(event: SseEvent, state: StreamState): Result<EventDelta |
       ? ok({ reasoning: body.text })
       : ok(undefined)
   }
+  if (type === 'response.output_item.added') {
+    const item = object(body.item)
+    if (item?.type === 'function_call') {
+      const call = callSlot(state, itemKey(body, item))
+      if (typeof item.call_id === 'string') call.callId = item.call_id
+      if (typeof item.name === 'string') call.name = item.name
+      if (typeof item.arguments === 'string') call.arguments += item.arguments
+    }
+    return ok(undefined)
+  }
+  if (type === 'response.function_call_arguments.delta') {
+    if (typeof body.delta !== 'string') {
+      return err('chat/bad-stream', 'function call arguments delta was not text')
+    }
+    callSlot(state, itemKey(body, undefined)).arguments += body.delta
+    return ok(undefined)
+  }
+  if (type === 'response.function_call_arguments.done') {
+    // Only trust the whole-value form when nothing was accumulated, the same
+    // way reasoning_text.done is treated above.
+    const call = callSlot(state, itemKey(body, undefined))
+    if (call.arguments === '' && typeof body.arguments === 'string') {
+      call.arguments = body.arguments
+    }
+    return ok(undefined)
+  }
   if (type === 'response.failed' || type === 'error') {
     return err('chat/provider', 'provider reported a response error')
   }
   if (type === 'response.completed' || type === 'response.incomplete') {
     const response = object(body.response)
+    recordUsage(state, responseUsage(response?.usage))
     if (Array.isArray(response?.output)) {
       state.providerItems = response.output
+      sweepCalls(state, response.output)
       const text = state.text === '' ? outputText(response.output) : ''
       const reasoning = state.reasoning === '' ? outputReasoning(response.output) : ''
       state.done = true
@@ -287,6 +548,26 @@ function chatReasoning(delta: Record<string, unknown>): string {
   return typeof direct === 'string' ? direct : reasoningDetails(delta.reasoning_details)
 }
 
+/**
+ * Accumulates Chat Completions tool-call fragments.
+ *
+ * Fragments correlate by `index`, and `id` and `function.name` appear on the
+ * first fragment only — later ones carry nothing but more argument text. So
+ * each field is assigned only while it is still empty.
+ */
+function collectChatCalls(state: StreamState, fragments: unknown[]): void {
+  for (const entry of fragments) {
+    const fragment = object(entry)
+    if (fragment === undefined) continue
+    const call = callSlot(state, indexKey(fragment.index))
+    if (call.callId === '' && typeof fragment.id === 'string') call.callId = fragment.id
+    const fn = object(fragment.function)
+    if (fn === undefined) continue
+    if (call.name === '' && typeof fn.name === 'string') call.name = fn.name
+    if (typeof fn.arguments === 'string') call.arguments += fn.arguments
+  }
+}
+
 function chatEvent(event: SseEvent, state: StreamState): Result<EventDelta | undefined> {
   if (event.data === '[DONE]') {
     state.done = true
@@ -297,6 +578,9 @@ function chatEvent(event: SseEvent, state: StreamState): Result<EventDelta | und
   if (object(body.error) !== undefined) {
     return err('chat/provider', 'provider reported a completion error')
   }
+  // Usage arrives on a final chunk whose choices array is empty, so it has to
+  // be read before the early return below.
+  recordUsage(state, chatUsage(body.usage))
   if (!Array.isArray(body.choices)) return ok(undefined)
   let text = ''
   let reasoning = ''
@@ -306,12 +590,15 @@ function chatEvent(event: SseEvent, state: StreamState): Result<EventDelta | und
     if (finishReason === 'error') {
       return err('chat/provider', 'provider reported a completion error')
     }
+    // 'tool_calls' is a finish reason like any other, so this already ends the
+    // stream when the model asked for tools rather than answering.
     if (typeof finishReason === 'string' && finishReason !== '') state.done = true
     const item = object(parsedChoice?.delta)
     if (item === undefined) continue
     text += textParts(item.content)
     if (typeof item.refusal === 'string') text += item.refusal
     reasoning += chatReasoning(item)
+    if (Array.isArray(item.tool_calls)) collectChatCalls(state, item.tool_calls)
   }
   return ok({
     ...(text === '' ? {} : { text }),
@@ -354,7 +641,12 @@ export async function streamChat(
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   const parser = new SseParser()
-  const state: StreamState = { text: '', reasoning: '', done: false }
+  const state: StreamState = {
+    text: '',
+    reasoning: '',
+    done: false,
+    toolCalls: new Map(),
+  }
   const consume = (events: SseEvent[]): Result<undefined> => {
     for (const event of events) {
       const parsed =
@@ -396,9 +688,12 @@ export async function streamChat(
   }
 
   if (!state.done) return err('chat/stream-ended', 'provider stream ended before completion')
+  const toolCalls = orderedCalls(state)
   return ok({
     text: state.text,
     reasoning: state.reasoning,
     ...(state.providerItems === undefined ? {} : { providerItems: state.providerItems }),
+    ...(toolCalls.length === 0 ? {} : { toolCalls }),
+    ...(state.usage === undefined ? {} : { usage: state.usage }),
   })
 }
