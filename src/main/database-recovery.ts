@@ -62,16 +62,48 @@ function isHealthy(db: DatabaseSync): boolean {
   return db.prepare('PRAGMA foreign_key_check').all().length === 0
 }
 
-export function validDatabase(file: string): boolean {
+/**
+ * Whether a database carries no schema at all.
+ *
+ * SQLite treats a zero-length file as a valid empty database, so a truncated
+ * `luna.db` — a half-finished write, a sync client, a full disk — opens
+ * cleanly and passes every integrity check. Without this, that file is
+ * indistinguishable from a first launch: startup would migrate it, report
+ * success, and show the user an app with every conversation gone. Emptiness
+ * where a database was is damage, and it is the one kind of damage SQLite
+ * cannot report.
+ */
+function blank(db: DatabaseSync): boolean {
+  const row = object(db.prepare(`SELECT count(*) AS n FROM sqlite_schema WHERE type = 'table'`).get())
+  return row?.n === 0
+}
+
+/**
+ * How a snapshot stands relative to this build. `ahead` is kept separate from
+ * `damaged` because the two deserve opposite treatment: damage is worth
+ * deleting, while a snapshot written by a newer Luna becomes restorable again
+ * the moment that version is reinstalled.
+ */
+type Grade = 'usable' | 'ahead' | 'damaged'
+
+function grade(file: string): Grade {
   let db: DatabaseSync | undefined
   try {
     db = new DatabaseSync(file, { readOnly: true })
-    return isHealthy(db) && version(db) <= latest
+    // A blank file restores as an empty app while the real data gets archived
+    // out of reach, so it is never a backup worth offering.
+    if (blank(db)) return 'damaged'
+    if (version(db) > latest) return 'ahead'
+    return isHealthy(db) ? 'usable' : 'damaged'
   } catch {
-    return false
+    return 'damaged'
   } finally {
     closeQuietly(db)
   }
+}
+
+export function validDatabase(file: string): boolean {
+  return grade(file) === 'usable'
 }
 
 async function files(dir: string): Promise<string[]> {
@@ -96,8 +128,26 @@ async function snapshots(dir: string): Promise<{ file: string; modified: number 
   return found.sort((a, b) => b.modified - a.modified)
 }
 
+/**
+ * Prunes to the newest `KEEP` snapshots that can actually be restored from.
+ *
+ * Age alone is the wrong test. Snapshots taken while the database was already
+ * damaged are newer than the last good one, so pruning by date walks the only
+ * usable backup off the end of the list while keeping five that restore to
+ * nothing.
+ */
 export async function rotateSnapshots(dir: string): Promise<void> {
-  for (const old of (await snapshots(dir)).slice(KEEP)) {
+  const graded = (await snapshots(dir)).map((candidate) => ({
+    file: candidate.file,
+    grade: grade(candidate.file),
+  }))
+  const keep = new Set(
+    graded.filter((candidate) => candidate.grade === 'usable')
+      .slice(0, KEEP)
+      .map((candidate) => candidate.file),
+  )
+  for (const old of graded) {
+    if (old.grade === 'ahead' || keep.has(old.file)) continue
     await rm(old.file, { force: true })
   }
 }
@@ -120,10 +170,15 @@ export async function createSnapshot(
     target = `${root}-${String(sequence)}.db`
     sequence += 1
   }
-  await rm(temp, { force: true })
+  await discard(temp)
   await backup(db, temp, { rate: 1_000_000 })
   await chmod(temp, 0o600)
-  if (!validDatabase(temp)) {
+  // Validating opens the copy, which leaves sidecar files that `rename` does
+  // not carry with it. Unswept, they accumulate in the backup directory.
+  const usable = validDatabase(temp)
+  await rm(`${temp}-wal`, { force: true })
+  await rm(`${temp}-shm`, { force: true })
+  if (!usable) {
     await rm(temp, { force: true })
     throw new Error('database backup failed validation')
   }
@@ -136,12 +191,24 @@ export async function createSnapshot(
 
 export async function snapshotDue(paths: DatabasePaths, now: number): Promise<boolean> {
   const newest = (await snapshots(paths.backups))[0]
-  return newest === undefined || now - newest.modified >= DAY
+  if (newest === undefined) return true
+  const age = now - newest.modified
+  // A snapshot dated in the future means the clock moved, not that one was
+  // just taken. Trusting the arithmetic would suspend backups until the date
+  // on that file passes, which can be years.
+  return age >= DAY || age < 0
+}
+
+/** Removes a working file and the write-ahead sidecars that follow it around. */
+async function discard(file: string): Promise<void> {
+  await rm(file, { force: true, maxRetries: 5, retryDelay: 100 })
+  await rm(`${file}-wal`, { force: true, maxRetries: 5, retryDelay: 100 })
+  await rm(`${file}-shm`, { force: true, maxRetries: 5, retryDelay: 100 })
 }
 
 async function trial(file: string, paths: DatabasePaths): Promise<boolean> {
   const candidate = `${paths.active}.trial`
-  await rm(candidate, { force: true })
+  await discard(candidate)
   try {
     await copyFile(file, candidate)
     const db = configured(candidate)
@@ -155,9 +222,7 @@ async function trial(file: string, paths: DatabasePaths): Promise<boolean> {
   } catch {
     return false
   } finally {
-    await rm(candidate, { force: true })
-    await rm(`${candidate}-wal`, { force: true })
-    await rm(`${candidate}-shm`, { force: true })
+    await discard(candidate)
   }
 }
 
@@ -174,7 +239,10 @@ async function recoveryFor(paths: DatabasePaths): Promise<RecoveryState> {
   let currentVersion: number | undefined
   try {
     db = new DatabaseSync(paths.active, { readOnly: true })
-    healthy = isHealthy(db)
+    // A blank file reads as perfectly healthy. Calling it healthy here would
+    // classify it as a migration failure, which offers only "Try again" — and
+    // hides a restorable backup behind a button that can never succeed.
+    healthy = !blank(db) && isHealthy(db)
     currentVersion = version(db)
   } catch {
     healthy = false
@@ -241,6 +309,8 @@ async function commitCandidate(paths: DatabasePaths, candidate: string, now: num
 async function prepareCandidate(paths: DatabasePaths, source?: string): Promise<string> {
   const candidate = `${paths.active}.candidate`
   await rm(candidate, { force: true })
+  await rm(`${candidate}-wal`, { force: true })
+  await rm(`${candidate}-shm`, { force: true })
   if (source !== undefined) await copyFile(source, candidate)
   const db = configured(candidate)
   await chmod(candidate, 0o600)
@@ -250,6 +320,8 @@ async function prepareCandidate(paths: DatabasePaths, source?: string): Promise<
     if (!isHealthy(db)) throw new Error('recovery candidate failed validation')
   } finally {
     closeQuietly(db)
+    await rm(`${candidate}-wal`, { force: true })
+    await rm(`${candidate}-shm`, { force: true })
   }
   return candidate
 }
@@ -298,6 +370,13 @@ async function erase(file: string): Promise<void> {
  * and failing there leaves every byte of the user's data untouched.
  */
 export async function eraseDatabase(paths: DatabasePaths): Promise<DatabaseSync> {
+  // A recovery that was interrupted leaves whole copies of the database beside
+  // it under these names, readable long after the user asked for the data to be
+  // gone. They are swept first because the candidate built below claims one of
+  // the same names.
+  await discard(`${paths.active}.trial`)
+  await discard(`${paths.active}.installing`)
+
   const candidate = await prepareCandidate(paths)
 
   // Snapshots and preserved archives are full copies of the conversations being
@@ -319,6 +398,10 @@ export async function startDatabase(paths: DatabasePaths, now: number): Promise<
   let db: DatabaseSync | undefined
   try {
     db = configured(paths.active)
+    // An existing file with no schema in it was emptied, not just created.
+    // Migrating it would hand back a working-looking app with nothing in it and
+    // then snapshot that emptiness over the backups that could still fix it.
+    if (hadDatabase && blank(db)) throw new Error('database is empty')
     const from = version(db)
     if (hadDatabase && from < latest) {
       if (!isHealthy(db)) throw new Error('database failed integrity check')
