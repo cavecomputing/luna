@@ -580,6 +580,75 @@ describe('database recovery under attack', () => {
   }, 20_000)
 })
 
+describe('startup scratch sweep', () => {
+  it('removes the working copies a crashed recovery left on disk', async () => {
+    const paths = await temporary()
+    const db = open(paths.active)
+    db.exec(
+      `INSERT INTO conversations (id, title, mode, pinned, created_at, updated_at)
+       VALUES ('chat-1', 'Synthetic', 'fast', 0, 1, 1)`,
+    )
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+    db.close()
+    // trial() and prepareCandidate() clear these in a finally. A crash does not.
+    await copyFile(paths.active, `${paths.active}.trial`)
+    await copyFile(paths.active, `${paths.active}.candidate`)
+    await writeFile(`${paths.active}.trial-wal`, 'stray write-ahead log')
+
+    const result = await startDatabase(paths, Date.now())
+    expect(result.ready).toBe(true)
+    if (result.ready) result.db.close()
+
+    const remaining = (await names(dirname(paths.active)))
+      .filter((name) => name.startsWith('luna.db.'))
+    expect(remaining).toEqual([])
+  })
+
+  it('opens normally when a leftover cannot be removed', async () => {
+    const paths = await temporary()
+    const db = open(paths.active)
+    db.exec(
+      `INSERT INTO conversations (id, title, mode, pinned, created_at, updated_at)
+       VALUES ('chat-1', 'Synthetic', 'fast', 0, 1, 1)`,
+    )
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+    db.close()
+    // A non-empty directory under the scratch name: rm refuses it.
+    await mkdir(`${paths.active}.trial`, { recursive: true })
+    await writeFile(join(`${paths.active}.trial`, 'blocker'), 'x')
+
+    const result = await startDatabase(paths, Date.now())
+
+    // Failing to tidy up must never route a healthy database to recovery.
+    expect(result.ready).toBe(true)
+    if (result.ready) {
+      expect(result.db.prepare('SELECT count(*) AS n FROM conversations').get()).toEqual({ n: 1 })
+      result.db.close()
+    }
+  })
+
+  it('still finishes an interrupted install before sweeping', async () => {
+    const paths = await temporary()
+    const active = open(paths.active)
+    active.close()
+    const replacement = open(`${paths.active}.installing`)
+    replacement.exec(`INSERT INTO prefs (key, value) VALUES ('theme', '"restored"')`)
+    replacement.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+    replacement.close()
+    await copyFile(paths.active, `${paths.active}.trial`)
+
+    const result = await startDatabase(paths, Date.now())
+    expect(result.ready).toBe(true)
+    if (result.ready) {
+      // The commit point wins; only the abandoned scratch is discarded.
+      expect(result.db.prepare('SELECT value FROM prefs WHERE key = ?').get('theme'))
+        .toEqual({ value: '"restored"' })
+      result.db.close()
+    }
+    expect(await names(dirname(paths.active))).not.toContain('luna.db.trial')
+  })
+})
+
 describe('eraseDatabase under attack', () => {
   it('destroys scratch copies left behind by an interrupted recovery', async () => {
     const paths = await temporary()

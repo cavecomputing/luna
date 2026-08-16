@@ -7,16 +7,21 @@ export type ThinkingText = {
 
 const OPEN = '<think>'
 const CLOSE = '</think>'
+const TAG = /<\/?think>/gi
 
-function findToken(source: string, token: string, from: number): number {
-  return source.toLowerCase().indexOf(token, from)
-}
-
+/**
+ * Length of the longest suffix of `source` that is an incomplete `token`.
+ *
+ * Only the last few characters can be one, so this reads them directly rather
+ * than lowercasing the remaining text. That matters: this runs on the whole
+ * accumulated reply once per streamed delta.
+ */
 function partialTokenLength(source: string, token: string, from: number): number {
-  const remaining = source.slice(from).toLowerCase()
-  const maximum = Math.min(remaining.length, token.length - 1)
+  const maximum = Math.min(source.length - from, token.length - 1)
   for (let length = maximum; length > 0; length -= 1) {
-    if (remaining.endsWith(token.slice(0, length))) return length
+    if (source.slice(source.length - length).toLowerCase() === token.slice(0, length)) {
+      return length
+    }
   }
   return 0
 }
@@ -24,6 +29,10 @@ function partialTokenLength(source: string, token: string, from: number): number
 /**
  * Separates the explicit reasoning convention used by some local models.
  * Re-parsing accumulated text makes tags split across any SSE boundary safe.
+ *
+ * One case-insensitive pass, because the caller runs this on every delta and
+ * the string it passes grows with the reply. Lowercasing the source instead
+ * would copy the entire accumulated response several times per delta.
  */
 export function parseThinkingTags(source: string, complete = false): ThinkingText {
   let reasoning = ''
@@ -31,25 +40,24 @@ export function parseThinkingTags(source: string, complete = false): ThinkingTex
   let cursor = 0
   let thinking = false
 
-  while (cursor < source.length) {
-    const token = thinking ? CLOSE : OPEN
-    const found = findToken(source, token, cursor)
-    if (found >= 0) {
-      const content = source.slice(cursor, found)
-      if (thinking) reasoning += content
-      else text += content
-      cursor = found + token.length
-      thinking = !thinking
-      continue
-    }
-
-    const partial = partialTokenLength(source, token, cursor)
-    const end = partial === 0 || complete ? source.length : source.length - partial
-    const content = source.slice(cursor, end)
+  TAG.lastIndex = 0
+  for (let match = TAG.exec(source); match !== null; match = TAG.exec(source)) {
+    // Only the tag the current state waits for ends a section. The other one is
+    // literal, which is what a model quoting these tags in its answer produces.
+    const closing = match[0].charAt(1) === '/'
+    if (closing !== thinking) continue
+    const content = source.slice(cursor, match.index)
     if (thinking) reasoning += content
     else text += content
-    break
+    cursor = match.index + match[0].length
+    thinking = !thinking
   }
+
+  const partial = partialTokenLength(source, thinking ? CLOSE : OPEN, cursor)
+  const end = partial === 0 || complete ? source.length : source.length - partial
+  const tail = source.slice(cursor, end)
+  if (thinking) reasoning += tail
+  else text += tail
 
   return { reasoning, text, thinking }
 }

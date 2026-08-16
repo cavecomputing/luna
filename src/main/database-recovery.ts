@@ -392,8 +392,29 @@ export async function eraseDatabase(paths: DatabasePaths): Promise<DatabaseSync>
   return openReady(paths.active)
 }
 
+/**
+ * Drops the working copies an interrupted recovery leaves beside the database.
+ * Both are whole copies of the user's conversations and both stay readable
+ * until something clears them; normally that is a `finally`, which a crash
+ * skips.
+ *
+ * Neither is a commit point — `.installing` is, and `resumeInstall` owns it —
+ * so removing them can only discard work that was already abandoned. A failure
+ * here is ignored on purpose: leftover scratch is untidy, while a startup that
+ * refuses to open over it would send a healthy database to the recovery window.
+ */
+async function sweepScratch(paths: DatabasePaths): Promise<void> {
+  try {
+    await discard(`${paths.active}.trial`)
+    await discard(`${paths.active}.candidate`)
+  } catch {
+    // Startup continues; the next recovery or privacy delete clears them.
+  }
+}
+
 export async function startDatabase(paths: DatabasePaths, now: number): Promise<StartResult> {
   await resumeInstall(paths, now)
+  await sweepScratch(paths)
   const hadDatabase = await exists(paths.active)
   let db: DatabaseSync | undefined
   try {

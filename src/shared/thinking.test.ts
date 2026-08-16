@@ -49,4 +49,36 @@ describe('parseThinkingTags', () => {
   it('releases an incomplete literal opening tag when the response is complete', () => {
     expect(parseThinkingTags('literal <thi', true).text).toBe('literal <thi')
   })
+
+  it('leaves a closing tag that opened nothing in the answer', () => {
+    expect(parseThinkingTags('</think>stray')).toEqual({
+      reasoning: '',
+      text: '</think>stray',
+      thinking: false,
+    })
+  })
+
+  it('treats a second opening tag inside reasoning as literal', () => {
+    expect(parseThinkingTags('<think>outer<think>inner</think>answer')).toEqual({
+      reasoning: 'outer<think>inner',
+      text: 'answer',
+      thinking: false,
+    })
+  })
+
+  it('reports reasoning that never closed as still thinking', () => {
+    expect(parseThinkingTags('<think>cut off mid-thought', true)).toEqual({
+      reasoning: 'cut off mid-thought',
+      text: '',
+      thinking: true,
+    })
+  })
+
+  it('keeps text before and after every block in order', () => {
+    expect(parseThinkingTags('a<think>one</think>b<think>two</think>c')).toEqual({
+      reasoning: 'onetwo',
+      text: 'abc',
+      thinking: false,
+    })
+  })
 })
