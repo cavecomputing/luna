@@ -52,21 +52,55 @@ tool calling touches five things at once:
 3. **The turn loop** stops being one request. It becomes: request → tool call → execute →
    feed the result back → request again, until the model stops calling tools. `ChatCoordinator`
    currently assumes one request per assistant row.
-4. **Storage.** `messages.role` is `CHECK (role IN ('user', 'assistant'))`. Tool calls and tool
-   results need a role, or a separate table, plus a migration. One user turn will produce
-   several rows.
+4. **Storage.** Decided and built: tool calls and results are a JSON `tool_steps` column on the
+   assistant row that made them, not a new role and not a separate table. One user turn still
+   produces exactly two rows. See **Storage shape for tool calls** below.
 5. **Cancellation** must interrupt the loop, not just the current HTTP request, and must still
    leave every row in a terminal state.
 
 Treat this as its own piece of work with its own tests before any tool that depends on it.
 
+### Storage shape for tool calls — decided
+
+Tool calls and their results live in a JSON `tool_steps` column on the assistant row, added by
+migration step 12. Token counts are four nullable INTEGER columns added by step 13; nullable
+because a provider reporting nothing is not the same as reporting zero.
+
+Widening `messages.role` was the obvious reading and is the wrong call. SQLite cannot loosen a
+CHECK in place, so it means rebuilding a STRICT table whose ids `attachments.message_id`
+references with `ON DELETE CASCADE`, under `PRAGMA foreign_keys = ON`, while
+`database-recovery.ts` grades every snapshot with `foreign_key_check`. It also breaks four things
+that assume one assistant row per turn: `retryConversation()` requires the retry target sit at
+`max(ordinal)`; `recoverInterrupted()` flips every streaming row to error, orphaning tool rows;
+`beginTurn()` allocates ordinals as max+1/+2 under `UNIQUE (conversation_id, ordinal)`; and
+`chat-export.ts` copies `role` straight into documented format v1.
+
+A separate table avoids the rebuild but splits `finishMessage()`'s exactly-once guarantee — one
+UPDATE's `WHERE id = ? AND role = 'assistant' AND status = 'streaming'` — across two tables, and
+makes `history()` a join where the drop-a-bad-row convention could drop half of a call/result
+pair. Both provider APIs reject that with a hard 400.
+
+Two consequences worth remembering:
+
+- **The `status != 'complete'` trap never materialized.** `requestBody` skips non-complete rows,
+  which would have hidden mid-loop rows from the next request in the same turn. There are no
+  mid-loop rows: the loop assembles its context in memory and does not round-trip through SQLite
+  until the turn ends.
+- **`tool_steps` validates whole-or-nothing.** One unreadable step invalidates the column and the
+  row replays as plain text, because a partial array means replaying a call without its result.
+
 ### F2. Token and cost accounting
 
 **Needed by:** v1.1 onward. Strongly recommended before shipping any tool loop.
 
-Luna records no usage at all. Once a model can call tools, one user message can silently trigger
-many provider requests. A user must be able to see what a conversation cost. At minimum: capture
-the `usage` block both APIs return, store it per assistant row, and total it per conversation.
+Once a model can call tools, one user message can silently trigger many provider requests. A user
+must be able to see what a conversation cost. At minimum: capture the `usage` block both APIs
+return, store it per assistant row, and total it per conversation.
+
+Storage exists as of migration step 13 — `input_tokens`, `output_tokens`, `reasoning_tokens`,
+`cached_tokens`, all nullable. Still to do: read the `usage` block from both APIs, sum it across
+loop iterations, and show a per-conversation total. Cost in currency is deliberately out of
+scope; that needs per-model pricing and a staleness story.
 
 ### F3. Context management
 
@@ -169,9 +203,7 @@ enable, disable) with credentials in platform secure storage; a `mcp_servers` ta
 non-secret metadata; tool discovery and a per-server enable list; the consent surface from F4;
 and the tool loop from F1 wired to dispatch to a server rather than to a built-in.
 
-**Schema.** `messages.role` is `CHECK (role IN ('user', 'assistant'))`. Tool calls and tool
-results need a role or a separate table, plus a migration, and one user turn will produce
-several rows. This lands before any MCP code, not alongside it.
+**Schema.** Done, in 1.1 development. See **Storage shape for tool calls** under Foundations.
 
 **Open decision:** stdio subprocesses only, or stdio plus remote HTTP servers? Stdio alone is
 a smaller first release and covers most existing servers. Remote servers add a network trust

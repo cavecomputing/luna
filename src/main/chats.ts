@@ -7,6 +7,10 @@ import type {
   MessageStatus,
   Mode,
   Role,
+  TokenUsage,
+  ToolPartKind,
+  ToolPartRef,
+  ToolStep,
 } from '../shared/types.js'
 import * as db from './db.js'
 import * as attachments from './attachments.js'
@@ -31,7 +35,9 @@ export type MessageAction = Pick<Message, 'id' | 'role' | 'text' | 'status'> & {
 }
 
 /** What a rendered message needs. history() adds the provider columns on top. */
-const MESSAGE_COLUMNS = 'id, conversation_id, role, text, reasoning, status, created_at'
+const MESSAGE_COLUMNS =
+  'id, conversation_id, role, text, reasoning, status, created_at, tool_steps, ' +
+  'input_tokens, output_tokens, reasoning_tokens, cached_tokens'
 const CONVERSATION_COLUMNS = 'id, title, draft, mode, pinned, updated_at'
 
 function mode(input: unknown): Mode | undefined {
@@ -67,6 +73,122 @@ function providerItems(input: unknown): unknown[] | undefined {
   }
 }
 
+function partKind(input: unknown): ToolPartKind | undefined {
+  return input === 'image' || input === 'audio' || input === 'resource' || input === 'resource_link'
+    ? input
+    : undefined
+}
+
+function count(input: unknown): number | undefined {
+  return typeof input === 'number' && Number.isFinite(input) && input >= 0 ? input : undefined
+}
+
+function toolPart(input: unknown): ToolPartRef | undefined {
+  const cell = object(input)
+  if (cell === undefined) return undefined
+  const kind = partKind(cell.kind)
+  if (
+    kind === undefined ||
+    (cell.mediaType !== undefined && typeof cell.mediaType !== 'string') ||
+    (cell.uri !== undefined && typeof cell.uri !== 'string') ||
+    (cell.size !== undefined && count(cell.size) === undefined)
+  ) {
+    return undefined
+  }
+  return {
+    kind,
+    ...(typeof cell.mediaType === 'string' ? { mediaType: cell.mediaType } : {}),
+    ...(typeof cell.size === 'number' ? { size: cell.size } : {}),
+    ...(typeof cell.uri === 'string' ? { uri: cell.uri } : {}),
+  }
+}
+
+function toolStep(input: unknown): ToolStep | undefined {
+  const cell = object(input)
+  if (cell === undefined) return undefined
+  if (
+    typeof cell.callId !== 'string' ||
+    typeof cell.source !== 'string' ||
+    typeof cell.name !== 'string' ||
+    typeof cell.arguments !== 'string' ||
+    typeof cell.text !== 'string' ||
+    typeof cell.isError !== 'boolean' ||
+    typeof cell.truncated !== 'boolean'
+  ) {
+    return undefined
+  }
+
+  let parts: ToolPartRef[] | undefined
+  if (cell.parts !== undefined) {
+    if (!Array.isArray(cell.parts)) return undefined
+    parts = []
+    for (const item of cell.parts) {
+      const part = toolPart(item)
+      if (part === undefined) return undefined
+      parts.push(part)
+    }
+  }
+
+  return {
+    callId: cell.callId,
+    source: cell.source,
+    name: cell.name,
+    arguments: cell.arguments,
+    text: cell.text,
+    // Any JSON value is legal here, including null, so presence is the only test.
+    ...('structured' in cell ? { structured: cell.structured } : {}),
+    ...(parts === undefined ? {} : { parts }),
+    isError: cell.isError,
+    truncated: cell.truncated,
+  }
+}
+
+/**
+ * Whole-or-nothing. One unreadable step invalidates the entire column.
+ *
+ * The .flatMap convention elsewhere drops a bad row and carries on, which would
+ * here mean replaying a tool call without its result, or a result without its
+ * call. Both provider APIs reject that with a hard 400, so a partial array is
+ * worse than none: without it the row simply replays as plain text.
+ */
+function toolSteps(input: unknown): ToolStep[] | undefined {
+  if (typeof input !== 'string' || input === '') return undefined
+  try {
+    const parsed: unknown = JSON.parse(input)
+    if (!Array.isArray(parsed)) return undefined
+    const steps: ToolStep[] = []
+    for (const item of parsed) {
+      const step = toolStep(item)
+      if (step === undefined) return undefined
+      steps.push(step)
+    }
+    return steps
+  } catch {
+    return undefined
+  }
+}
+
+function usage(cell: Record<string, unknown>): TokenUsage | undefined {
+  const input = count(cell.input_tokens)
+  const output = count(cell.output_tokens)
+  const reasoning = count(cell.reasoning_tokens)
+  const cached = count(cell.cached_tokens)
+  if (
+    input === undefined &&
+    output === undefined &&
+    reasoning === undefined &&
+    cached === undefined
+  ) {
+    return undefined
+  }
+  return {
+    ...(input === undefined ? {} : { inputTokens: input }),
+    ...(output === undefined ? {} : { outputTokens: output }),
+    ...(reasoning === undefined ? {} : { reasoningTokens: reasoning }),
+    ...(cached === undefined ? {} : { cachedTokens: cached }),
+  }
+}
+
 function messageRow(row: unknown): (StoredMessage & { conversationId: string }) | undefined {
   const cell = object(row)
   if (cell === undefined) return undefined
@@ -87,6 +209,9 @@ function messageRow(row: unknown): (StoredMessage & { conversationId: string }) 
     return undefined
   }
 
+  const parsedSteps = toolSteps(cell.tool_steps)
+  const parsedUsage = usage(cell)
+
   return {
     id: cell.id,
     conversationId: cell.conversation_id,
@@ -96,6 +221,8 @@ function messageRow(row: unknown): (StoredMessage & { conversationId: string }) 
     status: parsedStatus,
     at: cell.created_at,
     attachments: [],
+    ...(parsedSteps === undefined ? {} : { toolSteps: parsedSteps }),
+    ...(parsedUsage === undefined ? {} : { usage: parsedUsage }),
     ...(typeof cell.provider_id !== 'string' ? {} : { providerId: cell.provider_id }),
     ...(parsedApi === undefined ? {} : { providerApi: parsedApi }),
     ...(parsedItems === undefined ? {} : { providerItems: parsedItems }),
@@ -142,6 +269,8 @@ function visibleMessage(
     at: message.at,
     attachments: message.attachments,
     ...(message.streamSeq === undefined ? {} : { streamSeq: message.streamSeq }),
+    ...(message.toolSteps === undefined ? {} : { toolSteps: message.toolSteps }),
+    ...(message.usage === undefined ? {} : { usage: message.usage }),
   }
 }
 
@@ -264,7 +393,9 @@ export function restartMessage(
       .prepare(
         `UPDATE messages
          SET text = '', reasoning = '', status = 'streaming',
-             provider_id = NULL, provider_api = NULL, provider_items = NULL
+             provider_id = NULL, provider_api = NULL, provider_items = NULL,
+             tool_steps = NULL, input_tokens = NULL, output_tokens = NULL,
+             reasoning_tokens = NULL, cached_tokens = NULL
          WHERE id = ? AND status IN ('error', 'cancelled')`,
       )
       .run(id)
@@ -418,6 +549,21 @@ export function beginTurn(
     : { conversation, userMessageId, assistantMessageId }
 }
 
+/**
+ * Everything a finished turn recorded besides its visible text.
+ *
+ * Grouped rather than passed positionally: a turn now carries provider replay
+ * data, the tools it called, and what it cost, and eight trailing optional
+ * arguments is a call site nobody can read.
+ */
+export type TurnOutcome = {
+  providerApi?: ApiKind
+  providerId?: string
+  items?: unknown[]
+  toolSteps?: ToolStep[]
+  usage?: TokenUsage
+}
+
 export function finishMessage(
   conn: DatabaseSync,
   id: string,
@@ -425,25 +571,32 @@ export function finishMessage(
   reasoning: string,
   finalStatus: Exclude<MessageStatus, 'streaming'>,
   now: number,
-  providerApi?: ApiKind,
-  providerId?: string,
-  items?: unknown[],
+  outcome: TurnOutcome = {},
 ): Message | undefined {
   conn.exec('BEGIN')
   try {
     const result = conn
       .prepare(
         `UPDATE messages
-         SET text = ?, reasoning = ?, status = ?, provider_id = ?, provider_api = ?, provider_items = ?
+         SET text = ?, reasoning = ?, status = ?, provider_id = ?, provider_api = ?,
+             provider_items = ?, tool_steps = ?,
+             input_tokens = ?, output_tokens = ?, reasoning_tokens = ?, cached_tokens = ?
          WHERE id = ? AND role = 'assistant' AND status = 'streaming'`,
       )
       .run(
         text,
         reasoning,
         finalStatus,
-        providerId ?? null,
-        providerApi ?? null,
-        items === undefined ? null : JSON.stringify(items),
+        outcome.providerId ?? null,
+        outcome.providerApi ?? null,
+        outcome.items === undefined ? null : JSON.stringify(outcome.items),
+        outcome.toolSteps === undefined || outcome.toolSteps.length === 0
+          ? null
+          : JSON.stringify(outcome.toolSteps),
+        outcome.usage?.inputTokens ?? null,
+        outcome.usage?.outputTokens ?? null,
+        outcome.usage?.reasoningTokens ?? null,
+        outcome.usage?.cachedTokens ?? null,
         id,
       )
     if (result.changes === 0) {

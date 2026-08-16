@@ -80,6 +80,51 @@ export type AttachmentMeta = {
   size: number
 }
 
+/** What a tool returned besides text. The bytes stay out of the transcript. */
+export type ToolPartKind = 'image' | 'audio' | 'resource' | 'resource_link'
+
+export type ToolPartRef = {
+  kind: ToolPartKind
+  mediaType?: string
+  /** Byte length of the part we chose not to inline. */
+  size?: number
+  /** Present for resource links. Server-supplied, so render it as escaped text. */
+  uri?: string
+}
+
+/**
+ * One tool call and its result, stored on the assistant row that made it.
+ *
+ * `name` is the tool's own name, unprefixed; `source` says who provides it, so
+ * a grant can always be traced back even when two servers export the same name.
+ */
+export type ToolStep = {
+  callId: string
+  source: string
+  name: string
+  /** Argument JSON exactly as the model produced it. Not reformatted. */
+  arguments: string
+  /** Flattened text parts, capped. Everything else is referenced in `parts`. */
+  text: string
+  /** Structured result data, validated whole or dropped. Never partially kept. */
+  structured?: unknown
+  parts?: ToolPartRef[]
+  /** A tool-reported failure, which the model is told about so it can retry. */
+  isError: boolean
+  truncated: boolean
+}
+
+/**
+ * Tokens a turn consumed. Absent fields mean the provider reported nothing,
+ * which is different from reporting zero.
+ */
+export type TokenUsage = {
+  inputTokens?: number
+  outputTokens?: number
+  reasoningTokens?: number
+  cachedTokens?: number
+}
+
 export type Message = {
   id: string
   role: Role
@@ -92,6 +137,10 @@ export type Message = {
   /** Epoch milliseconds. Formatting is the renderer's job. */
   at: number
   attachments: AttachmentMeta[]
+  /** Tools this assistant row called, in the order it called them. */
+  toolSteps?: ToolStep[]
+  /** Summed across every request the turn made, not just the last one. */
+  usage?: TokenUsage
 }
 
 export type Conversation = {

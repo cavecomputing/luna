@@ -3,13 +3,13 @@ import { randomUUID } from 'node:crypto'
 import type { Prefs } from '../../shared/prefs.js'
 import { err, ok, type Result } from '../../shared/result.js'
 import type { ChatStart } from '../../shared/ipc.js'
-import type { ApiKind, Conversation, Message, ModelSlots, Mode } from '../../shared/types.js'
+import type { Conversation, Message, ModelSlots, Mode } from '../../shared/types.js'
 import { parseThinkingTags } from '../../shared/thinking.js'
 import { streamChat, type ChatChunk, type ChatCompletion, type ChatRequest } from '../chat-api.js'
 import * as chats from '../chats.js'
 import * as attachmentJobs from '../attachment-jobs.js'
 import type { StoredAttachment } from '../attachments.js'
-import type { StoredMessage, Turn } from '../chats.js'
+import type { StoredMessage, Turn, TurnOutcome } from '../chats.js'
 import * as db from '../db.js'
 import { id, object, text } from '../parse.js'
 import * as prefs from '../prefs.js'
@@ -42,9 +42,7 @@ type Deps = {
     reasoning: string,
     status: 'complete' | 'error' | 'cancelled',
     now: number,
-    api?: ApiKind,
-    providerId?: string,
-    items?: unknown[],
+    outcome?: TurnOutcome,
   ) => Message | undefined
   setTitle: (id: string, title: string) => Conversation | undefined
   list: () => Conversation[]
@@ -89,8 +87,8 @@ const deps: Deps = {
     }
     return chats.transcriptWith(conversationId, grouped)
   },
-  finish: (id, text, reasoning, status, now, api, providerId, items) =>
-    chats.finishMessage(db.handle(), id, text, reasoning, status, now, api, providerId, items),
+  finish: (id, text, reasoning, status, now, outcome) =>
+    chats.finishMessage(db.handle(), id, text, reasoning, status, now, outcome),
   setTitle: (id, title) => chats.setTitle(db.handle(), id, title),
   list: chats.load,
   stream: (request, signal, onDelta) =>
@@ -379,9 +377,13 @@ export class ChatCoordinator {
         reasoning,
         'complete',
         this.d.now(),
-        request.provider.api,
-        request.provider.id,
-        result.value.providerItems,
+        {
+          providerApi: request.provider.api,
+          providerId: request.provider.id,
+          ...(result.value.providerItems === undefined
+            ? {}
+            : { items: result.value.providerItems }),
+        },
       )
       if (message !== undefined) {
         this.d.notifyDone(conversationId, message)

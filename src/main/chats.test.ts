@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { open } from './db.js'
 import type { StoredAttachment } from './attachments.js'
+import type { TokenUsage, ToolStep } from '../shared/types.js'
 import {
   beginTurn,
   create,
@@ -54,9 +55,11 @@ describe('chat storage', () => {
         'Considered the greeting.',
         'complete',
         30,
-        'responses',
-        'openai',
-        [{ type: 'message', role: 'assistant' }],
+        {
+          providerApi: 'responses',
+          providerId: 'openai',
+          items: [{ type: 'message', role: 'assistant' }],
+        },
       ),
     ).toEqual({
       id: 'assistant-1',
@@ -168,5 +171,131 @@ describe('chat storage', () => {
     db.exec('PRAGMA ignore_check_constraints = ON')
     db.prepare('UPDATE conversations SET mode = ? WHERE id = ?').run('turbo', 'chat-1')
     expect(list(db)).toEqual([])
+  })
+})
+
+describe('tool steps and usage', () => {
+  const step: ToolStep = {
+    callId: 'call-1',
+    source: 'builtin',
+    name: 'luna_echo',
+    arguments: '{"text":"hi"}',
+    text: 'hi',
+    isError: false,
+    truncated: false,
+  }
+
+  function turn(): ReturnType<typeof open> {
+    const db = open(':memory:')
+    create(db, 'chat-1', 'fast', 10)
+    beginTurn(db, 'chat-1', 'Hello', 'user-1', 'assistant-1', 20)
+    return db
+  }
+
+  it('round-trips a tool step and its token usage', () => {
+    const db = turn()
+    const usage: TokenUsage = { inputTokens: 120, outputTokens: 40, reasoningTokens: 8 }
+    const message = finishMessage(db, 'assistant-1', 'Done', '', 'complete', 30, {
+      toolSteps: [step],
+      usage,
+    })
+
+    expect(message?.toolSteps).toEqual([step])
+    expect(message?.usage).toEqual(usage)
+    expect(find(db, 'chat-1')?.messages[1]).toMatchObject({ toolSteps: [step], usage })
+  })
+
+  it('stores non-text result parts as references rather than bytes', () => {
+    const db = turn()
+    const withParts: ToolStep = {
+      ...step,
+      text: 'A chart.',
+      parts: [
+        { kind: 'image', mediaType: 'image/png', size: 20_480 },
+        { kind: 'resource_link', uri: 'file:///project/report.csv' },
+      ],
+    }
+    finishMessage(db, 'assistant-1', 'Done', '', 'complete', 30, { toolSteps: [withParts] })
+
+    const stored = find(db, 'chat-1')?.messages[1]?.toolSteps?.[0]
+    expect(stored).toEqual(withParts)
+    // The bytes themselves never reach the row.
+    expect(JSON.stringify(stored)).not.toContain('data:')
+  })
+
+  it('keeps structured content whole, including an explicit null', () => {
+    const db = turn()
+    const structured: ToolStep = { ...step, structured: { temperature: 22.5, ok: null } }
+    finishMessage(db, 'assistant-1', 'Done', '', 'complete', 30, { toolSteps: [structured] })
+
+    expect(find(db, 'chat-1')?.messages[1]?.toolSteps?.[0]?.structured).toEqual({
+      temperature: 22.5,
+      ok: null,
+    })
+  })
+
+  it('round-trips a tool-reported failure so the model can be told about it', () => {
+    const db = turn()
+    const failed: ToolStep = { ...step, text: 'Date must be in the future.', isError: true }
+    finishMessage(db, 'assistant-1', '', '', 'complete', 30, { toolSteps: [failed] })
+
+    expect(find(db, 'chat-1')?.messages[1]?.toolSteps?.[0]?.isError).toBe(true)
+  })
+
+  /**
+   * Replaying a call without its result, or a result without its call, is a hard
+   * 400 from both provider APIs. Dropping just the bad entry would produce
+   * exactly that, so the column has to fail as a unit.
+   */
+  it('drops the whole column when one step is unreadable', () => {
+    const db = turn()
+    finishMessage(db, 'assistant-1', 'Done', '', 'complete', 30, { toolSteps: [step] })
+    db.prepare('UPDATE messages SET tool_steps = ? WHERE id = ?').run(
+      JSON.stringify([step, { callId: 'call-2', source: 'builtin' }]),
+      'assistant-1',
+    )
+
+    expect(find(db, 'chat-1')?.messages[1]?.toolSteps).toBeUndefined()
+  })
+
+  it('reads no usage at all rather than inventing zeros', () => {
+    const db = turn()
+    finishMessage(db, 'assistant-1', 'Done', '', 'complete', 30)
+
+    expect(find(db, 'chat-1')?.messages[1]?.usage).toBeUndefined()
+  })
+
+  it('reports a partial usage block without filling in the missing counts', () => {
+    const db = turn()
+    finishMessage(db, 'assistant-1', 'Done', '', 'complete', 30, {
+      usage: { outputTokens: 12 },
+    })
+
+    expect(find(db, 'chat-1')?.messages[1]?.usage).toEqual({ outputTokens: 12 })
+  })
+
+  it('clears tool steps and usage when a failed turn is retried', () => {
+    const db = turn()
+    finishMessage(db, 'assistant-1', 'partial', '', 'error', 30, {
+      toolSteps: [step],
+      usage: { inputTokens: 120 },
+    })
+
+    const restarted = restartMessage(db, 'assistant-1', 40)
+
+    expect(restarted?.messages[1]).toMatchObject({ status: 'streaming' })
+    expect(restarted?.messages[1]?.toolSteps).toBeUndefined()
+    expect(restarted?.messages[1]?.usage).toBeUndefined()
+  })
+
+  it('keeps tool steps and partial usage on a turn that failed after running tools', () => {
+    const db = turn()
+    const message = finishMessage(db, 'assistant-1', 'partial', '', 'error', 30, {
+      toolSteps: [step],
+      usage: { inputTokens: 120 },
+    })
+
+    expect(message?.toolSteps).toEqual([step])
+    expect(message?.usage).toEqual({ inputTokens: 120 })
   })
 })

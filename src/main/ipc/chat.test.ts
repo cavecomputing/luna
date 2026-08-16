@@ -169,9 +169,7 @@ describe('ChatCoordinator', () => {
       '',
       'complete',
       10,
-      'responses',
-      'provider-1',
-      undefined,
+      { providerApi: 'responses', providerId: 'provider-1' },
     )
     expect(d.stream).toHaveBeenCalledWith(
       expect.objectContaining({ systemPrompt: LUNA_SYSTEM_PROMPT }),
@@ -229,9 +227,7 @@ describe('ChatCoordinator', () => {
       'checking',
       'complete',
       10,
-      'responses',
-      'provider-1',
-      undefined,
+      { providerApi: 'responses', providerId: 'provider-1' },
     )
   })
 

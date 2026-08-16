@@ -113,6 +113,17 @@ const steps: readonly string[] = [
   // (Electron 43) removes the column's own CHECK with it, and messages' foreign
   // key onto conversations survives the rewrite.
   `ALTER TABLE conversations DROP COLUMN icon;`,
+  // Tool calls live on the assistant row that made them, as JSON, beside the
+  // provider items already stored there. A tool role would mean rebuilding this
+  // STRICT table to loosen its CHECK, and attachments' foreign key onto
+  // messages(id) has to survive that byte for byte. One row per turn also keeps
+  // finishMessage's exactly-once guard and beginTurn's ordinal arithmetic intact.
+  `ALTER TABLE messages ADD COLUMN tool_steps TEXT;`,
+  // Nullable, because a provider reporting nothing is not the same as zero.
+  `ALTER TABLE messages ADD COLUMN input_tokens INTEGER;
+   ALTER TABLE messages ADD COLUMN output_tokens INTEGER;
+   ALTER TABLE messages ADD COLUMN reasoning_tokens INTEGER;
+   ALTER TABLE messages ADD COLUMN cached_tokens INTEGER;`,
 ]
 
 /** The version a fully migrated database reports. */

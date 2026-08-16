@@ -35,6 +35,30 @@ function restoreIcon(db: DatabaseSync): void {
   db.exec("ALTER TABLE conversations ADD COLUMN icon TEXT NOT NULL DEFAULT 'spark'")
 }
 
+/**
+ * Takes the tool-step and usage columns back off. Their steps only add columns,
+ * so a replay that rewinds below them would otherwise fail on a duplicate name
+ * rather than on whatever the test is actually about.
+ */
+function dropToolColumns(db: DatabaseSync): void {
+  for (const column of [
+    'tool_steps',
+    'input_tokens',
+    'output_tokens',
+    'reasoning_tokens',
+    'cached_tokens',
+  ]) {
+    db.exec(`ALTER TABLE messages DROP COLUMN ${column}`)
+  }
+}
+
+/** Every rewind helper, for a replay that goes back before the newest steps. */
+function rewind(db: DatabaseSync): void {
+  dropToolColumns(db)
+  dropSampling(db)
+  restoreIcon(db)
+}
+
 describe('version', () => {
   it('reports 0 for a database that has never been migrated', () => {
     expect(version(fresh())).toBe(0)
@@ -93,10 +117,11 @@ describe('migrate', () => {
   it('removes the retired editable system prompt preference', () => {
     const db = fresh()
     migrate(db)
-    dropSampling(db)
-    restoreIcon(db)
+    rewind(db)
+    // Step index 8 is the systemPrompt deletion, so rewind to just before it.
+    // Frozen, so a literal is safer than an offset from a moving `latest`.
     db.exec(`INSERT INTO prefs (key, value) VALUES ('systemPrompt', '"Replace Luna"');
-      PRAGMA user_version = ${String(latest - 3)};`)
+      PRAGMA user_version = 8;`)
 
     migrate(db)
 
@@ -163,8 +188,7 @@ describe('migrate', () => {
       ALTER TABLE messages DROP COLUMN reasoning;
       ALTER TABLE messages DROP COLUMN provider_id;
       ALTER TABLE conversations DROP COLUMN draft;`)
-    dropSampling(db)
-    restoreIcon(db)
+    rewind(db)
 
     migrate(db)
 
@@ -188,8 +212,7 @@ describe('migrate', () => {
       DROP TABLE attachments;
       ALTER TABLE messages DROP COLUMN reasoning;
       ALTER TABLE conversations DROP COLUMN draft;`)
-    dropSampling(db)
-    restoreIcon(db)
+    rewind(db)
 
     migrate(db)
 
@@ -209,8 +232,7 @@ describe('migrate', () => {
       DROP TABLE window_state;
       DROP TABLE attachments;
       ALTER TABLE conversations DROP COLUMN draft;`)
-    dropSampling(db)
-    restoreIcon(db)
+    rewind(db)
 
     migrate(db)
 
@@ -245,10 +267,60 @@ describe('migrate', () => {
     ])
   })
 
+  it('adds tool step and token columns, leaving existing messages untouched', () => {
+    const db = fresh()
+    migrate(db)
+    db.exec(`INSERT INTO conversations
+      (id, title, mode, pinned, created_at, updated_at)
+      VALUES ('chat-1', 'Chat', 'fast', 0, 1, 1);
+      INSERT INTO messages
+      (id, conversation_id, role, text, status, created_at, ordinal)
+      VALUES ('message-1', 'chat-1', 'assistant', 'Answer', 'complete', 1, 0);`)
+    dropToolColumns(db)
+    db.exec('PRAGMA user_version = 11;')
+
+    migrate(db)
+
+    // A message written before the steps existed reads as "nothing recorded",
+    // which is deliberately not the same as zero tokens.
+    expect(
+      db.prepare(`SELECT text, tool_steps, input_tokens, output_tokens,
+        reasoning_tokens, cached_tokens FROM messages`).get(),
+    ).toEqual({
+      text: 'Answer',
+      tool_steps: null,
+      input_tokens: null,
+      output_tokens: null,
+      reasoning_tokens: null,
+      cached_tokens: null,
+    })
+  })
+
+  it('leaves integrity and foreign keys clean after every step', () => {
+    const db = fresh()
+    db.exec('PRAGMA foreign_keys = ON')
+    migrate(db)
+    db.exec(`INSERT INTO conversations
+      (id, title, mode, pinned, created_at, updated_at)
+      VALUES ('chat-1', 'Chat', 'fast', 0, 1, 1);
+      INSERT INTO messages
+      (id, conversation_id, role, text, status, created_at, ordinal)
+      VALUES ('message-1', 'chat-1', 'assistant', 'Answer', 'complete', 1, 0);
+      INSERT INTO attachments
+      (id, conversation_id, message_id, name, kind, media_type, byte_size, content,
+       ordinal, created_at)
+      VALUES ('file-1', 'chat-1', 'message-1', 'notes.txt', 'text', 'text/plain', 3,
+        x'616263', 0, 1);`)
+
+    expect(db.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' })
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+  })
+
   it('drops the conversation glyph column and keeps existing chats', () => {
     const db = fresh()
     migrate(db)
     restoreIcon(db)
+    dropToolColumns(db)
     db.exec(`INSERT INTO conversations
       (id, title, mode, pinned, created_at, updated_at)
       VALUES ('chat-1', 'Chat', 'fast', 0, 1, 1);
