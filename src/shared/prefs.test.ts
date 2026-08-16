@@ -21,6 +21,7 @@ describe('parsePrefs', () => {
       defaultMode: 'expert' as const,
       autoTitle: false,
       stream: false,
+      expandThinking: true,
       sidebarWidth: 320,
     }
     expect(parsePrefs(prefs)).toEqual(prefs)
@@ -50,6 +51,12 @@ describe('parsePrefs', () => {
 
   it('rejects a boolean given as a string', () => {
     expect(parsePrefs({ autoTitle: 'true' }).autoTitle).toBe(defaultPrefs.autoTitle)
+  })
+
+  it('defaults thinking to collapsed', () => {
+    expect(defaultPrefs.expandThinking).toBe(false)
+    expect(parsePrefs({}).expandThinking).toBe(false)
+    expect(parsePrefs({ expandThinking: true }).expandThinking).toBe(true)
   })
 
   it('ignores the retired system prompt preference', () => {

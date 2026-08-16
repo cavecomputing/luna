@@ -16,6 +16,8 @@ export type Prefs = {
   autoTitle: boolean
   /** Stream assistant replies token by token. */
   stream: boolean
+  /** Auto-expand the Thinking disclosure while the model is reasoning. */
+  expandThinking: boolean
   /** Last expanded width of the conversation sidebar, in CSS pixels. */
   sidebarWidth: number
 }
@@ -25,6 +27,7 @@ export const defaultPrefs: Prefs = {
   defaultMode: 'fast',
   autoTitle: true,
   stream: true,
+  expandThinking: false,
   sidebarWidth: 264,
 }
 
@@ -59,6 +62,7 @@ export function parsePrefs(input: unknown): Prefs {
     defaultMode: pick(raw.defaultMode, modes, defaultPrefs.defaultMode),
     autoTitle: bool(raw.autoTitle, defaultPrefs.autoTitle),
     stream: bool(raw.stream, defaultPrefs.stream),
+    expandThinking: bool(raw.expandThinking, defaultPrefs.expandThinking),
     sidebarWidth: range(
       raw.sidebarWidth,
       SIDEBAR_MIN_WIDTH,

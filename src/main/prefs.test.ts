@@ -74,6 +74,7 @@ describe('write', () => {
       defaultMode: 'expert' as const,
       autoTitle: false,
       stream: false,
+      expandThinking: false,
       sidebarWidth: 320,
     }
 

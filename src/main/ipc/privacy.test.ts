@@ -21,6 +21,7 @@ const preferences: Prefs = {
   defaultMode: 'fast',
   autoTitle: false,
   stream: true,
+  expandThinking: false,
   sidebarWidth: 264,
 }
 

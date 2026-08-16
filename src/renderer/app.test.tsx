@@ -92,9 +92,13 @@ describe('ConversationSurface', () => {
       fast: { providerId: 'provider-1', model: 'fast-model', sampling: { ...defaultSamplerSettings } },
       expert: { providerId: 'provider-1', model: 'expert-model', sampling: { ...defaultSamplerSettings } },
     }
-    const { container, rerender } = render(<ConversationSurface chats={chats(existing)} models={models} />)
+    const { container, rerender } = render(
+      <ConversationSurface chats={chats(existing)} models={models} expandThinking={false} />,
+    )
 
-    rerender(<ConversationSurface chats={chats(conversation('new'))} models={models} />)
+    rerender(
+      <ConversationSurface chats={chats(conversation('new'))} models={models} expandThinking={false} />,
+    )
 
     expect(screen.queryByText('Previous conversation content')).toBeNull()
     expect(screen.getByText('Hey there! I’m Luna.')).toBeTruthy()

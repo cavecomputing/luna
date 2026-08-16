@@ -43,20 +43,27 @@ describe('Thread', () => {
       at: 2,
       attachments: [],
     }
-    const { rerender } = render(<Thread chat={chat([user])} />)
+    const { rerender } = render(<Thread chat={chat([user])} expandThinking={false} />)
     scrollIntoView.mockClear()
 
-    rerender(<Thread chat={chat([user, response])} />)
+    rerender(<Thread chat={chat([user, response])} expandThinking={false} />)
 
     expect(scrollIntoView).not.toHaveBeenCalled()
 
-    rerender(<Thread chat={chat([user, { ...response, text: 'First streamed words' }])} />)
+    rerender(
+      <Thread
+        chat={chat([user, { ...response, text: 'First streamed words' }])}
+        expandThinking={false}
+      />,
+    )
 
     expect(scrollIntoView).not.toHaveBeenCalled()
   })
 
   it('shows the jump button when new content arrives away from the bottom', () => {
-    const { container, rerender, unmount } = render(<Thread chat={chat([message('one')])} />)
+    const { container, rerender, unmount } = render(
+      <Thread chat={chat([message('one')])} expandThinking={false} />,
+    )
     const scroll = container.firstElementChild?.firstElementChild
     if (!(scroll instanceof HTMLElement)) throw new Error('missing thread scroller')
     Object.defineProperties(scroll, {
@@ -66,7 +73,7 @@ describe('Thread', () => {
     })
     fireEvent.scroll(scroll)
 
-    rerender(<Thread chat={chat([message('one'), message('two')])} />)
+    rerender(<Thread chat={chat([message('one'), message('two')])} expandThinking={false} />)
 
     expect(screen.getByRole('button', { name: 'Jump to latest ↓' })).toBeDefined()
 
@@ -100,6 +107,7 @@ describe('Thread', () => {
             },
           ],
         }}
+        expandThinking={false}
       />,
     )
     const scroll = container.firstElementChild?.firstElementChild
@@ -117,11 +125,11 @@ describe('Thread', () => {
   })
 
   it('keeps loaded history still but animates messages that arrive later', () => {
-    const { rerender } = render(<Thread chat={chat([message('one')])} />)
+    const { rerender } = render(<Thread chat={chat([message('one')])} expandThinking={false} />)
 
     expect(screen.getByTestId('message-one').dataset.fresh).toBe('false')
 
-    rerender(<Thread chat={chat([message('one'), message('two')])} />)
+    rerender(<Thread chat={chat([message('one'), message('two')])} expandThinking={false} />)
 
     expect(screen.getByTestId('message-one').dataset.fresh).toBe('false')
     expect(screen.getByTestId('message-two').dataset.fresh).toBe('true')
@@ -129,9 +137,9 @@ describe('Thread', () => {
 
   it('treats a reopened conversation as history again', () => {
     const first = chat([message('three'), message('four')])
-    const { rerender } = render(<Thread key="a" chat={first} />)
+    const { rerender } = render(<Thread key="a" chat={first} expandThinking={false} />)
 
-    rerender(<Thread key="b" chat={first} />)
+    rerender(<Thread key="b" chat={first} expandThinking={false} />)
 
     expect(screen.getByTestId('message-three').dataset.fresh).toBe('false')
     expect(screen.getByTestId('message-four').dataset.fresh).toBe('false')

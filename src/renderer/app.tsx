@@ -26,14 +26,19 @@ import {
 type ConversationSurfaceProps = {
   chats: Chats
   models: ReturnType<typeof useModels>
+  expandThinking: boolean
 }
 
 /** Remount conversation-local state without giving adjacent siblings duplicate keys. */
-export function ConversationSurface({ chats, models }: ConversationSurfaceProps): React.JSX.Element {
+export function ConversationSurface({
+  chats,
+  models,
+  expandThinking,
+}: ConversationSurfaceProps): React.JSX.Element {
   const conversationKey = chats.openId ?? 'empty'
   return (
     <>
-      <Thread key={`thread:${conversationKey}`} chat={chats.open} />
+      <Thread key={`thread:${conversationKey}`} chat={chats.open} expandThinking={expandThinking} />
 
       <Composer
         key={`composer:${conversationKey}`}
@@ -308,7 +313,7 @@ export function App(): React.JSX.Element {
 
         </header>
 
-        <ConversationSurface chats={chats} models={models} />
+        <ConversationSurface chats={chats} models={models} expandThinking={prefs.expandThinking} />
       </main>
 
       {searchOpen && (

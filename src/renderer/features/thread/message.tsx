@@ -13,13 +13,25 @@ type Props = {
   /** Arrived after the thread mounted, so it plays an entrance. */
   fresh: boolean
   conversationId: string
+  /** Auto-open the Thinking disclosure while the model is reasoning. */
+  expandThinking: boolean
 }
 
 export function canRenderHtml(status: MessageStatus, visible: string, complete: string): boolean {
   return status !== 'streaming' && visible === complete
 }
 
-export function Message({ message, fresh, conversationId }: Props): React.JSX.Element {
+/** True while the model is reasoning and hasn't started its visible answer. */
+export function isThinkingLive(status: MessageStatus, visibleText: string): boolean {
+  return status === 'streaming' && visibleText === ''
+}
+
+export function Message({
+  message,
+  fresh,
+  conversationId,
+  expandThinking,
+}: Props): React.JSX.Element {
   const mine = message.role === 'user'
   const [incoming] = useState(() => fresh || (!mine && message.status === 'streaming'))
   const fallback =
@@ -41,6 +53,7 @@ export function Message({ message, fresh, conversationId }: Props): React.JSX.El
     message.status === 'streaming' &&
     visibleText === '' &&
     visibleReasoning === ''
+  const reasoningLive = isThinkingLive(message.status, visibleText)
 
   return (
     <article
@@ -74,14 +87,16 @@ export function Message({ message, fresh, conversationId }: Props): React.JSX.El
             />
           )}
           {!mine && visibleReasoning !== '' && (
-            <details
-              className={styles.reasoning}
-              open={message.status === 'streaming' && visibleText === ''}
-            >
+            <details className={styles.reasoning} open={expandThinking && reasoningLive}>
               <summary>
-                {message.status === 'streaming' && visibleText === ''
-                  ? 'Thinking…'
-                  : 'Thinking'}
+                {reasoningLive ? 'Thinking…' : 'Thinking'}
+                {reasoningLive && (
+                  <span className={styles.reasoningPulse} aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                )}
               </summary>
               <div className={styles.reasoningBody}>
                 <Markdown text={visibleReasoning} canRenderHtml={canRenderReasoning} />

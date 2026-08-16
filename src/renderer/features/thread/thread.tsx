@@ -7,9 +7,11 @@ import { followStep, isNearBottom } from './scroll-follow.js'
 
 type Props = {
   chat: Conversation | undefined
+  /** Auto-open the Thinking disclosure while the model is reasoning. */
+  expandThinking: boolean
 }
 
-export function Thread({ chat }: Props): React.JSX.Element {
+export function Thread({ chat, expandThinking }: Props): React.JSX.Element {
   const scroll = useRef<HTMLDivElement>(null)
   const inner = useRef<HTMLDivElement>(null)
   const end = useRef<HTMLDivElement>(null)
@@ -93,6 +95,7 @@ export function Thread({ chat }: Props): React.JSX.Element {
               message={message}
               conversationId={chat.id}
               fresh={index >= mountedCount}
+              expandThinking={expandThinking}
             />
           ))}
 

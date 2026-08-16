@@ -50,6 +50,19 @@ export function Chat({ prefs }: Props): React.JSX.Element {
           }}
         />
       </Row>
+
+      <Row
+        label="Expand thinking automatically"
+        hint="Show reasoning as it streams instead of staying collapsed."
+      >
+        <Toggle
+          label="Expand thinking automatically"
+          checked={p.expandThinking}
+          onChange={(v) => {
+            set('expandThinking', v)
+          }}
+        />
+      </Row>
     </Panel>
   )
 }
