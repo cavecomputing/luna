@@ -49,9 +49,10 @@ tool calling touches five things at once:
 2. **Stream parsing** must accumulate tool-call fragments. Arguments arrive as partial JSON
    strings keyed by call index, split across SSE chunks, and are only parseable once complete.
    This is the same class of problem as `parseThinkingTags` and deserves the same care.
-3. **The turn loop** stops being one request. It becomes: request → tool call → execute →
-   feed the result back → request again, until the model stops calling tools. `ChatCoordinator`
-   currently assumes one request per assistant row.
+3. **The turn loop.** Built. `ChatCoordinator.run()` is a bounded loop: request → tool calls →
+   execute → feed the results back → request again, capped at `MAX_TOOL_ITERATIONS` rounds and
+   `MAX_TOOL_CALLS_PER_TURN` calls. The loop body never writes a row, so there is still exactly
+   one terminal write per assistant message, after the loop. See **The turn loop** below.
 4. **Storage.** Decided and built: ordered model/tool rounds are JSON in `tool_steps` on the
    assistant row that made them, not a new role and not a separate table. One user turn still
    produces exactly two rows. See **Storage shape for tool calls** below.
@@ -93,6 +94,31 @@ Two consequences worth remembering:
 - **`tool_steps` validates whole-or-nothing.** One unreadable round invalidates the column and the
   row replays as plain text, because a partial array can lose a call/result pair or move a later
   model request ahead of the result it depended on.
+
+### The turn loop — built
+
+`run()` loops over rounds. Each round streams one model response; if it asked for no tools the
+turn is complete, otherwise the calls are dispatched and their results become the next request's
+`pendingRounds`. Nothing mid-turn touches the database.
+
+Details that are easy to get wrong and are covered by tests:
+
+- **`active.delete` moved into a `finally` around the whole loop.** It used to fire the moment the
+  first stream resolved, which would have made Stop a no-op during tool execution and between
+  rounds — exactly when a user reaches for it.
+- **The delta sequence never resets.** `streamSeq` is the renderer's ordering guard, so restarting
+  at 1 on round two would make the second reply look stale and get discarded.
+- **Committed text and the live round are tracked separately.** A round that fails before emitting
+  any delta still reports what earlier rounds produced, which a single combined buffer got wrong.
+- **A stopped turn never contacts the provider.** The abort check at the top of each round covers
+  the first one too, so cancelling during setup costs nothing.
+- **Refusals are tool errors, not turn failures.** A denied, unknown, or disabled tool becomes a
+  step the model is told about, so it can apologize or route around it.
+- **Failed turns still record rounds and usage.** A turn that ran three tools and then broke should
+  show what it did and what it cost.
+
+The catalog is snapshotted once per turn, so enabling a tool mid-turn cannot change what that turn
+can reach. Standing permission is persisted only from the native prompt's "Always allow".
 
 ### F2. Token and cost accounting
 
