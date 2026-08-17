@@ -1,0 +1,101 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.tool {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-3);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.name {
+  font-size: var(--t-md);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--t-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.toggle input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.meta,
+.desc,
+.claims,
+.standing,
+.status {
+  font-size: var(--t-sm);
+  color: var(--text-muted);
+}
+
+.desc {
+  margin: 0;
+}
+
+/* A tool nobody has approved, or one whose definition moved since approval. */
+.flag {
+  align-self: flex-start;
+  padding: 2px var(--s-2);
+  border-radius: var(--r-sm);
+  background: var(--surface-hover);
+  color: var(--text);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+
+.consent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding-top: var(--s-2);
+  border-top: 1px solid var(--line-soft);
+}
+
+.secondary {
+  min-height: 28px;
+  padding: 0 var(--s-3);
+  border-radius: var(--r-md);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-hover);
+  transition:
+    background var(--fast) var(--ease),
+    transform var(--fast) var(--ease);
+}
+
+.secondary:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.secondary:disabled {
+  opacity: 0.5;
+}
+
+.empty,
+.status {
+  margin: 0;
+}

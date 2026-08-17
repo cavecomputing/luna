@@ -7,6 +7,7 @@ import styles from './message.module.css'
 import { cx } from '../../lib/cx.js'
 import { useSmoothText } from './use-smooth-text.js'
 import { MessageAttachments } from '../attachments/message-attachments.js'
+import { ToolRounds } from './tool-rounds.js'
 
 type Props = {
   message: Msg
@@ -102,6 +103,9 @@ export function Message({
                 <Markdown text={visibleReasoning} canRenderHtml={canRenderReasoning} />
               </div>
             </details>
+          )}
+          {!mine && message.toolRounds !== undefined && (
+            <ToolRounds rounds={message.toolRounds} />
           )}
           {visibleText !== '' && <Markdown text={visibleText} canRenderHtml={canRenderText} />}
         </div>

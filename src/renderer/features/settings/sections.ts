@@ -2,6 +2,7 @@
 export const sections = [
   { id: 'providers', label: 'Providers' },
   { id: 'models', label: 'Models' },
+  { id: 'tools', label: 'Tools' },
   { id: 'chat', label: 'Chat' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'privacy', label: 'Privacy' },
