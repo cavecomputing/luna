@@ -195,3 +195,17 @@
   color: var(--text-muted);
   font-size: var(--t-sm);
 }
+
+.meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+}
+
+/* Tokens, not money: pricing varies per model and many servers charge nothing. */
+.tokens {
+  color: var(--text-muted);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
