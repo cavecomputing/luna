@@ -1,10 +1,11 @@
 /**
  * Reading and changing what tools may do.
  *
- * The renderer can turn a tool on and off and revoke standing permission. It
- * cannot create standing permission or answer a consent prompt — those
- * decisions are made in main against a native dialog, because the renderer is
- * untrusted. See tool-consent.ts.
+ * The renderer can turn a tool on and off and revoke standing permission, and
+ * it can *ask* for standing permission. It can never create one: both the
+ * pre-approval toggle and the execution-time prompt are answered in main
+ * against a native dialog, because the renderer is untrusted. See
+ * tool-consent.ts.
  */
 
 import { err, ok, type Result } from '../../shared/result.js'
@@ -15,6 +16,7 @@ import * as grants from '../tool-grants.js'
 import type { Grant } from '../tool-grants.js'
 import { Registry, toolSources } from '../tools/registry.js'
 import type { ToolDefinition } from '../../shared/tools.js'
+import { confirmStanding } from '../tool-consent.js'
 import { broadcast, handle } from './bus.js'
 
 type Deps = {
@@ -24,6 +26,8 @@ type Deps = {
   reconcile: (source: string, definitions: readonly ToolDefinition[], now: number) => void
   setEnabled: (source: string, name: string, enabled: boolean, now: number) => Grant | undefined
   setPolicy: (source: string, name: string, value: ToolPolicy, now: number) => Grant | undefined
+  /** Native, main-owned confirmation for a pre-approved standing grant. */
+  confirmStanding: (request: { sourceLabel: string; definition: ToolDefinition }) => Promise<boolean>
   now: () => number
   notifyTools: (value: ToolInfo[]) => void
 }
@@ -40,6 +44,7 @@ const deps: Deps = {
   setEnabled: (source, name, enabled, now) =>
     grants.setEnabled(db.handle(), source, name, enabled, now),
   setPolicy: (source, name, value, now) => grants.setPolicy(db.handle(), source, name, value, now),
+  confirmStanding: (request) => confirmStanding(request),
   now: Date.now,
   notifyTools: (value) => {
     broadcast('tools:changed', value)
@@ -106,6 +111,38 @@ export async function setEnabled(input: unknown, d: Deps = deps): Promise<Result
   return ok(value)
 }
 
+/**
+ * Grants standing permission, after a native prompt.
+ *
+ * The renderer asks; it never writes the grant. Declining is a success with the
+ * list unchanged — the user did what they meant to, the same way cancelling the
+ * privacy delete does.
+ */
+export async function allowAlways(input: unknown, d: Deps = deps): Promise<Result<ToolInfo[]>> {
+  const found = target(input)
+  if (found === undefined) return err('tool/invalid', 'tool selection was invalid')
+
+  const current = await survey(d, new AbortController().signal)
+  const entry = current.find(
+    (tool) => tool.source === found.source && tool.definition.name === found.name,
+  )
+  if (entry === undefined) return err('tool/missing', 'tool was not found')
+  // Standing permission on a switched-off tool is a grant nobody can see the
+  // effect of, so it is refused rather than quietly stored.
+  if (!entry.enabled) return err('tool/not-enabled', 'tool must be enabled first')
+  if (entry.policy === 'allow') return ok(current)
+
+  if (!(await d.confirmStanding({ sourceLabel: entry.sourceLabel, definition: entry.definition }))) {
+    return ok(current)
+  }
+  if (d.setPolicy(found.source, found.name, 'allow', d.now()) === undefined) {
+    return err('tool/missing', 'tool was not found')
+  }
+  const value = await survey(d, new AbortController().signal)
+  d.notifyTools(value)
+  return ok(value)
+}
+
 export async function requireApproval(
   input: unknown,
   d: Deps = deps,
@@ -123,5 +160,6 @@ export async function requireApproval(
 export function register(): void {
   handle('tools:list', () => listTools())
   handle('tools:set-enabled', (_event, req) => setEnabled(req))
+  handle('tools:allow-always', (_event, req) => allowAlways(req))
   handle('tools:require-approval', (_event, req) => requireApproval(req))
 }

@@ -143,6 +143,49 @@ export async function requestApproval(
   })
 }
 
+/**
+ * Confirms granting a tool standing permission, ahead of any call.
+ *
+ * The Tools panel offers this as a toggle, but the renderer cannot write the
+ * grant itself — it asks, and main puts a native box in front of a person
+ * first. That keeps the rule that only a native prompt owned by main can
+ * persist an `allow`, while still letting someone approve a tool before its
+ * first use instead of being interrupted mid-turn.
+ *
+ * There are no arguments to show, because nothing has been called yet. That is
+ * exactly the tradeoff being agreed to, so the copy says so.
+ */
+export async function confirmStanding(
+  request: Omit<ApprovalRequest, 'arguments'>,
+  d: ConsentDeps = deps,
+): Promise<boolean> {
+  const turn = queue.then(async () => {
+    const description = flatten(request.definition.description, MAX_DETAIL_DESCRIPTION)
+    const hints = hintLine(request.definition.annotations)
+    const answer = await d.ask({
+      type: 'warning',
+      buttons: ['Cancel', 'Always allow'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      message: `Always allow ${request.definition.title ?? request.definition.name}?`,
+      detail: [
+        `From: ${request.sourceLabel}`,
+        description === '' ? '' : `Description provided by the tool: ${description}`,
+        hints,
+        '',
+        'Luna will run this tool whenever the model asks, without showing you the ' +
+          'arguments first. You can turn this off at any time in Settings.',
+      ]
+        .filter((line, index, all) => !(line === '' && all[index - 1] === ''))
+        .join('\n'),
+    })
+    return answer === 1
+  })
+  queue = turn.catch(() => undefined)
+  return await turn.catch(() => false)
+}
+
 /** Test seam: the module-level queue outlives a single call by design. */
 export function resetQueue(): void {
   queue = Promise.resolve()

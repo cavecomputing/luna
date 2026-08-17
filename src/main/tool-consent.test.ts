@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ToolDefinition } from '../shared/tools.js'
 import {
+  confirmStanding,
   detailFor,
   hintLine,
   requestApproval,
@@ -219,5 +220,66 @@ describe('hintLine', () => {
   it('says nothing when there are no claims to report', () => {
     expect(hintLine(undefined)).toBe('')
     expect(hintLine({ destructiveHint: false })).toBe('')
+  })
+})
+
+describe('confirmStanding', () => {
+  const standing = { sourceLabel: 'Filesystem', definition }
+
+  it('grants only when the affirmative button is chosen', async () => {
+    expect(await confirmStanding(standing, deps(1))).toBe(true)
+    expect(await confirmStanding(standing, deps(0))).toBe(false)
+  })
+
+  /** Escape must not hand a tool standing permission. */
+  it('makes cancel the default and the escape answer', async () => {
+    const d = deps(0)
+    await confirmStanding(standing, d)
+
+    expect(d.ask).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultId: 0, cancelId: 0, type: 'warning', noLink: true }),
+    )
+    const options = d.ask.mock.calls[0]?.[0] as { buttons: string[] }
+    expect(options.buttons[0]).toBe('Cancel')
+  })
+
+  it('says plainly that arguments will not be shown in future', async () => {
+    const d = deps(0)
+    await confirmStanding(standing, d)
+    const options = d.ask.mock.calls[0]?.[0] as { detail: string; message: string }
+
+    expect(options.detail).toContain('without showing you the arguments')
+    expect(options.detail).toContain('From: Filesystem')
+    expect(options.detail).toContain('Description provided by the tool:')
+    expect(options.message).toContain('Always allow')
+  })
+
+  it('shares the queue with execution-time prompts', async () => {
+    let open = 0
+    let peak = 0
+    const release: (() => void)[] = []
+    const d: ConsentDeps = {
+      ask: () => {
+        open += 1
+        peak = Math.max(peak, open)
+        return new Promise<number>((resolve) => {
+          release.push(() => {
+            open -= 1
+            resolve(0)
+          })
+        })
+      },
+    }
+
+    const first = requestApproval(request, new AbortController().signal, d)
+    const second = confirmStanding(standing, d)
+    await Promise.resolve()
+    release[0]?.()
+    await first
+    await Promise.resolve()
+    release[1]?.()
+    await second
+
+    expect(peak).toBe(1)
   })
 })

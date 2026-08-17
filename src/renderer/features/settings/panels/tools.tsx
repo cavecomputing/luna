@@ -64,10 +64,19 @@ export function Tools(): React.JSX.Element {
     setTools(result.value)
   }
 
-  async function requireApproval(tool: ToolInfo): Promise<void> {
+  /**
+   * Asks main to change standing permission.
+   *
+   * Turning it on is a request, not a write: main puts a native prompt in front
+   * of the user and only then persists the grant. If they cancel, the returned
+   * list still says 'ask' and the toggle springs back on its own.
+   */
+  async function setStanding(tool: ToolInfo, always: boolean): Promise<void> {
     setBusy(true)
     setStatus('')
-    const result = await window.luna.tools.requireApproval(tool.source, tool.definition.name)
+    const result = always
+      ? await window.luna.tools.allowAlways(tool.source, tool.definition.name)
+      : await window.luna.tools.requireApproval(tool.source, tool.definition.name)
     setBusy(false)
     if (!result.ok) {
       setStatus(message(result.code))
@@ -117,23 +126,22 @@ export function Tools(): React.JSX.Element {
 
                 {tool.enabled && (
                   <div className={styles.consent}>
-                    {tool.policy === 'allow' ? (
-                      <>
-                        <span className={styles.standing}>Runs without asking.</span>
-                        <button
-                          type="button"
-                          className={styles.secondary}
-                          disabled={isBusy}
-                          onClick={() => {
-                            void requireApproval(tool)
-                          }}
-                        >
-                          Ask every time
-                        </button>
-                      </>
-                    ) : (
-                      <span className={styles.standing}>Asks before every use.</span>
-                    )}
+                    <span className={styles.standing}>
+                      {tool.policy === 'allow'
+                        ? 'Runs without asking.'
+                        : 'Asks before every use.'}
+                    </span>
+                    <label className={styles.toggle}>
+                      <input
+                        type="checkbox"
+                        checked={tool.policy === 'allow'}
+                        disabled={isBusy}
+                        onChange={(event) => {
+                          void setStanding(tool, event.target.checked)
+                        }}
+                      />
+                      <span>Always allow</span>
+                    </label>
                   </div>
                 )}
               </li>

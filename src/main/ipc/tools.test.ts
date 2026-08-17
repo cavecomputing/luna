@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ToolDefinition } from '../../shared/tools.js'
 import { toolKey } from '../../shared/tools.js'
 import type { Grant } from '../tool-grants.js'
-import { listTools, requireApproval, setEnabled } from './tools.js'
+import { allowAlways, listTools, requireApproval, setEnabled } from './tools.js'
 
 /** The deps argument is optional in production, so strip the undefined here. */
 type TestDeps = NonNullable<Parameters<typeof listTools>[0]>
@@ -57,6 +57,7 @@ function makeDeps(over: Partial<TestDeps> = {}): TestDeps {
       stored.set(toolKey(source, name), next)
       return next
     }),
+    confirmStanding: vi.fn().mockResolvedValue(true),
     now: () => 200,
     notifyTools: vi.fn(),
     ...over,
@@ -222,5 +223,91 @@ describe('requireApproval', () => {
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.code).toBe('tool/missing')
     expect(d.notifyTools).not.toHaveBeenCalled()
+  })
+})
+
+describe('allowAlways', () => {
+  async function enabled(): Promise<TestDeps> {
+    const d = makeDeps()
+    await listTools(d)
+    await setEnabled({ source: 'server-1', name: 'get_weather', enabled: true }, d)
+    vi.mocked(d.notifyTools).mockClear()
+    return d
+  }
+
+  it('grants standing permission once the native prompt is accepted', async () => {
+    const d = await enabled()
+    const result = await allowAlways({ source: 'server-1', name: 'get_weather' }, d)
+
+    expect(d.confirmStanding).toHaveBeenCalledWith({
+      sourceLabel: 'Server One',
+      definition: weather,
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.value[0]).toMatchObject({ policy: 'allow' })
+    expect(d.setPolicy).toHaveBeenLastCalledWith('server-1', 'get_weather', 'allow', 200)
+  })
+
+  /**
+   * The whole point of routing through main: a renderer request alone must
+   * never be enough to make a tool run silently.
+   */
+  it('writes nothing when the native prompt is declined', async () => {
+    const d = await enabled()
+    vi.mocked(d.confirmStanding).mockResolvedValue(false)
+
+    const result = await allowAlways({ source: 'server-1', name: 'get_weather' }, d)
+
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.value[0]).toMatchObject({ policy: 'ask' })
+    expect(d.setPolicy).not.toHaveBeenCalled()
+    expect(d.notifyTools).not.toHaveBeenCalled()
+  })
+
+  it('refuses standing permission on a tool that is not enabled', async () => {
+    const d = makeDeps()
+    await listTools(d)
+
+    const result = await allowAlways({ source: 'server-1', name: 'get_weather' }, d)
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.code).toBe('tool/not-enabled')
+    expect(d.confirmStanding).not.toHaveBeenCalled()
+    expect(d.setPolicy).not.toHaveBeenCalled()
+  })
+
+  it('does not re-prompt for a tool that already runs without asking', async () => {
+    const d = await enabled()
+    await allowAlways({ source: 'server-1', name: 'get_weather' }, d)
+    vi.mocked(d.confirmStanding).mockClear()
+
+    const result = await allowAlways({ source: 'server-1', name: 'get_weather' }, d)
+
+    expect(result.ok).toBe(true)
+    expect(d.confirmStanding).not.toHaveBeenCalled()
+  })
+
+  it('returns tool/invalid for malformed targets', async () => {
+    const d = await enabled()
+    for (const bad of [
+      { source: 'server-1', name: 'has space' },
+      { source: 'bad/source', name: 'get_weather' },
+      { source: 'server-1' },
+      'nonsense',
+    ]) {
+      const result = await allowAlways(bad, d)
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.code).toBe('tool/invalid')
+    }
+    expect(d.confirmStanding).not.toHaveBeenCalled()
+  })
+
+  it('returns tool/missing for a tool that was never discovered', async () => {
+    const d = await enabled()
+    const result = await allowAlways({ source: 'server-1', name: 'ghost' }, d)
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.code).toBe('tool/missing')
+    expect(d.confirmStanding).not.toHaveBeenCalled()
   })
 })

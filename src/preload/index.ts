@@ -69,6 +69,8 @@ const api = {
     list: () => invoke('tools:list', undefined),
     setEnabled: (source: string, name: string, enabled: boolean) =>
       invoke('tools:set-enabled', { source, name, enabled }),
+    allowAlways: (source: string, name: string) =>
+      invoke('tools:allow-always', { source, name }),
     requireApproval: (source: string, name: string) =>
       invoke('tools:require-approval', { source, name }),
   },

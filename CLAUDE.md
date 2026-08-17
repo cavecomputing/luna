@@ -157,8 +157,9 @@ editing one type — the compiler then tells you every place that must change.
   returns an unsubscribe.
 - Handlers return `Result<T>` (see `shared/result.ts`), never throw across the boundary.
   A rejected `invoke` loses the error type and leaks stack traces into the renderer.
-- A renderer may revoke standing tool permission but may never create it. Only an execution-time
-  native consent prompt owned by main may persist an `allow` grant.
+- A renderer may revoke standing tool permission but may never create it. Only a native consent
+  prompt owned by main may persist an `allow` grant — either the execution-time prompt or the
+  pre-approval one behind the Tools toggle. The renderer asks; main confirms and writes.
 
 Full pattern with code: [docs/architecture.md](docs/architecture.md#ipc).
 

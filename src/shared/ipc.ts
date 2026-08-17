@@ -127,6 +127,11 @@ export type Invocations = {
   /** Connects to every tool source and returns the catalog with its grants. */
   'tools:list': { req: undefined; res: ToolInfo[] }
   'tools:set-enabled': { req: { source: string; name: string; enabled: boolean }; res: ToolInfo[] }
+  /**
+   * Asks main to grant standing permission. Main confirms natively first, so
+   * the renderer requests the grant but never creates it.
+   */
+  'tools:allow-always': { req: { source: string; name: string }; res: ToolInfo[] }
   /** Revokes standing permission so an enabled tool asks before every call. */
   'tools:require-approval': { req: { source: string; name: string }; res: ToolInfo[] }
   'chats:list': { req: undefined; res: Conversation[] }
