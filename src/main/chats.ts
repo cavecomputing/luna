@@ -3,8 +3,10 @@ import type {
   ApiKind,
   AttachmentMeta,
   Conversation,
+  ConversationSummary,
   Message,
   MessageStatus,
+  SearchHit,
   Mode,
   Role,
   TokenUsage,
@@ -267,7 +269,7 @@ function messageRow(row: unknown): (StoredMessage & { conversationId: string }) 
   }
 }
 
-function conversationRow(row: unknown, messages: Message[]): Conversation | undefined {
+function summaryRow(row: unknown): ConversationSummary | undefined {
   const cell = object(row)
   if (cell === undefined) return undefined
   const parsedMode = mode(cell.mode)
@@ -291,8 +293,12 @@ function conversationRow(row: unknown, messages: Message[]): Conversation | unde
     mode: parsedMode,
     pinned: cell.pinned === 1,
     updatedAt: cell.updated_at,
-    messages,
   }
+}
+
+function conversationRow(row: unknown, messages: Message[]): Conversation | undefined {
+  const summary = summaryRow(row)
+  return summary === undefined ? undefined : { ...summary, messages }
 }
 
 function visibleMessage(
@@ -318,6 +324,107 @@ function visibleMessage(
     ...(message.trimmed === true ? { trimmed: true } : {}),
     ...(message.usage === undefined ? {} : { usage: message.usage }),
   }
+}
+
+/**
+ * Every conversation, without message bodies.
+ *
+ * This is what the sidebar shows and what `chats:changed` broadcasts, so it
+ * runs several times per turn. Reading message text here made that cost scale
+ * with the whole database rather than with the conversation being read.
+ */
+export function summaries(conn: DatabaseSync): ConversationSummary[] {
+  return conn
+    .prepare(
+      `SELECT ${CONVERSATION_COLUMNS}
+       FROM conversations ORDER BY pinned DESC, updated_at DESC, id`,
+    )
+    .all()
+    .flatMap((row) => {
+      const parsed = summaryRow(row)
+      return parsed === undefined ? [] : [parsed]
+    })
+}
+
+const EXCERPT_LENGTH = 110
+const EXCERPT_CONTEXT = 36
+
+function normalized(value: string): string {
+  return value.replace(/\s+/g, ' ').trim()
+}
+
+/** A short window around the first match, for a search result row. */
+export function excerptAround(content: string, query: string): string | undefined {
+  const text = normalized(content)
+  const index = text.toLowerCase().indexOf(query)
+  if (index < 0) return undefined
+  if (text.length <= EXCERPT_LENGTH) return text
+  const start = Math.max(0, index - EXCERPT_CONTEXT)
+  const end = Math.min(text.length, start + EXCERPT_LENGTH)
+  return `${start > 0 ? '…' : ''}${text.slice(start, end).trim()}${end < text.length ? '…' : ''}`
+}
+
+/** Escapes the wildcards SQLite's LIKE would otherwise treat as syntax. */
+function likePattern(query: string): string {
+  return `%${query.replace(/[\\%_]/g, (match) => `\\${match}`)}%`
+}
+
+/**
+ * Searches titles and message text in SQLite.
+ *
+ * This used to filter an in-memory array of every conversation, which only
+ * worked because every message was already loaded into the renderer. Running it
+ * here is what lets the sidebar carry titles alone.
+ */
+export function searchChats(conn: DatabaseSync, query: string): SearchHit[] {
+  const q = normalized(query).toLowerCase()
+  if (q === '') return []
+  const pattern = likePattern(q)
+
+  const hits: SearchHit[] = []
+  for (const row of conn
+    .prepare(
+      `SELECT ${CONVERSATION_COLUMNS} FROM conversations
+       ORDER BY pinned DESC, updated_at DESC, id`,
+    )
+    .all()) {
+    const summary = summaryRow(row)
+    if (summary === undefined) continue
+
+    const match = object(
+      conn
+        .prepare(
+          `SELECT text, reasoning FROM messages
+           WHERE conversation_id = ?
+             AND (lower(text) LIKE ? ESCAPE '\\' OR lower(reasoning) LIKE ? ESCAPE '\\')
+           ORDER BY ordinal LIMIT 1`,
+        )
+        .get(summary.id, pattern, pattern),
+    )
+    const titleHit = summary.title.toLowerCase().includes(q)
+    if (match === undefined && !titleHit) continue
+
+    const excerpt =
+      match === undefined
+        ? undefined
+        : (typeof match.text === 'string' ? excerptAround(match.text, q) : undefined) ??
+          (typeof match.reasoning === 'string' ? excerptAround(match.reasoning, q) : undefined)
+    hits.push({ conversation: summary, ...(excerpt === undefined ? {} : { excerpt }) })
+  }
+  return hits
+}
+
+/** The messages of one conversation, loaded when it is opened. */
+export function messagesFor(conn: DatabaseSync, conversationId: string): Message[] {
+  const attachmentMap = attachments.messageMap(conn, conversationId)
+  return conn
+    .prepare(`SELECT ${MESSAGE_COLUMNS} FROM messages WHERE conversation_id = ? ORDER BY ordinal`)
+    .all(conversationId)
+    .flatMap((row) => {
+      const parsed = messageRow(row)
+      if (parsed === undefined) return []
+      return [visibleMessage({ ...parsed, attachments: attachmentMap.get(parsed.id) ?? [] })]
+    })
 }
 
 export function list(conn: DatabaseSync): Conversation[] {
@@ -683,8 +790,27 @@ export function recoverInterrupted(conn: DatabaseSync): number {
     .run().changes)
 }
 
-export function load(): Conversation[] {
+/** What the sidebar and every chats:changed broadcast carry. */
+export function load(): ConversationSummary[] {
+  return summaries(db.handle())
+}
+
+/**
+ * Every conversation with its messages.
+ *
+ * Only the export path wants this — it genuinely needs the whole database. The
+ * sidebar uses load() instead, which is why that no longer reads message text.
+ */
+export function all(): Conversation[] {
   return list(db.handle())
+}
+
+export function messages(id: string): Message[] {
+  return messagesFor(db.handle(), id)
+}
+
+export function search(query: string): SearchHit[] {
+  return searchChats(db.handle(), query)
 }
 
 export function get(id: string): Conversation | undefined {

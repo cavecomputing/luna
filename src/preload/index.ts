@@ -78,6 +78,8 @@ const api = {
   },
   chats: {
     list: () => invoke('chats:list', undefined),
+    messages: (id: string) => invoke('chats:messages', { id }),
+    search: (query: string) => invoke('chats:search', { query }),
     create: (mode: Mode) => invoke('chats:create', { mode }),
     setMode: (id: string, mode: Mode) => invoke('chats:set-mode', { id, mode }),
     setDraft: (id: string, draft: string) => invoke('chats:set-draft', { id, draft }),

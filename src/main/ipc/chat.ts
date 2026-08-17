@@ -3,7 +3,13 @@ import { randomUUID } from 'node:crypto'
 import type { Prefs } from '../../shared/prefs.js'
 import { err, ok, type Result } from '../../shared/result.js'
 import type { ChatStart } from '../../shared/ipc.js'
-import type { Conversation, Message, ModelSlots, Mode } from '../../shared/types.js'
+import type {
+  Conversation,
+  ConversationSummary,
+  Message,
+  ModelSlots,
+  Mode,
+} from '../../shared/types.js'
 import { parseThinkingTags } from '../../shared/thinking.js'
 import {
   streamChat,
@@ -71,7 +77,7 @@ type Deps = {
     outcome?: TurnOutcome,
   ) => Message | undefined
   setTitle: (id: string, title: string) => Conversation | undefined
-  list: () => Conversation[]
+  list: () => ConversationSummary[]
   stream: (
     request: ChatRequest,
     signal: AbortSignal,
@@ -85,7 +91,7 @@ type Deps = {
   allowAlways: (source: string, name: string, now: number) => void
   newId: () => string
   now: () => number
-  notifyChats: (chats: Conversation[]) => void
+  notifyChats: (chats: ConversationSummary[]) => void
   notifyDelta: (data: {
     conversationId: string
     messageId: string

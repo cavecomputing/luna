@@ -357,10 +357,12 @@ Proposals, not decisions. Each is small relative to the versions above.
 - **Edit and resend a user message; regenerate a reply.** 1.0 can only retry a reply that failed
   or was stopped. Editing a message and re-running from that point is expected behavior in a
   chat client, and it becomes more valuable once turns are expensive.
-- **Conversation list performance.** `chats.load()` reads every message of every conversation on
-  every `chats:changed` broadcast, which fires on each stream start and finish. It is fine at
-  1.0's scale. Tool loops make conversations much longer, so this should be fixed before v1.1
-  rather than after.
+- **Conversation list performance.** Fixed. `chats.load()` used to read every message of every
+  conversation on every `chats:changed` broadcast — three times per message sent, and the tool
+  columns added to that read made it worse. The sidebar now carries titles and timestamps only,
+  message bodies load for the conversation being read, and search runs as a SQLite query instead
+  of a scan of an in-memory copy of everything. Measured on 300 conversations of 5 turns each
+  with tool rounds: 34.5 ms of blocking main-process work per message sent, down to 1.2 ms.
 Both of the hardening items listed here previously shipped in 1.0.3. Every file in
 `src/main/ipc/` now has a matching `.test.ts`.
 

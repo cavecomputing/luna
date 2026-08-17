@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatDelta, ChatFinal } from '../../../shared/ipc.js'
-import type { Conversation, Mode } from '../../../shared/types.js'
+import type { ConversationSummary, Message, Mode } from '../../../shared/types.js'
 import { byRecency } from './filter.js'
 
 export type Chats = ReturnType<typeof useChats>
+
+/** Stable identity, so an unloaded thread does not re-render on every pass. */
+const NO_MESSAGES: Message[] = []
 
 function deltaKey(delta: Pick<ChatDelta, 'conversationId' | 'messageId'>): string {
   return `${delta.conversationId}:${delta.messageId}`
@@ -15,75 +18,46 @@ export function queueDelta(pending: Map<string, ChatDelta>, delta: ChatDelta): v
   if (queued === undefined || queued.seq < delta.seq) pending.set(key, delta)
 }
 
-export function applyDeltas(chats: Conversation[], deltas: Iterable<ChatDelta>): Conversation[] {
-  let next = chats
+/** Deltas now update the open conversation's messages, not every conversation. */
+export function applyDeltas(messages: Message[], deltas: Iterable<ChatDelta>): Message[] {
+  let next = messages
   for (const delta of deltas) next = applyDelta(next, delta)
   return next
 }
 
-export function applyDelta(chats: Conversation[], delta: ChatDelta): Conversation[] {
-  return chats.map((chat) =>
-    chat.id !== delta.conversationId
-      ? chat
-      : {
-          ...chat,
-          messages: chat.messages.map((message) =>
-            message.id !== delta.messageId ||
-            message.status !== 'streaming' ||
-            (message.streamSeq ?? 0) >= delta.seq
-              ? message
-              : {
-                  ...message,
-                  text: delta.text,
-                  reasoning: delta.reasoning,
-                  streamSeq: delta.seq,
-                },
-          ),
-        },
+export function applyDelta(messages: Message[], delta: ChatDelta): Message[] {
+  return messages.map((message) =>
+    message.id !== delta.messageId ||
+    message.status !== 'streaming' ||
+    (message.streamSeq ?? 0) >= delta.seq
+      ? message
+      : { ...message, text: delta.text, reasoning: delta.reasoning, streamSeq: delta.seq },
   )
 }
 
-export function applyFinal(chats: Conversation[], final: ChatFinal): Conversation[] {
-  return chats.map((chat) =>
-    chat.id !== final.conversationId
-      ? chat
-      : {
-          ...chat,
-          messages: chat.messages.map((message) =>
-            message.id === final.message.id ? final.message : message,
-          ),
-        },
+export function applyFinal(messages: Message[], final: ChatFinal): Message[] {
+  return messages.map((message) =>
+    message.id === final.message.id ? final.message : message,
   )
 }
 
-/** Keep in-flight renderer text when an unrelated database broadcast arrives. */
+/**
+ * Merges a broadcast list into the current one, keeping the draft being typed.
+ *
+ * Message bodies used to be preserved here too, because the broadcast carried
+ * them and would have overwritten in-flight streamed text. It no longer does,
+ * which is the point of the change — a list update cannot disturb the thread.
+ */
 export function mergeChats(
-  current: Conversation[],
-  incoming: Conversation[],
-): Conversation[] {
-  const prior = new Map(
-    current.flatMap((chat) => chat.messages.map((message) => [message.id, message] as const)),
-  )
+  current: ConversationSummary[],
+  incoming: ConversationSummary[],
+): ConversationSummary[] {
   const priorChats = new Map(current.map((chat) => [chat.id, chat] as const))
   const seen = new Set<string>()
   return incoming.flatMap((chat) => {
     if (seen.has(chat.id)) return []
     seen.add(chat.id)
-    return [{
-      ...chat,
-      draft: priorChats.get(chat.id)?.draft ?? chat.draft,
-      messages: chat.messages.map((message) => {
-        const streamed = prior.get(message.id)
-        return message.status === 'streaming' && streamed?.status === 'streaming'
-          ? {
-              ...message,
-              text: streamed.text,
-              ...(streamed.reasoning === undefined ? {} : { reasoning: streamed.reasoning }),
-              ...(streamed.streamSeq === undefined ? {} : { streamSeq: streamed.streamSeq }),
-            }
-          : message
-      }),
-    }]
+    return [{ ...chat, draft: priorChats.get(chat.id)?.draft ?? chat.draft }]
   })
 }
 
@@ -108,8 +82,23 @@ function friendlyError(code: string): string {
 
 /** Main owns persistence and requests; this hook mirrors its typed events. */
 export function useChats(defaultMode: Mode) {
-  const [chats, setChats] = useState<Conversation[]>([])
+  const [chats, setChats] = useState<ConversationSummary[]>([])
   const [openId, setOpenId] = useState<string>()
+  /**
+   * Messages tagged with the conversation they belong to.
+   *
+   * Deriving the visible list from this rather than clearing on every change
+   * means a slow load that lands after the user has moved on cannot paint one
+   * conversation's messages into another's thread.
+   */
+  const [loaded, setLoaded] = useState<{ id: string; messages: Message[] }>()
+  /**
+   * The most recent delta per streaming message, kept until that message
+   * finishes. Reopening a conversation refetches from the database, which only
+   * holds text once the turn ends — this is what stops switching away and back
+   * mid-stream from blanking the reply.
+   */
+  const live = useRef(new Map<string, ChatDelta>())
   const [draftMode, setDraftMode] = useState<Mode>()
   const [renameId, setRenameId] = useState<string>()
   const [error, setError] = useState<string>()
@@ -122,7 +111,13 @@ export function useChats(defaultMode: Mode) {
       deltaFrame = undefined
       const batch = [...pending.values()]
       pending.clear()
-      if (batch.length > 0) setChats((current) => applyDeltas(current, batch))
+      if (batch.length > 0) {
+        setLoaded((current) =>
+          current === undefined
+            ? current
+            : { ...current, messages: applyDeltas(current.messages, batch) },
+        )
+      }
     }
     void window.luna.chats.list().then((result) => {
       if (!alive) return
@@ -146,16 +141,23 @@ export function useChats(defaultMode: Mode) {
       )
     })
     const offDelta = window.luna.onChatDelta((value) => {
+      live.current.set(value.messageId, value)
       queueDelta(pending, value)
       deltaFrame ??= requestAnimationFrame(flushDeltas)
     })
     const offDone = window.luna.onChatDone((value) => {
+      live.current.delete(value.message.id)
       pending.delete(deltaKey({ conversationId: value.conversationId, messageId: value.message.id }))
-      setChats((current) => applyFinal(current, value))
+      setLoaded((current) =>
+        current === undefined ? current : { ...current, messages: applyFinal(current.messages, value) },
+      )
     })
     const offError = window.luna.onChatError((value) => {
+      live.current.delete(value.message.id)
       pending.delete(deltaKey({ conversationId: value.conversationId, messageId: value.message.id }))
-      setChats((current) => applyFinal(current, value))
+      setLoaded((current) =>
+        current === undefined ? current : { ...current, messages: applyFinal(current.messages, value) },
+      )
       setError(friendlyError(value.code))
     })
     const offRename = window.luna.onRenameChat(({ id }) => {
@@ -172,10 +174,27 @@ export function useChats(defaultMode: Mode) {
     }
   }, [])
 
+  // Message bodies are fetched for the conversation being read, so opening one
+  // costs the same whether there are five conversations or five thousand.
+  useEffect(() => {
+    if (openId === undefined) return undefined
+    let alive = true
+    void window.luna.chats.messages(openId).then((result) => {
+      if (!alive || !result.ok) return
+      setLoaded({ id: openId, messages: applyDeltas(result.value, live.current.values()) })
+    })
+    return () => {
+      alive = false
+    }
+  }, [openId])
+
   const visible = useMemo(() => byRecency(chats), [chats])
-  const open = chats.find((chat) => chat.id === openId)
-  const streamingMessage = open?.messages.find((message) => message.status === 'streaming')
-  const currentMode = open?.mode ?? draftMode ?? defaultMode
+  const summary = chats.find((chat) => chat.id === openId)
+  const messages =
+    loaded !== undefined && loaded.id === openId ? loaded.messages : NO_MESSAGES
+  const open = summary === undefined ? undefined : { ...summary, messages }
+  const streamingMessage = messages.find((message) => message.status === 'streaming')
+  const currentMode = summary?.mode ?? draftMode ?? defaultMode
 
   async function start(): Promise<void> {
     setError(undefined)
@@ -188,8 +207,8 @@ export function useChats(defaultMode: Mode) {
     setOpenId(result.value.id)
   }
 
-  async function ensure(): Promise<Conversation | undefined> {
-    if (open !== undefined) return open
+  async function ensure(): Promise<ConversationSummary | undefined> {
+    if (summary !== undefined) return summary
     const created = await window.luna.chats.create(draftMode ?? defaultMode)
     if (!created.ok) {
       setError('A new conversation could not be created.')

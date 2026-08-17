@@ -10,7 +10,12 @@ import { app, BrowserWindow, dialog, session } from 'electron'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { err, ok, type Result } from '../../shared/result.js'
 import type { Prefs } from '../../shared/prefs.js'
-import type { Conversation, ModelSlots, Provider } from '../../shared/types.js'
+import type {
+  Conversation,
+  ConversationSummary,
+  ModelSlots,
+  Provider,
+} from '../../shared/types.js'
 import * as jobs from '../attachment-jobs.js'
 import { saveArchive, type ArchiveDeps } from '../chat-export.js'
 import * as chats from '../chats.js'
@@ -28,6 +33,7 @@ type Streams = {
 }
 
 type Deps = {
+  /** Full conversations, for export. The broadcast below carries summaries. */
   chats: () => Conversation[]
   archive: ArchiveDeps
   confirm: () => Promise<boolean>
@@ -44,7 +50,7 @@ type Deps = {
   notifyPrefs: (value: Prefs) => void
   notifyProviders: (value: Provider[]) => void
   notifyModels: (value: ModelSlots) => void
-  notifyChats: (value: Conversation[]) => void
+  notifyChats: (value: ConversationSummary[]) => void
   notifyAttachmentStorage: () => void
 }
 
@@ -98,7 +104,7 @@ async function clearBrowsingData(): Promise<void> {
 }
 
 const deps: Deps = {
-  chats: chats.load,
+  chats: chats.all,
   archive: {
     pickFolder,
     load: (conversationId) => jobs.readHistory(db.filePath(), conversationId),

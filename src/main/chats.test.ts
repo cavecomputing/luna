@@ -5,18 +5,23 @@ import type { TokenUsage, ToolStep } from '../shared/types.js'
 import {
   beginTurn,
   create,
+  excerptAround,
   find,
   finishMessage,
   history,
   list,
   messageAction,
+  messagesFor,
   recoverInterrupted,
   remove,
   restartMessage,
   retryConversation,
+  searchChats,
   setDraft,
   setMode,
   setPinned,
+  setTitle,
+  summaries,
 } from './chats.js'
 
 describe('chat storage', () => {
@@ -335,5 +340,138 @@ describe('tool rounds and usage', () => {
 
     expect(message?.toolRounds).toEqual([{ text: 'Checking.', steps: [step] }])
     expect(message?.usage).toEqual({ inputTokens: 120 })
+  })
+})
+
+describe('summaries and per-conversation loading', () => {
+  function seeded(): ReturnType<typeof open> {
+    const db = open(':memory:')
+    create(db, 'chat-1', 'fast', 10)
+    create(db, 'chat-2', 'expert', 20)
+    beginTurn(db, 'chat-1', 'Hello there', 'user-1', 'assistant-1', 30)
+    finishMessage(db, 'assistant-1', 'General Kenobi', '', 'complete', 40)
+    beginTurn(db, 'chat-2', 'Second chat', 'user-2', 'assistant-2', 50)
+    finishMessage(db, 'assistant-2', 'Second reply', 'thinking aloud', 'complete', 60)
+    return db
+  }
+
+  /** The sidebar cost must not scale with how much history exists. */
+  it('lists conversations without their messages', () => {
+    const listed = summaries(seeded())
+
+    expect(listed).toHaveLength(2)
+    for (const entry of listed) expect(entry).not.toHaveProperty('messages')
+    expect(listed.map((entry) => entry.id)).toEqual(['chat-2', 'chat-1'])
+  })
+
+  it('loads the messages of one conversation only', () => {
+    const db = seeded()
+    const loaded = messagesFor(db, 'chat-1')
+
+    expect(loaded.map((message) => message.id)).toEqual(['user-1', 'assistant-1'])
+    expect(loaded[1]?.text).toBe('General Kenobi')
+  })
+
+  it('returns nothing for a conversation with no messages', () => {
+    const db = open(':memory:')
+    create(db, 'empty', 'fast', 10)
+    expect(messagesFor(db, 'empty')).toEqual([])
+  })
+
+  it('strips main-only replay data before the messages leave storage', () => {
+    const db = seeded()
+    finishMessage(db, 'assistant-1', 'Answer', '', 'complete', 70, {
+      providerApi: 'responses',
+      providerId: 'openai',
+      items: [{ type: 'message' }],
+    })
+    const loaded = messagesFor(db, 'chat-1')
+
+    for (const message of loaded) {
+      expect(message).not.toHaveProperty('providerItems')
+      expect(message).not.toHaveProperty('providerId')
+    }
+  })
+})
+
+describe('searchChats', () => {
+  function corpus(): ReturnType<typeof open> {
+    const db = open(':memory:')
+    create(db, 'chat-1', 'fast', 10)
+    setTitle(db, 'chat-1', 'Weekend trip')
+    beginTurn(db, 'chat-1', 'Where should we go?', 'user-1', 'assistant-1', 20)
+    finishMessage(db, 'assistant-1', 'The coast is lovely in autumn.', '', 'complete', 30)
+
+    create(db, 'chat-2', 'fast', 40)
+    setTitle(db, 'chat-2', 'Dinner ideas')
+    beginTurn(db, 'chat-2', 'Something quick', 'user-2', 'assistant-2', 50)
+    finishMessage(db, 'assistant-2', 'Try a sheet pan supper.', 'weighing options', 'complete', 60)
+    return db
+  }
+
+  it('finds a conversation by message text and shows where it matched', () => {
+    const hits = searchChats(corpus(), 'coast')
+
+    expect(hits).toHaveLength(1)
+    expect(hits[0]?.conversation.title).toBe('Weekend trip')
+    expect(hits[0]?.excerpt).toContain('coast')
+  })
+
+  it('finds a conversation by title even with no message match', () => {
+    const hits = searchChats(corpus(), 'Dinner')
+    expect(hits.map((hit) => hit.conversation.id)).toEqual(['chat-2'])
+  })
+
+  it('searches reasoning as well as answer text', () => {
+    const hits = searchChats(corpus(), 'weighing')
+    expect(hits.map((hit) => hit.conversation.id)).toEqual(['chat-2'])
+  })
+
+  it('is case insensitive', () => {
+    expect(searchChats(corpus(), 'COAST')).toHaveLength(1)
+  })
+
+  it('returns nothing for an empty query', () => {
+    expect(searchChats(corpus(), '   ')).toEqual([])
+  })
+
+  /** A percent sign is a LIKE wildcard, so an unescaped one matches everything. */
+  it('treats LIKE wildcards as literal characters', () => {
+    expect(searchChats(corpus(), '%')).toEqual([])
+    expect(searchChats(corpus(), '_')).toEqual([])
+  })
+
+  it('orders results pinned first, then newest', () => {
+    const db = corpus()
+    setPinned(db, 'chat-1', true)
+    const hits = searchChats(db, 'e')
+    expect(hits[0]?.conversation.id).toBe('chat-1')
+  })
+
+  it('carries no message bodies in a result', () => {
+    const hits = searchChats(corpus(), 'coast')
+    expect(hits[0]?.conversation).not.toHaveProperty('messages')
+  })
+})
+
+describe('excerptAround', () => {
+  it('returns short text whole', () => {
+    expect(excerptAround('the coast is lovely', 'coast')).toBe('the coast is lovely')
+  })
+
+  it('windows a long line around the match with ellipses', () => {
+    const long = `${'a'.repeat(200)} needle ${'b'.repeat(200)}`
+    const excerpt = excerptAround(long, 'needle')
+    expect(excerpt).toContain('needle')
+    expect(excerpt?.startsWith('…')).toBe(true)
+    expect(excerpt?.endsWith('…')).toBe(true)
+  })
+
+  it('collapses whitespace so an excerpt stays on one line', () => {
+    expect(excerptAround('a\n\n  b   coast', 'coast')).toBe('a b coast')
+  })
+
+  it('reports nothing when the text does not match', () => {
+    expect(excerptAround('nothing here', 'coast')).toBeUndefined()
   })
 })

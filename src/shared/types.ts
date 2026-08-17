@@ -161,7 +161,15 @@ export type Message = {
   usage?: TokenUsage
 }
 
-export type Conversation = {
+/**
+ * A conversation without its messages.
+ *
+ * This is what the sidebar, search results, and every `chats:changed`
+ * broadcast carry. Message bodies are fetched for the conversation actually
+ * being read, so the cost of opening one chat does not scale with how many
+ * chats exist.
+ */
+export type ConversationSummary = {
   id: string
   title: string
   /** Unsent composer text, persisted separately for each conversation. */
@@ -171,5 +179,16 @@ export type Conversation = {
   pinned: boolean
   /** Epoch milliseconds of the most recent message. */
   updatedAt: number
+}
+
+/** A summary plus the messages themselves, for the thread being displayed. */
+export type Conversation = ConversationSummary & {
   messages: Message[]
+}
+
+/** One conversation matching a search, with the line that matched. */
+export type SearchHit = {
+  conversation: ConversationSummary
+  /** A window around the first message match. Absent when only the title hit. */
+  excerpt?: string
 }

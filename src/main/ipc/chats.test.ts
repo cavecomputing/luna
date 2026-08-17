@@ -28,6 +28,8 @@ type TestDeps = Parameters<typeof createChat>[1]
 function makeDeps(): TestDeps {
   let items = [chat()]
   return {
+    messages: vi.fn(() => []),
+    search: vi.fn(() => []),
     list: vi.fn(() => items),
     get: vi.fn((id: string) => items.find((item) => item.id === id)),
     create: vi.fn((id: string, mode: Mode, now: number) => {

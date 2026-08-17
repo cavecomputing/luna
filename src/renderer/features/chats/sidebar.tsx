@@ -6,7 +6,7 @@ import { Gear } from '../../ui/icons/gear.js'
 import { Plus } from '../../ui/icons/plus.js'
 import { Search } from '../../ui/icons/search.js'
 import { groupChats } from './filter.js'
-import type { Conversation } from '../../../shared/types.js'
+import type { ConversationSummary as Conversation } from '../../../shared/types.js'
 import styles from './sidebar.module.css'
 
 type GroupProps = {

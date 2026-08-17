@@ -9,7 +9,8 @@ import type { Prefs } from './prefs.js'
 import type { ToolInfo } from './tools.js'
 import type {
   AttachmentMeta,
-  Conversation,
+  ConversationSummary,
+  SearchHit,
   Message,
   ModelSlots,
   Mode,
@@ -56,7 +57,7 @@ export type AttachmentCleanup = {
 }
 
 export type ChatStart = {
-  conversation: Conversation
+  conversation: ConversationSummary
   userMessageId: string
   assistantMessageId: string
 }
@@ -139,12 +140,17 @@ export type Invocations = {
   'tools:allow-always': { req: { source: string; name: string }; res: ToolInfo[] }
   /** Revokes standing permission so an enabled tool asks before every call. */
   'tools:require-approval': { req: { source: string; name: string }; res: ToolInfo[] }
-  'chats:list': { req: undefined; res: Conversation[] }
-  'chats:create': { req: { mode: Mode }; res: Conversation }
-  'chats:set-mode': { req: { id: string; mode: Mode }; res: Conversation }
+  /** Titles and timestamps only. Message bodies come from chats:messages. */
+  'chats:list': { req: undefined; res: ConversationSummary[] }
+  /** The messages of one conversation, loaded when it is opened. */
+  'chats:messages': { req: { id: string }; res: Message[] }
+  /** Searches titles and message text in SQLite rather than in the renderer. */
+  'chats:search': { req: { query: string }; res: SearchHit[] }
+  'chats:create': { req: { mode: Mode }; res: ConversationSummary }
+  'chats:set-mode': { req: { id: string; mode: Mode }; res: ConversationSummary }
   'chats:set-draft': { req: { id: string; draft: string }; res: undefined }
-  'chats:set-pinned': { req: { id: string; pinned: boolean }; res: Conversation }
-  'chats:rename': { req: { id: string; title: string }; res: Conversation }
+  'chats:set-pinned': { req: { id: string; pinned: boolean }; res: ConversationSummary }
+  'chats:rename': { req: { id: string; title: string }; res: ConversationSummary }
   'chats:delete': { req: { id: string }; res: undefined }
   'chats:menu': { req: { id: string }; res: undefined }
   'attachments:add': {
@@ -191,7 +197,7 @@ export type Events = {
   'models:changed': ModelSlots
   /** A tool was enabled, disabled, or re-discovered with a changed definition. */
   'tools:changed': ToolInfo[]
-  'chats:changed': Conversation[]
+  'chats:changed': ConversationSummary[]
   'attachments:changed': { conversationId: string; attachments: AttachmentMeta[] }
   /** Attachment rows changed; Settings reloads worker-computed storage totals. */
   'attachments:storage-changed': undefined
