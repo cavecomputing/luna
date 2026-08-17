@@ -54,14 +54,16 @@ export function digestOf(definition: ToolDefinition): string {
   return createHash('sha256').update(canonical).digest('hex')
 }
 
-/** Key order in JSON is not meaningful, so sort it before hashing. */
+/** Key order in objects is not meaningful; array order and shape are. */
 function stable(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stable)
   const cell = object(value)
   if (cell === undefined) return value
-  return Object.keys(cell)
-    .sort()
-    .map((key) => [key, stable(cell[key])])
+  return Object.fromEntries(
+    Object.keys(cell)
+      .sort()
+      .map((key) => [key, stable(cell[key])]),
+  )
 }
 
 function policy(input: unknown): ToolPolicy | undefined {

@@ -153,6 +153,8 @@ Approval is of a **definition**, not a name. `digest` covers the description, th
 annotations, so a server that rewrites what a tool claims to do — the injection route that leaves
 the name untouched — loses the grant and has to ask again. Disabling a tool also drops any
 standing permission, so re-enabling never silently restores "never ask me again".
+The digest canonicalizes schemas by recursively sorting object keys while preserving arrays as
+arrays, so structurally different schemas cannot collide through their serialized shape.
 
 **The prompt is a native dialog driven from main**, not a renderer one. `bus.ts` checks the sender
 on every channel because a compromised page can send anything, which means a consent decision

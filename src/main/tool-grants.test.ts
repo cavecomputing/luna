@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import type { ToolDefinition } from '../shared/tools.js'
 import { open } from './db.js'
@@ -16,11 +17,64 @@ function withTool(definition: ToolDefinition = tool): ReturnType<typeof open> {
   return db
 }
 
+/** The unshipped entry-array canonicalizer, retained only to verify safe revocation. */
+function legacyStable(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(legacyStable)
+  if (value === null || typeof value !== 'object') return value
+  const cell = value as Record<string, unknown>
+  return Object.keys(cell)
+    .sort()
+    .map((key) => [key, legacyStable(cell[key])])
+}
+
+function legacyDigestOf(definition: ToolDefinition): string {
+  const canonical = JSON.stringify([
+    definition.name,
+    definition.title ?? '',
+    definition.description,
+    legacyStable(definition.inputSchema),
+    legacyStable(definition.outputSchema ?? null),
+    [
+      definition.annotations?.readOnlyHint ?? null,
+      definition.annotations?.destructiveHint ?? null,
+      definition.annotations?.idempotentHint ?? null,
+      definition.annotations?.openWorldHint ?? null,
+    ],
+  ])
+  return createHash('sha256').update(canonical).digest('hex')
+}
+
 describe('digestOf', () => {
   it('is stable across key order in the schema', () => {
-    const a: ToolDefinition = { ...tool, inputSchema: { type: 'object', title: 'x' } }
-    const b: ToolDefinition = { ...tool, inputSchema: { title: 'x', type: 'object' } }
+    const a: ToolDefinition = {
+      ...tool,
+      inputSchema: {
+        type: 'object',
+        properties: { city: { type: 'string', title: 'City' }, units: { enum: ['c', 'f'] } },
+      },
+    }
+    const b: ToolDefinition = {
+      ...tool,
+      inputSchema: {
+        properties: { units: { enum: ['c', 'f'] }, city: { title: 'City', type: 'string' } },
+        type: 'object',
+      },
+    }
     expect(digestOf(a)).toBe(digestOf(b))
+  })
+
+  it('distinguishes nested objects from arrays of key-value pairs', () => {
+    const nestedObject: ToolDefinition = {
+      ...tool,
+      inputSchema: { shape: { kind: 'object' } },
+    }
+    const pairArray: ToolDefinition = {
+      ...tool,
+      inputSchema: { shape: [['kind', 'object']] },
+    }
+
+    expect(legacyDigestOf(nestedObject)).toBe(legacyDigestOf(pairArray))
+    expect(digestOf(nestedObject)).not.toBe(digestOf(pairArray))
   })
 
   it('changes when the description changes', () => {
@@ -70,6 +124,28 @@ describe('reconcile', () => {
       policy: 'allow',
       seenAt: 300,
     })
+  })
+
+  it('revokes a grant stored with the legacy canonicalizer', () => {
+    const db = withTool()
+    setEnabled(db, 'server-1', 'get_weather', true, 200)
+    setPolicy(db, 'server-1', 'get_weather', 'allow', 200)
+    db.prepare('UPDATE tool_grants SET digest = ? WHERE source = ? AND tool_name = ?').run(
+      legacyDigestOf(tool),
+      'server-1',
+      'get_weather',
+    )
+
+    reconcile(db, 'server-1', [tool], 300)
+
+    const grant = find(db, 'server-1', 'get_weather')
+    expect(grant).toMatchObject({
+      enabled: false,
+      policy: 'ask',
+      digest: digestOf(tool),
+      seenAt: 300,
+    })
+    expect(grant?.approvedAt).toBeUndefined()
   })
 
   /** The injection route that leaves the name untouched. */
