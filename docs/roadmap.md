@@ -128,10 +128,14 @@ Once a model can call tools, one user message can silently trigger many provider
 must be able to see what a conversation cost. At minimum: capture the `usage` block both APIs
 return, store it per assistant row, and total it per conversation.
 
-Storage exists as of migration step 13 — `input_tokens`, `output_tokens`, `reasoning_tokens`,
-`cached_tokens`, all nullable. Still to do: read the `usage` block from both APIs, sum it across
-loop iterations, and show a per-conversation total. Cost in currency is deliberately out of
-scope; that needs per-model pricing and a staleness story.
+Built. Migration step 13 stores four nullable counts per assistant row; both APIs' `usage` blocks
+are read and summed across every round of a turn; each reply shows its tokens with a breakdown on
+hover, and the thread shows a running total.
+
+Cost in currency stays out of scope. Pricing varies per model, changes without notice, and Luna
+talks to servers that charge nothing — a token count is true everywhere, a dollar figure would be
+a guess. A provider that reported nothing shows nothing rather than zero, since those are
+different claims.
 
 ### F3. Context management
 
