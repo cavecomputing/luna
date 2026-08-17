@@ -137,11 +137,21 @@ scope; that needs per-model pricing and a staleness story.
 
 **Needed by:** v1.1 onward.
 
-Luna sends the entire conversation history on every turn, with no truncation, summarization, or
-token counting. That is correct and simple for short chats. It fails once search results and
-code output enter the transcript, and it fails first on models with smaller context windows.
-Needed: a token estimate, a defined policy for what gets dropped or summarized, and a visible
-indication when history has been trimmed.
+Built, as measure-and-trim. `shared/tokens.ts` estimates tokens without a tokenizer dependency —
+four characters per token, with CJK counted separately because averaging it in undercounts a
+Japanese or Chinese conversation badly, which is exactly where dropping messages hurts.
+
+`planHistory` drops the oldest turns first and always resumes at a user message, so history never
+opens on a reply to a question the model cannot see. The trailing turn is kept whatever it costs:
+sending nothing is a worse failure than sending one oversized turn. History gets 60% of the
+window; the rest is headroom for the reply, this turn's tool results, and the estimate being low.
+
+Each model slot carries an optional context window (migration step 16, with a Settings > Models
+field); absent means Luna's 128K default. A turn that had to leave history out records it on the
+assistant row, and the reply says so.
+
+Deferred: summarization, real tokenizers, auto-detected context windows from `/models` — which
+does not reliably report one — and a live context meter in the composer.
 
 ### F4. Permission and consent model
 

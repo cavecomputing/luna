@@ -62,6 +62,8 @@ const api = {
     get: () => invoke('models:get', undefined),
     set: (slot: Mode, providerId: string | null, model: string) =>
       invoke('models:set', { slot, providerId, model }),
+    setContext: (slot: Mode, contextTokens: number | null) =>
+      invoke('models:set-context', { slot, contextTokens }),
     setSampling: (slot: Mode, sampling: SamplerSettings) =>
       invoke('models:set-sampling', { slot, sampling }),
   },

@@ -43,7 +43,7 @@ export type MessageAction = Pick<Message, 'id' | 'role' | 'text' | 'status'> & {
 
 /** What a rendered message needs. history() adds the provider columns on top. */
 const MESSAGE_COLUMNS =
-  'id, conversation_id, role, text, reasoning, status, created_at, tool_steps, ' +
+  'id, conversation_id, role, text, reasoning, status, created_at, tool_steps, trimmed, ' +
   'input_tokens, output_tokens, reasoning_tokens, cached_tokens'
 const CONVERSATION_COLUMNS = 'id, title, draft, mode, pinned, updated_at'
 
@@ -259,6 +259,7 @@ function messageRow(row: unknown): (StoredMessage & { conversationId: string }) 
     ...(parsedRole !== 'assistant' || parsedRounds === undefined
       ? {}
       : { toolRounds: parsedRounds }),
+    ...(parsedRole === 'assistant' && cell.trimmed === 1 ? { trimmed: true } : {}),
     ...(parsedUsage === undefined ? {} : { usage: parsedUsage }),
     ...(typeof cell.provider_id !== 'string' ? {} : { providerId: cell.provider_id }),
     ...(parsedApi === undefined ? {} : { providerApi: parsedApi }),
@@ -314,6 +315,7 @@ function visibleMessage(
             steps: round.steps,
           })),
         }),
+    ...(message.trimmed === true ? { trimmed: true } : {}),
     ...(message.usage === undefined ? {} : { usage: message.usage }),
   }
 }
@@ -438,7 +440,7 @@ export function restartMessage(
         `UPDATE messages
          SET text = '', reasoning = '', status = 'streaming',
              provider_id = NULL, provider_api = NULL, provider_items = NULL,
-             tool_steps = NULL, input_tokens = NULL, output_tokens = NULL,
+             tool_steps = NULL, trimmed = NULL, input_tokens = NULL, output_tokens = NULL,
              reasoning_tokens = NULL, cached_tokens = NULL
          WHERE id = ? AND status IN ('error', 'cancelled')`,
       )
@@ -606,6 +608,8 @@ export type TurnOutcome = {
   items?: unknown[]
   toolRounds?: StoredToolRound[]
   usage?: TokenUsage
+  /** History had to be left out of this turn's request. */
+  trimmed?: boolean
 }
 
 export function finishMessage(
@@ -623,7 +627,7 @@ export function finishMessage(
       .prepare(
         `UPDATE messages
          SET text = ?, reasoning = ?, status = ?, provider_id = ?, provider_api = ?,
-             provider_items = ?, tool_steps = ?,
+             provider_items = ?, tool_steps = ?, trimmed = ?,
              input_tokens = ?, output_tokens = ?, reasoning_tokens = ?, cached_tokens = ?
          WHERE id = ? AND role = 'assistant' AND status = 'streaming'`,
       )
@@ -637,6 +641,7 @@ export function finishMessage(
         outcome.toolRounds === undefined || outcome.toolRounds.length === 0
           ? null
           : JSON.stringify(outcome.toolRounds),
+        outcome.trimmed === true ? 1 : null,
         outcome.usage?.inputTokens ?? null,
         outcome.usage?.outputTokens ?? null,
         outcome.usage?.reasoningTokens ?? null,

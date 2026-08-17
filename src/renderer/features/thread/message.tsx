@@ -104,6 +104,11 @@ export function Message({
               </div>
             </details>
           )}
+          {!mine && message.trimmed === true && (
+            <p className={styles.trimmed}>
+              Earlier messages were left out of this request to fit the model’s context.
+            </p>
+          )}
           {!mine && message.toolRounds !== undefined && (
             <ToolRounds rounds={message.toolRounds} />
           )}

@@ -810,3 +810,74 @@ describe('tool loop', () => {
     })
   })
 })
+
+describe('context trimming', () => {
+  function longHistory(count: number, tokensEach: number) {
+    const messages = []
+    for (let i = 0; i < count; i += 1) {
+      messages.push({
+        id: `u${String(i)}`,
+        role: 'user' as const,
+        text: 'x'.repeat(tokensEach * 4),
+        status: 'complete' as const,
+        at: i,
+        attachments: [],
+      })
+      messages.push({
+        id: `a${String(i)}`,
+        role: 'assistant' as const,
+        text: 'y'.repeat(tokensEach * 4),
+        status: 'complete' as const,
+        at: i,
+        attachments: [],
+      })
+    }
+    return messages
+  }
+
+  it('sends the whole history when it fits', async () => {
+    const d = makeDeps()
+    d.history = vi.fn(() => Promise.resolve(longHistory(2, 10)))
+    const chat = new ChatCoordinator(d)
+    await chat.send({ conversationId: 'chat-1', text: 'Hello', attachmentIds: [] })
+
+    await vi.waitFor(() => {
+      expect(d.finish).toHaveBeenCalledTimes(1)
+    })
+    const request = (d.stream as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as ChatRequest
+    expect(request.history).toHaveLength(4)
+    expect((d.finish as ReturnType<typeof vi.fn>).mock.calls[0]?.[5]).not.toHaveProperty('trimmed')
+  })
+
+  it('drops the oldest turns and records that it did', async () => {
+    const d = makeDeps()
+    d.slots = vi.fn(() => ({
+      fast: {
+        providerId: provider.id,
+        model: 'model-fast',
+        contextTokens: 2_048,
+        sampling: { ...defaultSamplerSettings },
+      },
+      expert: {
+        providerId: provider.id,
+        model: 'model-expert',
+        sampling: { ...defaultSamplerSettings },
+      },
+    }))
+    d.history = vi.fn(() => Promise.resolve(longHistory(20, 200)))
+    const chat = new ChatCoordinator(d)
+    await chat.send({ conversationId: 'chat-1', text: 'Hello', attachmentIds: [] })
+
+    await vi.waitFor(() => {
+      expect(d.finish).toHaveBeenCalledTimes(1)
+    })
+    const request = (d.stream as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as ChatRequest
+    expect(request.history.length).toBeLessThan(40)
+    expect(request.history.length).toBeGreaterThan(0)
+    // Whatever survives still opens on a user message.
+    expect(request.history[0]?.role).toBe('user')
+    expect((d.finish as ReturnType<typeof vi.fn>).mock.calls[0]?.[5]).toMatchObject({
+      trimmed: true,
+    })
+  })
+})

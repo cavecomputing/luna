@@ -35,6 +35,13 @@ import {
 } from '../../shared/tools.js'
 import type { StoredToolRound } from '../chats.js'
 import type { TokenUsage, ToolStep } from '../../shared/types.js'
+import {
+  DEFAULT_CONTEXT_TOKENS,
+  estimateTokens,
+  historyBudget,
+  planHistory,
+  type Sized,
+} from '../../shared/tokens.js'
 import { broadcast, handle } from './bus.js'
 import { listTools } from './tools.js'
 
@@ -163,6 +170,26 @@ function combineReasoning(structured: string, tagged: string): string {
   return `${structured}\n\n${tagged}`
 }
 
+/**
+ * What one stored message costs, for history planning.
+ *
+ * Attachment bytes are counted from their declared size rather than encoded,
+ * since base64-ing every attachment just to measure it would cost more than the
+ * estimate is worth. Tool rounds count too — a turn that ran tools is often the
+ * largest thing in a transcript.
+ */
+function sizeOf(message: StoredMessage): Sized {
+  let tokens = estimateTokens(message.text) + estimateTokens(message.reasoning ?? '')
+  for (const attachment of message.attachments) tokens += Math.ceil(attachment.size / 3)
+  for (const round of message.toolRounds ?? []) {
+    tokens += estimateTokens(round.text)
+    for (const step of round.steps) {
+      tokens += estimateTokens(step.arguments) + estimateTokens(step.text)
+    }
+  }
+  return { role: message.role, tokens }
+}
+
 /** Joins one round's text onto the rounds before it. */
 function joinText(before: string, next: string): string {
   if (before === '') return next
@@ -216,6 +243,8 @@ type Active = {
 type Selection = {
   provider: ProviderConfig
   model: string
+  /** The slot's declared context window, when it has one. */
+  contextTokens?: number
   sampling: ModelSlots[Mode]['sampling']
 }
 
@@ -227,7 +256,12 @@ function selection(conversation: Conversation, d: Deps): Result<Selection> {
   if (slot.model.trim() === '') return err('chat/no-model', 'conversation mode has no model')
   const provider = d.getProvider(slot.providerId)
   if (provider === undefined) return err('chat/no-provider', 'configured provider was not found')
-  return ok({ provider, model: slot.model, sampling: slot.sampling })
+  return ok({
+    provider,
+    model: slot.model,
+    ...(slot.contextTokens === undefined ? {} : { contextTokens: slot.contextTokens }),
+    sampling: slot.sampling,
+  })
 }
 
 export class ChatCoordinator {
@@ -399,12 +433,16 @@ export class ChatCoordinator {
     // Snapshotted once, alongside the history read: enabling a tool while this
     // turn is in flight must not change what this turn can reach.
     const catalog = await this.d.toolCatalog(controller.signal)
+    const plan = planHistory(
+      history.map(sizeOf),
+      historyBudget(selected.contextTokens ?? DEFAULT_CONTEXT_TOKENS),
+    )
     const request: ChatRequest = {
       provider: selected.provider,
       ...(apiKey === undefined ? {} : { apiKey }),
       model: selected.model,
       systemPrompt: LUNA_SYSTEM_PROMPT,
-      history,
+      history: plan.from === 0 ? history : history.slice(plan.from),
       sampling: selected.sampling,
       ...(catalog.length === 0
         ? {}
@@ -417,6 +455,7 @@ export class ChatCoordinator {
       controller,
       this.d.prefs().stream,
       catalog,
+      plan.trimmed,
     )
   }
 
@@ -435,6 +474,7 @@ export class ChatCoordinator {
     controller: AbortController,
     showStream: boolean,
     catalog: readonly ToolInfo[],
+    trimmed: boolean,
   ): Promise<void> {
     /** Text from rounds already finished. The live round is appended to it. */
     let committedText = ''
@@ -540,6 +580,7 @@ export class ChatCoordinator {
       totals,
       seq,
       showStream,
+      trimmed,
       partial: joinText(committedText, roundText),
       partialReasoning: joinText(committedReasoning, roundReasoning),
     })
@@ -607,12 +648,14 @@ export class ChatCoordinator {
       totals: TokenUsage
       seq: number
       showStream: boolean
+      trimmed: boolean
       partial: string
       partialReasoning: string
     },
   ): void {
     const shared = {
       ...(state.rounds.length === 0 ? {} : { toolRounds: state.rounds }),
+      ...(state.trimmed ? { trimmed: true } : {}),
       ...(hasUsage(state.totals) ? { usage: state.totals } : {}),
     }
 

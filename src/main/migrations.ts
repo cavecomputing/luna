@@ -138,6 +138,13 @@ const steps: readonly string[] = [
      approved_at INTEGER,
      PRIMARY KEY (source, tool_name)
    ) STRICT;`,
+  // How much context each slot's model has, and whether a turn had to leave
+  // history out. Both nullable: an unset window means "use the default", and an
+  // unset flag means the question predates this column.
+  `ALTER TABLE model_slots ADD COLUMN context_tokens INTEGER CHECK (
+     context_tokens IS NULL OR context_tokens BETWEEN 1024 AND 10485760
+   );
+   ALTER TABLE messages ADD COLUMN trimmed INTEGER CHECK (trimmed IS NULL OR trimmed IN (0, 1));`,
 ]
 
 /** The version a fully migrated database reports. */

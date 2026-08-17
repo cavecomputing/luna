@@ -11,6 +11,7 @@ import { useDebouncedValue } from '../../../lib/use-debounced-value.js'
 import { Bolt } from '../../../ui/icons/bolt.js'
 import { Crescent } from '../../../ui/icons/crescent.js'
 import { Panel } from '../panel.js'
+import { DEFAULT_CONTEXT_TOKENS } from '../../../../shared/tokens.js'
 import { SelectMenu } from '../../../ui/select-menu.js'
 import { Toggle } from '../../../ui/toggle.js'
 import { ModelCombobox } from './model-combobox.js'
@@ -68,6 +69,7 @@ type CardProps = {
   status: string
   onProvider: (id: string | null) => void
   onModel: (value: string) => void
+  onContext: (contextTokens: number | null) => void
   onRefresh: () => void
   onSampling: (sampling: SamplerSettings) => void
 }
@@ -183,6 +185,7 @@ function ModelCard({
   status,
   onProvider,
   onModel,
+  onContext,
   onRefresh,
   onSampling,
 }: CardProps): React.JSX.Element {
@@ -239,6 +242,26 @@ function ModelCard({
           {selected === undefined
             ? 'Fast and Expert are configured independently.'
             : `${selected.api === 'responses' ? 'Responses API' : 'Chat Completions'} · Server models appear as suggestions; any exact model ID is accepted.`}
+        </small>
+      </div>
+
+      <div className={styles.field}>
+        <label htmlFor={`${slot}-context`}>Context window</label>
+        <input
+          id={`${slot}-context`}
+          type="number"
+          min={1024}
+          step={1024}
+          value={value.contextTokens ?? ''}
+          placeholder={`${String(DEFAULT_CONTEXT_TOKENS)} (default)`}
+          onChange={(event) => {
+            const next = Number.parseInt(event.target.value, 10)
+            onContext(Number.isFinite(next) ? next : null)
+          }}
+        />
+        <small>
+          How many tokens this model accepts. Luna trims the oldest turns when a conversation
+          would not fit, and says so on the reply.
         </small>
       </div>
 
@@ -500,6 +523,22 @@ export function Models({ registerFlush }: ModelsProps = {}): React.JSX.Element {
     }
   }
 
+  function saveContext(slot: Mode, contextTokens: number | null): void {
+    setSlots((current) => ({
+      ...current,
+      [slot]: {
+        ...current[slot],
+        ...(contextTokens === null ? { contextTokens: undefined } : { contextTokens }),
+      },
+    }))
+    setStatus((current) => ({ ...current, [slot]: '' }))
+    void window.luna.models.setContext(slot, contextTokens).then((result) => {
+      if (!result.ok) {
+        setStatus((current) => ({ ...current, [slot]: 'The context window could not be saved.' }))
+      }
+    })
+  }
+
   function saveSampling(slot: Mode, sampling: SamplerSettings): void {
     setSlots((current) => ({
       ...current,
@@ -542,6 +581,9 @@ export function Models({ registerFlush }: ModelsProps = {}): React.JSX.Element {
         onRefresh={() => {
           void refresh('fast', slots.fast.providerId)
         }}
+        onContext={(contextTokens) => {
+          saveContext('fast', contextTokens)
+        }}
         onSampling={(sampling) => {
           saveSampling('fast', sampling)
         }}
@@ -566,6 +608,9 @@ export function Models({ registerFlush }: ModelsProps = {}): React.JSX.Element {
         }}
         onRefresh={() => {
           void refresh('expert', slots.expert.providerId)
+        }}
+        onContext={(contextTokens) => {
+          saveContext('expert', contextTokens)
         }}
         onSampling={(sampling) => {
           saveSampling('expert', sampling)

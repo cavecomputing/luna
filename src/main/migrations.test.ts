@@ -57,8 +57,15 @@ function dropToolGrants(db: DatabaseSync): void {
   db.exec('DROP TABLE tool_grants')
 }
 
+/** Removes the context-window and trimmed columns for the same reason. */
+function dropContextColumns(db: DatabaseSync): void {
+  db.exec('ALTER TABLE model_slots DROP COLUMN context_tokens')
+  db.exec('ALTER TABLE messages DROP COLUMN trimmed')
+}
+
 /** Every rewind helper, for a replay that goes back before the newest steps. */
 function rewind(db: DatabaseSync): void {
+  dropContextColumns(db)
   dropToolGrants(db)
   dropToolColumns(db)
   dropSampling(db)
@@ -284,6 +291,7 @@ describe('migrate', () => {
       VALUES ('message-1', 'chat-1', 'assistant', 'Answer', 'complete', 1, 0);`)
     dropToolColumns(db)
     dropToolGrants(db)
+    dropContextColumns(db)
     db.exec('PRAGMA user_version = 11;')
 
     migrate(db)
@@ -329,6 +337,7 @@ describe('migrate', () => {
     restoreIcon(db)
     dropToolColumns(db)
     dropToolGrants(db)
+    dropContextColumns(db)
     db.exec(`INSERT INTO conversations
       (id, title, mode, pinned, created_at, updated_at)
       VALUES ('chat-1', 'Chat', 'fast', 0, 1, 1);

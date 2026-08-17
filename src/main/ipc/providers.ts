@@ -24,6 +24,7 @@ type Deps = {
   drop: (id: string) => boolean
   slots: () => ModelSlots
   setSlot: (slot: Mode, providerId: string | null, model: string) => ModelSlots
+  setContext: (slot: Mode, contextTokens: number | null) => ModelSlots
   setSampling: (slot: Mode, sampling: SamplerSettings) => ModelSlots
   hasKey: (id: string) => Promise<boolean>
   readKey: (id: string) => Promise<string | undefined>
@@ -46,6 +47,7 @@ const deps: Deps = {
   drop: providers.drop,
   slots: providers.slots,
   setSlot: providers.setSlot,
+  setContext: providers.setContext,
   setSampling: providers.setSampling,
   hasKey: secrets.has,
   readKey: secrets.read,
@@ -233,6 +235,22 @@ export function updateSlot(input: unknown, d: Deps): Result<ModelSlots> {
   return ok(value)
 }
 
+/** Bounds match the CHECK on model_slots.context_tokens. */
+export function updateContext(input: unknown, d: Deps): Result<ModelSlots> {
+  const req = object(input)
+  if (req === undefined || (req.slot !== 'fast' && req.slot !== 'expert')) {
+    return err('model/invalid', 'model slot was invalid')
+  }
+  const contextTokens =
+    req.contextTokens === null ? null : bounded(req.contextTokens, 1024, 10_485_760)
+  if (contextTokens === undefined) {
+    return err('model/invalid', 'context window was invalid')
+  }
+  const value = d.setContext(req.slot, contextTokens)
+  d.notifyModels(value)
+  return ok(value)
+}
+
 function bounded(value: unknown, min: number, max: number): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
     ? value
@@ -309,5 +327,6 @@ export function register(): void {
   handle('providers:models', (_event, req) => getModels(req, deps))
   handle('models:get', () => getSlots(deps))
   handle('models:set', (_event, req) => updateSlot(req, deps))
+  handle('models:set-context', (_event, req) => updateContext(req, deps))
   handle('models:set-sampling', (_event, req) => updateSampling(req, deps))
 }

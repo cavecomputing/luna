@@ -127,6 +127,7 @@ function slotRow(row: unknown): [Mode, ModelSlots[Mode]] | undefined {
   const topK = optionalNumber(cell.top_k)
   const minP = optionalNumber(cell.min_p)
   const repeatPenalty = optionalNumber(cell.repeat_penalty)
+  const contextTokens = optionalNumber(cell.context_tokens)
   if (
     (cell.slot !== 'fast' && cell.slot !== 'expert') ||
     (typeof cell.provider_id !== 'string' && cell.provider_id !== null) ||
@@ -139,7 +140,8 @@ function slotRow(row: unknown): [Mode, ModelSlots[Mode]] | undefined {
     seed === undefined ||
     topK === undefined ||
     minP === undefined ||
-    repeatPenalty === undefined
+    repeatPenalty === undefined ||
+    contextTokens === undefined
   ) {
     return undefined
   }
@@ -149,6 +151,7 @@ function slotRow(row: unknown): [Mode, ModelSlots[Mode]] | undefined {
     {
       providerId: cell.provider_id,
       model: cell.model,
+      ...(contextTokens === null ? {} : { contextTokens }),
       sampling: {
         enabled: cell.sampling_enabled === 1,
         temperature: cell.temperature,
@@ -170,7 +173,7 @@ export function readSlots(conn: DatabaseSync): ModelSlots {
     expert: { providerId: null, model: '', sampling: { ...defaultSamplerSettings } },
   }
 
-  for (const row of conn.prepare(`SELECT slot, provider_id, model, sampling_enabled,
+  for (const row of conn.prepare(`SELECT slot, provider_id, model, context_tokens, sampling_enabled,
     temperature, top_p, frequency_penalty, presence_penalty, seed, top_k, min_p,
     repeat_penalty FROM model_slots`).all()) {
     const parsed = slotRow(row)
@@ -214,6 +217,18 @@ export function writeSlot(
   return readSlots(conn)
 }
 
+/** Null clears the override, putting the slot back on Luna's default estimate. */
+export function writeContext(
+  conn: DatabaseSync,
+  slot: Mode,
+  contextTokens: number | null,
+): ModelSlots {
+  conn
+    .prepare('UPDATE model_slots SET context_tokens = ? WHERE slot = ?')
+    .run(contextTokens, slot)
+  return readSlots(conn)
+}
+
 export function load(): ProviderConfig[] {
   return list(db.handle())
 }
@@ -240,6 +255,10 @@ export function slots(): ModelSlots {
 
 export function setSlot(slot: Mode, providerId: string | null, model: string): ModelSlots {
   return writeSlot(db.handle(), slot, providerId, model)
+}
+
+export function setContext(slot: Mode, contextTokens: number | null): ModelSlots {
+  return writeContext(db.handle(), slot, contextTokens)
 }
 
 export function setSampling(slot: Mode, sampling: SamplerSettings): ModelSlots {

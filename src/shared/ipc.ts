@@ -120,6 +120,11 @@ export type Invocations = {
     req: { slot: Mode; providerId: string | null; model: string }
     res: ModelSlots
   }
+  /** Null clears the override and returns the slot to Luna's default estimate. */
+  'models:set-context': {
+    req: { slot: Mode; contextTokens: number | null }
+    res: ModelSlots
+  }
   'models:set-sampling': {
     req: { slot: Mode; sampling: SamplerSettings }
     res: ModelSlots

@@ -55,6 +55,8 @@ export const defaultSamplerSettings: SamplerSettings = {
 export type ModelSlot = {
   providerId: string | null
   model: string
+  /** The model's context window. Absent means use Luna's default estimate. */
+  contextTokens?: number
   sampling: SamplerSettings
 }
 
@@ -153,6 +155,8 @@ export type Message = {
   attachments: AttachmentMeta[]
   /** Ordered model/tool rounds completed before this assistant answer. */
   toolRounds?: ToolRound[]
+  /** True when history had to be left out of this turn's request. */
+  trimmed?: boolean
   /** Summed across every request the turn made, not just the last one. */
   usage?: TokenUsage
 }
