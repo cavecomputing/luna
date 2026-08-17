@@ -70,6 +70,17 @@ function responseContent(message: StoredMessage): string | Record<string, unknow
   return content
 }
 
+/** Compatible servers may expose plaintext reasoning that must not be replayed as input. */
+function replayItems(items: unknown[]): unknown[] {
+  return items.filter((item) => {
+    const value = object(item)
+    return (
+      value?.type !== 'reasoning' ||
+      (typeof value.encrypted_content === 'string' && value.encrypted_content !== '')
+    )
+  })
+}
+
 export function requestBody(request: ChatRequest): Record<string, unknown> {
   const sampling = samplingBody(request.sampling, request.provider.api)
   if (request.provider.api === 'chat-completions') {
@@ -96,7 +107,7 @@ export function requestBody(request: ChatRequest): Record<string, unknown> {
       message.providerApi === 'responses' &&
       message.providerItems !== undefined
     ) {
-      input.push(...message.providerItems)
+      input.push(...replayItems(message.providerItems))
     } else {
       input.push({
         role: message.role,

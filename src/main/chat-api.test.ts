@@ -36,6 +36,12 @@ function request(api: ProviderConfig['api'] = 'responses'): ChatRequest {
   }
 }
 
+function setProviderItems(requestValue: ChatRequest, items: unknown[]): void {
+  const assistant = requestValue.history[1]
+  if (assistant === undefined) throw new Error('test request is missing its assistant message')
+  requestValue.history[1] = { ...assistant, providerItems: items }
+}
+
 function sse(parts: string[], status = 200): Response {
   return new Response(
     new ReadableStream<Uint8Array>({
@@ -95,6 +101,64 @@ describe('requestBody', () => {
       store: false,
       include: ['reasoning.encrypted_content'],
     })
+  })
+
+  it('omits plaintext reasoning with empty encrypted content from Responses replay', () => {
+    const configured = request()
+    setProviderItems(configured, [
+      {
+        id: 'rs_local',
+        type: 'reasoning',
+        content: [{ type: 'reasoning_text', text: 'Plaintext local reasoning.' }],
+        encrypted_content: '',
+      },
+      { type: 'message', role: 'assistant', id: 'msg_local', content: 'Hi' },
+    ])
+
+    expect(requestBody(configured).input).toEqual([
+      { role: 'user', content: 'Hello' },
+      { type: 'message', role: 'assistant', id: 'msg_local', content: 'Hi' },
+      { role: 'user', content: 'Again' },
+    ])
+  })
+
+  it('omits Responses reasoning without encrypted content from replay', () => {
+    const configured = request()
+    setProviderItems(configured, [
+      {
+        id: 'rs_compatible',
+        type: 'reasoning',
+        content: [{ type: 'reasoning_text', text: 'Compatible provider reasoning.' }],
+      },
+      { type: 'message', role: 'assistant', id: 'msg_compatible' },
+    ])
+
+    expect(requestBody(configured).input).toEqual([
+      { role: 'user', content: 'Hello' },
+      { type: 'message', role: 'assistant', id: 'msg_compatible' },
+      { role: 'user', content: 'Again' },
+    ])
+  })
+
+  it('preserves encrypted OpenAI reasoning in Responses replay', () => {
+    const configured = request()
+    const reasoning = {
+      id: 'rs_openai',
+      type: 'reasoning',
+      summary: [],
+      encrypted_content: 'encrypted-reasoning',
+    }
+    setProviderItems(configured, [
+      reasoning,
+      { type: 'message', role: 'assistant', id: 'msg_openai' },
+    ])
+
+    expect(requestBody(configured).input).toEqual([
+      { role: 'user', content: 'Hello' },
+      reasoning,
+      { type: 'message', role: 'assistant', id: 'msg_openai' },
+      { role: 'user', content: 'Again' },
+    ])
   })
 
   it('builds a Chat Completions request from visible roles and text', () => {
