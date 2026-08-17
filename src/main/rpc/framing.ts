@@ -33,28 +33,38 @@ export class LineFramer {
   push(chunk: string): Framed[] {
     if (chunk === '') return []
     const out: Framed[] = []
-    let rest = chunk
-    let newline = rest.indexOf('\n')
+    let start = 0
+    let newline = chunk.indexOf('\n', start)
 
     while (newline >= 0) {
-      const line = this.buffer + rest.slice(0, newline)
-      this.buffer = ''
-      rest = rest.slice(newline + 1)
+      const fragment = chunk.slice(start, newline)
+      start = newline + 1
       if (this.discarding) {
         // The overflow was already reported; drop the rest of that line only.
         this.discarding = false
+        this.buffer = ''
+      } else if (this.buffer.length + fragment.length > MAX_LINE_LENGTH) {
+        // Check before concatenating or parsing: a complete oversized line is
+        // just as invalid as one that crossed a chunk boundary.
+        this.buffer = ''
+        out.push({ ok: false, reason: 'overflow' })
       } else {
+        const line = this.buffer + fragment
+        this.buffer = ''
         const parsed = decode(line)
         if (parsed !== undefined) out.push(parsed)
       }
-      newline = rest.indexOf('\n')
+      newline = chunk.indexOf('\n', start)
     }
 
-    this.buffer += rest
-    if (this.buffer.length > MAX_LINE_LENGTH) {
+    if (this.discarding) return out
+    const fragment = chunk.slice(start)
+    if (this.buffer.length + fragment.length > MAX_LINE_LENGTH) {
       this.buffer = ''
       this.discarding = true
       out.push({ ok: false, reason: 'overflow' })
+    } else {
+      this.buffer += fragment
     }
     return out
   }

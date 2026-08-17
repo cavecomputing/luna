@@ -74,9 +74,46 @@ describe('LineFramer', () => {
     expect(framed).toEqual([{ ok: false, reason: 'overflow' }])
   })
 
-  it('resynchronizes on the next line after an overflow', () => {
+  it('rejects a complete oversized line before parsing it', () => {
     const framer = new LineFramer()
-    framer.push('x'.repeat(MAX_LINE_LENGTH + 1))
-    expect(values(framer, ['leftover-of-the-bad-line\n{"a":1}\n'])).toEqual([{ a: 1 }])
+    expect(framer.push(`${'x'.repeat(MAX_LINE_LENGTH + 1)}\n`)).toEqual([
+      { ok: false, reason: 'overflow' },
+    ])
+  })
+
+  it('accepts a complete JSON line exactly at the limit', () => {
+    const framer = new LineFramer()
+    const line = JSON.stringify('x'.repeat(MAX_LINE_LENGTH - 2))
+    expect(line).toHaveLength(MAX_LINE_LENGTH)
+
+    expect(framer.push(`${line}\n`)).toEqual([
+      { ok: true, value: 'x'.repeat(MAX_LINE_LENGTH - 2) },
+    ])
+  })
+
+  it('reports one overflow for each oversized line', () => {
+    const framer = new LineFramer()
+    const oversized = 'x'.repeat(MAX_LINE_LENGTH + 1)
+    expect(framer.push(`${oversized}\n${oversized}\n`)).toEqual([
+      { ok: false, reason: 'overflow' },
+      { ok: false, reason: 'overflow' },
+    ])
+  })
+
+  it('recovers after a complete overflow within the same chunk', () => {
+    const framer = new LineFramer()
+    const framed = framer.push(`${'x'.repeat(MAX_LINE_LENGTH + 1)}\n{"a":1}\n`)
+    expect(framed).toEqual([
+      { ok: false, reason: 'overflow' },
+      { ok: true, value: { a: 1 } },
+    ])
+  })
+
+  it('reports a split oversized line once and discards through its delimiter', () => {
+    const framer = new LineFramer()
+    expect(framer.push('x'.repeat(MAX_LINE_LENGTH))).toEqual([])
+    expect(framer.push('too much')).toEqual([{ ok: false, reason: 'overflow' }])
+    expect(framer.push('still the same bad line')).toEqual([])
+    expect(framer.push('discarded\n{"a":1}\n')).toEqual([{ ok: true, value: { a: 1 } }])
   })
 })
