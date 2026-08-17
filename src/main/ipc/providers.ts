@@ -25,6 +25,8 @@ type Deps = {
   slots: () => ModelSlots
   setSlot: (slot: Mode, providerId: string | null, model: string) => ModelSlots
   setContext: (slot: Mode, contextTokens: number | null) => ModelSlots
+  /** Stores context windows a server reported; returns slots only if any moved. */
+  recordDetected: (providerId: string, models: readonly ProviderModel[]) => ModelSlots | undefined
   setSampling: (slot: Mode, sampling: SamplerSettings) => ModelSlots
   hasKey: (id: string) => Promise<boolean>
   readKey: (id: string) => Promise<string | undefined>
@@ -48,6 +50,7 @@ const deps: Deps = {
   slots: providers.slots,
   setSlot: providers.setSlot,
   setContext: providers.setContext,
+  recordDetected: providers.recordDetectedContext,
   setSampling: providers.setSampling,
   hasKey: secrets.has,
   readKey: secrets.read,
@@ -208,7 +211,14 @@ export async function getModels(input: unknown, d: Deps): Promise<Result<Provide
   } catch {
     return err('secret/unavailable', 'secure credential read failed')
   }
-  return d.discover(provider, apiKey)
+  const found = await d.discover(provider, apiKey)
+  // Discovery is the only moment Luna learns a model's real window, so record
+  // it now. Slots pointing elsewhere are untouched.
+  if (found.ok) {
+    const value = d.recordDetected(providerId, found.value)
+    if (value !== undefined) d.notifyModels(value)
+  }
+  return found
 }
 
 export function getSlots(d: Deps): Result<ModelSlots> {

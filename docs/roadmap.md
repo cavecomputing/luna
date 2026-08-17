@@ -150,12 +150,21 @@ opens on a reply to a question the model cannot see. The trailing turn is kept w
 sending nothing is a worse failure than sending one oversized turn. History gets 60% of the
 window; the rest is headroom for the reply, this turn's tool results, and the estimate being low.
 
-Each model slot carries an optional context window (migration step 16, with a Settings > Models
-field); absent means Luna's 128K default. A turn that had to leave history out records it on the
-assistant row, and the reply says so.
+The window is resolved in order of how well it is actually known: a value the user typed, else
+what the server reported at discovery, else a 128K default. Migration step 16 stores the typed
+override and the trimmed flag; step 17 stores the detected value separately, so clearing an
+override falls back to discovery rather than to a guess.
 
-Deferred: summarization, real tokenizers, auto-detected context windows from `/models` — which
-does not reliably report one — and a live context meter in the composer.
+Auto-detection turned out to be worth doing. There is no standard field, but the servers that
+matter do report one: OpenRouter puts it at `context_length` on every model it lists, and
+llama.cpp reports `meta.n_ctx`. OpenAI's own `/v1/models` says nothing, which is where the
+default still earns its place. A served window beats a trained maximum, since a server may load a
+model with less than it supports.
+
+A turn that had to leave history out records it on the assistant row, and the reply says so.
+
+Deferred: summarization, real tokenizers, and a live context meter in the composer showing how
+full the window is before you send.
 
 ### F4. Permission and consent model
 

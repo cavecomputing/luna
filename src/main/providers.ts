@@ -128,6 +128,7 @@ function slotRow(row: unknown): [Mode, ModelSlots[Mode]] | undefined {
   const minP = optionalNumber(cell.min_p)
   const repeatPenalty = optionalNumber(cell.repeat_penalty)
   const contextTokens = optionalNumber(cell.context_tokens)
+  const detected = optionalNumber(cell.detected_context_tokens)
   if (
     (cell.slot !== 'fast' && cell.slot !== 'expert') ||
     (typeof cell.provider_id !== 'string' && cell.provider_id !== null) ||
@@ -141,7 +142,8 @@ function slotRow(row: unknown): [Mode, ModelSlots[Mode]] | undefined {
     topK === undefined ||
     minP === undefined ||
     repeatPenalty === undefined ||
-    contextTokens === undefined
+    contextTokens === undefined ||
+    detected === undefined
   ) {
     return undefined
   }
@@ -152,6 +154,7 @@ function slotRow(row: unknown): [Mode, ModelSlots[Mode]] | undefined {
       providerId: cell.provider_id,
       model: cell.model,
       ...(contextTokens === null ? {} : { contextTokens }),
+      ...(detected === null ? {} : { detectedContextTokens: detected }),
       sampling: {
         enabled: cell.sampling_enabled === 1,
         temperature: cell.temperature,
@@ -173,7 +176,7 @@ export function readSlots(conn: DatabaseSync): ModelSlots {
     expert: { providerId: null, model: '', sampling: { ...defaultSamplerSettings } },
   }
 
-  for (const row of conn.prepare(`SELECT slot, provider_id, model, context_tokens, sampling_enabled,
+  for (const row of conn.prepare(`SELECT slot, provider_id, model, context_tokens, detected_context_tokens, sampling_enabled,
     temperature, top_p, frequency_penalty, presence_penalty, seed, top_k, min_p,
     repeat_penalty FROM model_slots`).all()) {
     const parsed = slotRow(row)
@@ -218,6 +221,32 @@ export function writeSlot(
 }
 
 /** Null clears the override, putting the slot back on Luna's default estimate. */
+/**
+ * Records what a server reported for the model a slot is using.
+ *
+ * Only touches slots already pointing at that provider and model, so a
+ * discovery run for one provider cannot rewrite another's window.
+ */
+export function writeDetectedContext(
+  conn: DatabaseSync,
+  providerId: string,
+  models: readonly { id: string; contextLength?: number }[],
+): ModelSlots | undefined {
+  const update = conn.prepare(
+    `UPDATE model_slots SET detected_context_tokens = ?
+     WHERE provider_id = ? AND model = ? AND
+       (detected_context_tokens IS NULL OR detected_context_tokens != ?)`,
+  )
+  let moved = 0
+  for (const entry of models) {
+    if (entry.contextLength === undefined) continue
+    const result = update.run(entry.contextLength, providerId, entry.id, entry.contextLength)
+    moved += Number(result.changes)
+  }
+  // Nothing changed means nothing to announce, so an unchanged Refresh stays silent.
+  return moved === 0 ? undefined : readSlots(conn)
+}
+
 export function writeContext(
   conn: DatabaseSync,
   slot: Mode,
@@ -259,6 +288,13 @@ export function setSlot(slot: Mode, providerId: string | null, model: string): M
 
 export function setContext(slot: Mode, contextTokens: number | null): ModelSlots {
   return writeContext(db.handle(), slot, contextTokens)
+}
+
+export function recordDetectedContext(
+  providerId: string,
+  models: readonly { id: string; contextLength?: number }[],
+): ModelSlots | undefined {
+  return writeDetectedContext(db.handle(), providerId, models)
 }
 
 export function setSampling(slot: Mode, sampling: SamplerSettings): ModelSlots {

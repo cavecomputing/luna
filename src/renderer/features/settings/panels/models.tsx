@@ -253,15 +253,20 @@ function ModelCard({
           min={1024}
           step={1024}
           value={value.contextTokens ?? ''}
-          placeholder={`${String(DEFAULT_CONTEXT_TOKENS)} (default)`}
+          placeholder={
+            value.detectedContextTokens === undefined
+              ? `${String(DEFAULT_CONTEXT_TOKENS)} (default)`
+              : `${String(value.detectedContextTokens)} (from server)`
+          }
           onChange={(event) => {
             const next = Number.parseInt(event.target.value, 10)
             onContext(Number.isFinite(next) ? next : null)
           }}
         />
         <small>
-          How many tokens this model accepts. Luna trims the oldest turns when a conversation
-          would not fit, and says so on the reply.
+          {value.detectedContextTokens === undefined
+            ? 'How many tokens this model accepts. Luna trims the oldest turns when a conversation would not fit, and says so on the reply. Refresh the model list to read this from the server.'
+            : 'Read from the server when the model list was refreshed. Set a value to use less than the model allows.'}
         </small>
       </div>
 

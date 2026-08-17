@@ -249,9 +249,14 @@ type Active = {
 type Selection = {
   provider: ProviderConfig
   model: string
-  /** The slot's declared context window, when it has one. */
+  /** Effective window: what the user typed, else what the server reported. */
   contextTokens?: number
   sampling: ModelSlots[Mode]['sampling']
+}
+
+/** The window to plan against, in order of how much it is actually known. */
+function effectiveContext(slot: ModelSlots[Mode]): number | undefined {
+  return slot.contextTokens ?? slot.detectedContextTokens
 }
 
 function selection(conversation: Conversation, d: Deps): Result<Selection> {
@@ -262,10 +267,12 @@ function selection(conversation: Conversation, d: Deps): Result<Selection> {
   if (slot.model.trim() === '') return err('chat/no-model', 'conversation mode has no model')
   const provider = d.getProvider(slot.providerId)
   if (provider === undefined) return err('chat/no-provider', 'configured provider was not found')
+  const context = effectiveContext(slot)
   return ok({
     provider,
     model: slot.model,
-    ...(slot.contextTokens === undefined ? {} : { contextTokens: slot.contextTokens }),
+    // A typed override wins over discovery; discovery wins over Luna's guess.
+    ...(context === undefined ? {} : { contextTokens: context }),
     sampling: slot.sampling,
   })
 }

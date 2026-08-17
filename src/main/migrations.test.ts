@@ -59,6 +59,7 @@ function dropToolGrants(db: DatabaseSync): void {
 
 /** Removes the context-window and trimmed columns for the same reason. */
 function dropContextColumns(db: DatabaseSync): void {
+  db.exec('ALTER TABLE model_slots DROP COLUMN detected_context_tokens')
   db.exec('ALTER TABLE model_slots DROP COLUMN context_tokens')
   db.exec('ALTER TABLE messages DROP COLUMN trimmed')
 }
@@ -309,6 +310,22 @@ describe('migrate', () => {
       reasoning_tokens: null,
       cached_tokens: null,
     })
+  })
+
+  it('adds a separate column for server-reported context windows', () => {
+    const db = fresh()
+    migrate(db)
+    const columns = db.prepare('PRAGMA table_info(model_slots)').all()
+      .map((row) => ({ ...row }).name)
+
+    // Kept apart from context_tokens so a typed override and a detected value
+    // stay distinguishable, and clearing one falls back to the other.
+    expect(columns).toContain('context_tokens')
+    expect(columns).toContain('detected_context_tokens')
+    expect(db.prepare('SELECT detected_context_tokens FROM model_slots').all()).toEqual([
+      { detected_context_tokens: null },
+      { detected_context_tokens: null },
+    ])
   })
 
   it('leaves integrity and foreign keys clean after every step', () => {

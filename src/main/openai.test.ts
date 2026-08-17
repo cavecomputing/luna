@@ -98,3 +98,45 @@ describe('discoverModels', () => {
     expect(result).toMatchObject({ ok: false, code: 'provider/bad-response' })
   })
 })
+
+describe('context window discovery', () => {
+  const parse = (row: Record<string, unknown>) => {
+    const result = parseModels({ data: [{ id: 'm1', ...row }] })
+    return result.ok ? result.value[0]?.contextLength : undefined
+  }
+
+  /** OpenRouter puts it here, on every model it lists. */
+  it('reads context_length', () => {
+    expect(parse({ context_length: 262_144 })).toBe(262_144)
+  })
+
+  /** llama.cpp reports its own metadata rather than an OpenAI-shaped field. */
+  it('reads meta.n_ctx', () => {
+    expect(parse({ meta: { n_ctx: 131_072, n_ctx_train: 131_072 } })).toBe(131_072)
+  })
+
+  /** A server may load a model with less than it was trained for. */
+  it('prefers the served window over the trained maximum', () => {
+    expect(parse({ meta: { n_ctx: 32_768, n_ctx_train: 131_072 } })).toBe(32_768)
+  })
+
+  it('falls back to the provider block OpenRouter nests', () => {
+    expect(parse({ top_provider: { context_length: 200_000 } })).toBe(200_000)
+  })
+
+  /** OpenAI's own /v1/models says nothing, and that must stay absent not zero. */
+  it('reports nothing when the server does not say', () => {
+    expect(parse({ owned_by: 'openai' })).toBeUndefined()
+  })
+
+  it('ignores implausible or malformed values', () => {
+    expect(parse({ context_length: 0 })).toBeUndefined()
+    expect(parse({ context_length: -1 })).toBeUndefined()
+    expect(parse({ context_length: 'lots' })).toBeUndefined()
+    expect(parse({ meta: 'nope' })).toBeUndefined()
+  })
+
+  it('floors a fractional value rather than storing it', () => {
+    expect(parse({ context_length: 8192.7 })).toBe(8192)
+  })
+})

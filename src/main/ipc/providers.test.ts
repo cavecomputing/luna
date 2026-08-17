@@ -67,6 +67,7 @@ function makeDeps(): TestDeps {
     }),
     slots: vi.fn(() => slots),
     setContext: vi.fn(() => slots),
+    recordDetected: vi.fn(() => undefined),
     setSlot: vi.fn((slot: Mode, providerId: string | null, model: string) => {
       slots = { ...slots, [slot]: { ...slots[slot], providerId, model } }
       return slots

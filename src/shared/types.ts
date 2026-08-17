@@ -24,6 +24,8 @@ export type ProviderModel = {
   id: string
   ownedBy?: string
   created?: number
+  /** Context window, when the server reports one. Not every server does. */
+  contextLength?: number
 }
 
 /** Optional request-level sampling overrides for one model slot. */
@@ -55,8 +57,10 @@ export const defaultSamplerSettings: SamplerSettings = {
 export type ModelSlot = {
   providerId: string | null
   model: string
-  /** The model's context window. Absent means use Luna's default estimate. */
+  /** A window the user typed. Overrides whatever the server reported. */
   contextTokens?: number
+  /** The window this model's server last reported, when it reported one. */
+  detectedContextTokens?: number
   sampling: SamplerSettings
 }
 

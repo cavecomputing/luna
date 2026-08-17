@@ -145,6 +145,13 @@ const steps: readonly string[] = [
      context_tokens IS NULL OR context_tokens BETWEEN 1024 AND 10485760
    );
    ALTER TABLE messages ADD COLUMN trimmed INTEGER CHECK (trimmed IS NULL OR trimmed IN (0, 1));`,
+  // What the server said this slot's model accepts, recorded at discovery.
+  // Kept apart from context_tokens so a typed override and a detected value
+  // stay distinguishable, and clearing the override falls back here rather
+  // than to a guess.
+  `ALTER TABLE model_slots ADD COLUMN detected_context_tokens INTEGER CHECK (
+     detected_context_tokens IS NULL OR detected_context_tokens BETWEEN 1024 AND 10485760
+   );`,
 ]
 
 /** The version a fully migrated database reports. */
