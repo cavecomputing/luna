@@ -719,6 +719,55 @@ describe('tool call accumulation', () => {
       if (result.ok) expect(result.value.toolCalls?.[0]?.name).toBe('swept')
     })
 
+    it('keeps two final-only calls to the same function distinct and ordered', async () => {
+      const result = await run('responses', [
+        'data: {"type":"response.completed","response":{"output":[',
+        '{"id":"fc_1","type":"function_call","call_id":"c1","name":"repeat","arguments":"{\\"n\\":1}"},',
+        '{"id":"fc_2","type":"function_call","call_id":"c2","name":"repeat","arguments":"{\\"n\\":2}"}]}}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.value.toolCalls).toEqual([
+        { callId: 'c1', name: 'repeat', arguments: '{"n":1}' },
+        { callId: 'c2', name: 'repeat', arguments: '{"n":2}' },
+      ])
+    })
+
+    it('merges a streamed call by call ID without dropping a same-name final call', async () => {
+      const result = await run('responses', [
+        'data: {"type":"response.output_item.added","output_index":0,"item":',
+        '{"type":"function_call","call_id":"c1","name":"repeat"}}\n\n',
+        'data: {"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\\"n\\":1}"}\n\n',
+        'data: {"type":"response.completed","response":{"output":[',
+        '{"id":"fc_1","type":"function_call","call_id":"c1","name":"repeat","arguments":"{\\"n\\":1}"},',
+        '{"id":"fc_2","type":"function_call","call_id":"c2","name":"repeat","arguments":"{\\"n\\":2}"}]}}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.value.toolCalls).toEqual([
+        { callId: 'c1', name: 'repeat', arguments: '{"n":1}' },
+        { callId: 'c2', name: 'repeat', arguments: '{"n":2}' },
+      ])
+    })
+
+    it('uses output index when the streamed call has no provider identifiers', async () => {
+      const result = await run('responses', [
+        'data: {"type":"response.output_item.added","output_index":0,"item":',
+        '{"type":"function_call","name":"indexed"}}\n\n',
+        'data: {"type":"response.function_call_arguments.delta","output_index":0,"delta":"{}"}\n\n',
+        'data: {"type":"response.completed","response":{"output":[',
+        '{"id":"fc_1","type":"function_call","call_id":"c1","name":"indexed","arguments":"{}"}]}}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.value.toolCalls).toEqual([
+        { callId: 'c1', name: 'indexed', arguments: '{}' },
+      ])
+    })
+
     it('reads token usage from the completed event', async () => {
       const result = await run('responses', [
         'data: {"type":"response.completed","response":{"output":[],"usage":',

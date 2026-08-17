@@ -441,19 +441,41 @@ function indexKey(value: unknown): string {
   return typeof value === 'number' && Number.isFinite(value) ? `index:${String(value)}` : 'index:0'
 }
 
+/** Finds the streamed slot represented by one final Responses item. */
+function finalCallSlot(
+  state: StreamState,
+  item: Record<string, unknown>,
+  outputIndex: number,
+): StreamToolCall {
+  const itemId = typeof item.id === 'string' && item.id !== '' ? item.id : undefined
+  const callId =
+    typeof item.call_id === 'string' && item.call_id !== '' ? item.call_id : undefined
+  let slot = itemId === undefined ? undefined : state.toolCalls.get(itemId)
+  if (slot === undefined && callId !== undefined) {
+    slot = [...state.toolCalls.values()].find((entry) => entry.call.callId === callId)
+  }
+  slot ??= state.toolCalls.get(indexKey(outputIndex))
+  if (slot === undefined) {
+    const key = itemId ?? (callId === undefined ? indexKey(outputIndex) : `call-id:${callId}`)
+    const call = callSlot(state, key)
+    const created = state.toolCalls.get(key)
+    if (created !== undefined) created.order = outputIndex
+    return call
+  }
+  // The completed output is authoritative for call order, including when an
+  // earlier call had no streamed fragments but a later one did.
+  slot.order = outputIndex
+  return slot.call
+}
+
 /** Picks up any call the deltas missed, from the final output array. */
 function sweepCalls(state: StreamState, output: unknown[]): void {
-  for (const entry of output) {
+  for (const [outputIndex, entry] of output.entries()) {
     const item = object(entry)
     if (item?.type !== 'function_call' || typeof item.name !== 'string') continue
-    const key = typeof item.id === 'string' && item.id !== '' ? item.id : `call:${item.name}`
-    const existing = [...state.toolCalls.values()].some(
-      (slot) => slot.call.name === item.name && slot.call.arguments !== '',
-    )
-    if (existing) continue
-    const call = callSlot(state, key)
-    call.name = item.name
-    if (typeof item.call_id === 'string') call.callId = item.call_id
+    const call = finalCallSlot(state, item, outputIndex)
+    if (call.name === '') call.name = item.name
+    if (call.callId === '' && typeof item.call_id === 'string') call.callId = item.call_id
     if (call.arguments === '' && typeof item.arguments === 'string') {
       call.arguments = item.arguments
     }
