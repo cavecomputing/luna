@@ -455,90 +455,156 @@ describe('tool calling', () => {
     })
   })
 
-  describe('replaying stored steps', () => {
-    it('pairs each Chat Completions call with its result', () => {
+  describe('replaying stored rounds', () => {
+    const secondStep: ToolStep = {
+      ...step,
+      callId: 'call_2',
+      arguments: '{"text":"again"}',
+      text: 'again',
+    }
+
+    it('preserves two Chat Completions rounds before the final answer', () => {
       const body = requestBody({
         ...bare('chat-completions'),
         history: [
           {
             id: 'a1',
             role: 'assistant',
-            text: 'Let me check.',
+            text: 'Both checks passed.',
             status: 'complete',
             at: 1,
             attachments: [],
-            toolSteps: [step],
+            toolRounds: [
+              { text: 'First check.', steps: [step] },
+              { text: 'Second check.', steps: [secondStep] },
+            ],
           },
         ],
       })
       expect(body.messages).toEqual([
         {
           role: 'assistant',
-          content: 'Let me check.',
+          content: 'First check.',
           tool_calls: [
             { id: 'call_1', type: 'function', function: { name: 'luna_echo', arguments: '{"text":"hi"}' } },
           ],
         },
         { role: 'tool', tool_call_id: 'call_1', content: 'hi' },
+        {
+          role: 'assistant',
+          content: 'Second check.',
+          tool_calls: [
+            {
+              id: 'call_2',
+              type: 'function',
+              function: { name: 'luna_echo', arguments: '{"text":"again"}' },
+            },
+          ],
+        },
+        { role: 'tool', tool_call_id: 'call_2', content: 'again' },
+        { role: 'assistant', content: 'Both checks passed.' },
       ])
     })
 
-    /** Provider items already carry the call, so only the output is missing. */
-    it('appends only the output when Responses items are replayed verbatim', () => {
+    it('interleaves exact Responses rounds and final provider output', () => {
+      const firstItems = [
+        { type: 'reasoning', encrypted_content: 'encrypted-first' },
+        { type: 'function_call', call_id: 'call_1', name: 'luna_echo' },
+      ]
+      const secondItems = [
+        { type: 'reasoning', encrypted_content: 'encrypted-second' },
+        { type: 'function_call', call_id: 'call_2', name: 'luna_echo' },
+      ]
+      const finalItems = [{ type: 'message', role: 'assistant', content: 'Both checks passed.' }]
       const body = requestBody({
         ...bare('responses'),
         history: [
           {
             id: 'a1',
             role: 'assistant',
-            text: 'Checked.',
+            text: 'Both checks passed.',
             status: 'complete',
             at: 1,
             attachments: [],
             providerApi: 'responses',
             providerId: 'openai',
-            providerItems: [{ type: 'function_call', call_id: 'call_1', name: 'luna_echo' }],
-            toolSteps: [step],
+            providerItems: finalItems,
+            toolRounds: [
+              { text: 'First check.', steps: [step], providerItems: firstItems },
+              { text: 'Second check.', steps: [secondStep], providerItems: secondItems },
+            ],
           },
         ],
       })
       expect(body.input).toEqual([
-        { type: 'function_call', call_id: 'call_1', name: 'luna_echo' },
+        ...firstItems,
         { type: 'function_call_output', call_id: 'call_1', output: 'hi' },
+        ...secondItems,
+        { type: 'function_call_output', call_id: 'call_2', output: 'again' },
+        ...finalItems,
       ])
     })
 
-    /** Switching provider drops the stored items, so both halves are rebuilt. */
-    it('synthesizes both halves when the provider no longer matches', () => {
+    it('synthesizes round chronology when the Responses provider changes', () => {
       const body = requestBody({
         ...bare('responses'),
         history: [
           {
             id: 'a1',
             role: 'assistant',
-            text: 'Checked.',
+            text: 'Both checks passed.',
             status: 'complete',
             at: 1,
             attachments: [],
             providerApi: 'responses',
             providerId: 'someone-else',
-            providerItems: [{ type: 'function_call', call_id: 'call_1' }],
-            toolSteps: [step],
+            providerItems: [{ type: 'message', content: 'provider-private' }],
+            toolRounds: [
+              {
+                text: 'First check.',
+                steps: [step],
+                providerItems: [{ type: 'function_call', call_id: 'call_1' }],
+              },
+              { text: 'Second check.', steps: [secondStep] },
+            ],
           },
         ],
       })
       expect(body.input).toEqual([
-        { role: 'assistant', content: 'Checked.' },
+        { role: 'assistant', content: 'First check.' },
         { type: 'function_call', call_id: 'call_1', name: 'luna_echo', arguments: '{"text":"hi"}' },
+        { type: 'function_call_output', call_id: 'call_1', output: 'hi' },
+        { role: 'assistant', content: 'Second check.' },
+        {
+          type: 'function_call',
+          call_id: 'call_2',
+          name: 'luna_echo',
+          arguments: '{"text":"again"}',
+        },
+        { type: 'function_call_output', call_id: 'call_2', output: 'again' },
+        { role: 'assistant', content: 'Both checks passed.' },
+      ])
+    })
+
+    it('carries exact mid-turn Responses output into the next request', () => {
+      const providerItems = [
+        { type: 'reasoning', encrypted_content: 'encrypted-pending' },
+        { type: 'function_call', call_id: 'call_1', name: 'luna_echo' },
+      ]
+      const body = requestBody({
+        ...bare('responses'),
+        pendingRounds: [{ text: 'Working on it.', steps: [step], providerItems }],
+      })
+      expect(body.input).toEqual([
+        ...providerItems,
         { type: 'function_call_output', call_id: 'call_1', output: 'hi' },
       ])
     })
 
-    it('carries mid-turn steps that are not in the database yet', () => {
+    it('carries mid-turn Chat Completions rounds not yet in the database', () => {
       const body = requestBody({
         ...bare('chat-completions'),
-        pendingSteps: [step],
-        pendingText: 'Working on it.',
+        pendingRounds: [{ text: 'Working on it.', steps: [step] }],
       })
       expect(body.messages).toEqual([
         {

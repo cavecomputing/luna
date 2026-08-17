@@ -174,7 +174,7 @@ describe('chat storage', () => {
   })
 })
 
-describe('tool steps and usage', () => {
+describe('tool rounds and usage', () => {
   const step: ToolStep = {
     callId: 'call-1',
     source: 'builtin',
@@ -192,17 +192,34 @@ describe('tool steps and usage', () => {
     return db
   }
 
-  it('round-trips a tool step and its token usage', () => {
+  it('round-trips ordered tool rounds and token usage', () => {
     const db = turn()
     const usage: TokenUsage = { inputTokens: 120, outputTokens: 40, reasoningTokens: 8 }
+    const storedRounds = [
+      {
+        text: 'Let me check.',
+        steps: [step],
+        providerItems: [
+          { type: 'reasoning', encrypted_content: 'encrypted-test-value' },
+          { type: 'function_call', call_id: 'call-1', name: 'luna_echo' },
+        ],
+      },
+      {
+        text: 'One more check.',
+        steps: [{ ...step, callId: 'call-2', arguments: '{"text":"again"}', text: 'again' }],
+      },
+    ]
     const message = finishMessage(db, 'assistant-1', 'Done', '', 'complete', 30, {
-      toolSteps: [step],
+      toolRounds: storedRounds,
       usage,
     })
 
-    expect(message?.toolSteps).toEqual([step])
+    expect(message?.toolRounds).toEqual(
+      storedRounds.map((round) => ({ text: round.text, steps: round.steps })),
+    )
     expect(message?.usage).toEqual(usage)
-    expect(find(db, 'chat-1')?.messages[1]).toMatchObject({ toolSteps: [step], usage })
+    expect(find(db, 'chat-1')?.messages[1]?.toolRounds?.[0]).not.toHaveProperty('providerItems')
+    expect(history(db, 'chat-1', new Map())[1]?.toolRounds).toEqual(storedRounds)
   })
 
   it('stores non-text result parts as references rather than bytes', () => {
@@ -215,9 +232,11 @@ describe('tool steps and usage', () => {
         { kind: 'resource_link', uri: 'file:///project/report.csv' },
       ],
     }
-    finishMessage(db, 'assistant-1', 'Done', '', 'complete', 30, { toolSteps: [withParts] })
+    finishMessage(db, 'assistant-1', 'Done', '', 'complete', 30, {
+      toolRounds: [{ text: '', steps: [withParts] }],
+    })
 
-    const stored = find(db, 'chat-1')?.messages[1]?.toolSteps?.[0]
+    const stored = find(db, 'chat-1')?.messages[1]?.toolRounds?.[0]?.steps[0]
     expect(stored).toEqual(withParts)
     // The bytes themselves never reach the row.
     expect(JSON.stringify(stored)).not.toContain('data:')
@@ -226,9 +245,11 @@ describe('tool steps and usage', () => {
   it('keeps structured content whole, including an explicit null', () => {
     const db = turn()
     const structured: ToolStep = { ...step, structured: { temperature: 22.5, ok: null } }
-    finishMessage(db, 'assistant-1', 'Done', '', 'complete', 30, { toolSteps: [structured] })
+    finishMessage(db, 'assistant-1', 'Done', '', 'complete', 30, {
+      toolRounds: [{ text: '', steps: [structured] }],
+    })
 
-    expect(find(db, 'chat-1')?.messages[1]?.toolSteps?.[0]?.structured).toEqual({
+    expect(find(db, 'chat-1')?.messages[1]?.toolRounds?.[0]?.steps[0]?.structured).toEqual({
       temperature: 22.5,
       ok: null,
     })
@@ -237,9 +258,11 @@ describe('tool steps and usage', () => {
   it('round-trips a tool-reported failure so the model can be told about it', () => {
     const db = turn()
     const failed: ToolStep = { ...step, text: 'Date must be in the future.', isError: true }
-    finishMessage(db, 'assistant-1', '', '', 'complete', 30, { toolSteps: [failed] })
+    finishMessage(db, 'assistant-1', '', '', 'complete', 30, {
+      toolRounds: [{ text: '', steps: [failed] }],
+    })
 
-    expect(find(db, 'chat-1')?.messages[1]?.toolSteps?.[0]?.isError).toBe(true)
+    expect(find(db, 'chat-1')?.messages[1]?.toolRounds?.[0]?.steps[0]?.isError).toBe(true)
   })
 
   /**
@@ -247,15 +270,30 @@ describe('tool steps and usage', () => {
    * 400 from both provider APIs. Dropping just the bad entry would produce
    * exactly that, so the column has to fail as a unit.
    */
-  it('drops the whole column when one step is unreadable', () => {
+  it('drops the whole column when one round is unreadable', () => {
     const db = turn()
-    finishMessage(db, 'assistant-1', 'Done', '', 'complete', 30, { toolSteps: [step] })
+    finishMessage(db, 'assistant-1', 'Done', '', 'complete', 30, {
+      toolRounds: [{ text: 'Checking.', steps: [step] }],
+    })
     db.prepare('UPDATE messages SET tool_steps = ? WHERE id = ?').run(
-      JSON.stringify([step, { callId: 'call-2', source: 'builtin' }]),
+      JSON.stringify([
+        { text: 'Checking.', steps: [step] },
+        { text: 'Broken.', steps: [{ callId: 'call-2', source: 'builtin' }] },
+      ]),
       'assistant-1',
     )
 
-    expect(find(db, 'chat-1')?.messages[1]?.toolSteps).toBeUndefined()
+    expect(find(db, 'chat-1')?.messages[1]?.toolRounds).toBeUndefined()
+  })
+
+  it('treats the unshipped flat step shape as unreadable history', () => {
+    const db = turn()
+    db.prepare('UPDATE messages SET tool_steps = ? WHERE id = ?').run(
+      JSON.stringify([step]),
+      'assistant-1',
+    )
+
+    expect(find(db, 'chat-1')?.messages[1]?.toolRounds).toBeUndefined()
   })
 
   it('reads no usage at all rather than inventing zeros', () => {
@@ -274,28 +312,28 @@ describe('tool steps and usage', () => {
     expect(find(db, 'chat-1')?.messages[1]?.usage).toEqual({ outputTokens: 12 })
   })
 
-  it('clears tool steps and usage when a failed turn is retried', () => {
+  it('clears tool rounds and usage when a failed turn is retried', () => {
     const db = turn()
     finishMessage(db, 'assistant-1', 'partial', '', 'error', 30, {
-      toolSteps: [step],
+      toolRounds: [{ text: 'Checking.', steps: [step] }],
       usage: { inputTokens: 120 },
     })
 
     const restarted = restartMessage(db, 'assistant-1', 40)
 
     expect(restarted?.messages[1]).toMatchObject({ status: 'streaming' })
-    expect(restarted?.messages[1]?.toolSteps).toBeUndefined()
+    expect(restarted?.messages[1]?.toolRounds).toBeUndefined()
     expect(restarted?.messages[1]?.usage).toBeUndefined()
   })
 
-  it('keeps tool steps and partial usage on a turn that failed after running tools', () => {
+  it('keeps tool rounds and partial usage on a turn that failed after running tools', () => {
     const db = turn()
     const message = finishMessage(db, 'assistant-1', 'partial', '', 'error', 30, {
-      toolSteps: [step],
+      toolRounds: [{ text: 'Checking.', steps: [step] }],
       usage: { inputTokens: 120 },
     })
 
-    expect(message?.toolSteps).toEqual([step])
+    expect(message?.toolRounds).toEqual([{ text: 'Checking.', steps: [step] }])
     expect(message?.usage).toEqual({ inputTokens: 120 })
   })
 })

@@ -52,7 +52,7 @@ tool calling touches five things at once:
 3. **The turn loop** stops being one request. It becomes: request → tool call → execute →
    feed the result back → request again, until the model stops calling tools. `ChatCoordinator`
    currently assumes one request per assistant row.
-4. **Storage.** Decided and built: tool calls and results are a JSON `tool_steps` column on the
+4. **Storage.** Decided and built: ordered model/tool rounds are JSON in `tool_steps` on the
    assistant row that made them, not a new role and not a separate table. One user turn still
    produces exactly two rows. See **Storage shape for tool calls** below.
 5. **Cancellation** must interrupt the loop, not just the current HTTP request, and must still
@@ -62,9 +62,13 @@ Treat this as its own piece of work with its own tests before any tool that depe
 
 ### Storage shape for tool calls — decided
 
-Tool calls and their results live in a JSON `tool_steps` column on the assistant row, added by
-migration step 12. Token counts are four nullable INTEGER columns added by step 13; nullable
-because a provider reporting nothing is not the same as reporting zero.
+Tool rounds live in a JSON `tool_steps` column on the assistant row, added by migration step 12.
+Each round contains the model text and the parallel calls/results from one request, preserving
+the fact that a later round was produced only after the model saw every earlier result. The row's
+text is the final answer after all rounds. Responses output items are kept per round and for the
+final answer so manual replay can include encrypted reasoning in its original order; those items
+stay in main/SQLite and never cross IPC. Token counts are four nullable INTEGER columns added by
+step 13; nullable because a provider reporting nothing is not the same as reporting zero.
 
 Widening `messages.role` was the obvious reading and is the wrong call. SQLite cannot loosen a
 CHECK in place, so it means rebuilding a STRICT table whose ids `attachments.message_id`
@@ -86,8 +90,9 @@ Two consequences worth remembering:
   which would have hidden mid-loop rows from the next request in the same turn. There are no
   mid-loop rows: the loop assembles its context in memory and does not round-trip through SQLite
   until the turn ends.
-- **`tool_steps` validates whole-or-nothing.** One unreadable step invalidates the column and the
-  row replays as plain text, because a partial array means replaying a call without its result.
+- **`tool_steps` validates whole-or-nothing.** One unreadable round invalidates the column and the
+  row replays as plain text, because a partial array can lose a call/result pair or move a later
+  model request ahead of the result it depended on.
 
 ### F2. Token and cost accounting
 

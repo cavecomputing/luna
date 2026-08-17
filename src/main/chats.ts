@@ -10,6 +10,7 @@ import type {
   TokenUsage,
   ToolPartKind,
   ToolPartRef,
+  ToolRound,
   ToolStep,
 } from '../shared/types.js'
 import * as db from './db.js'
@@ -17,8 +18,14 @@ import * as attachments from './attachments.js'
 import type { StoredAttachment } from './attachments.js'
 import { object } from './parse.js'
 
-export type StoredMessage = Omit<Message, 'attachments'> & {
+/** Responses replay data stays in main and is stripped before IPC. */
+export type StoredToolRound = ToolRound & {
+  providerItems?: unknown[]
+}
+
+export type StoredMessage = Omit<Message, 'attachments' | 'toolRounds'> & {
   attachments: StoredAttachment[]
+  toolRounds?: StoredToolRound[]
   providerId?: string
   providerApi?: ApiKind
   providerItems?: unknown[]
@@ -61,13 +68,16 @@ function api(input: unknown): ApiKind | undefined {
   return input === 'responses' || input === 'chat-completions' ? input : undefined
 }
 
+function providerItemList(input: unknown): unknown[] | undefined {
+  return Array.isArray(input) && input.every((item) => object(item) !== undefined)
+    ? input
+    : undefined
+}
+
 function providerItems(input: unknown): unknown[] | undefined {
   if (typeof input !== 'string' || input === '') return undefined
   try {
-    const parsed: unknown = JSON.parse(input)
-    return Array.isArray(parsed) && parsed.every((item) => object(item) !== undefined)
-      ? parsed
-      : undefined
+    return providerItemList(JSON.parse(input))
   } catch {
     return undefined
   }
@@ -144,25 +154,50 @@ function toolStep(input: unknown): ToolStep | undefined {
 }
 
 /**
- * Whole-or-nothing. One unreadable step invalidates the entire column.
+ * Whole-or-nothing. One unreadable round invalidates the entire column.
  *
  * The .flatMap convention elsewhere drops a bad row and carries on, which would
- * here mean replaying a tool call without its result, or a result without its
- * call. Both provider APIs reject that with a hard 400, so a partial array is
- * worse than none: without it the row simply replays as plain text.
+ * here mean losing an iteration boundary or replaying a tool call without its
+ * result. Both provider APIs reject half pairs, and later rounds must not move
+ * ahead of earlier results, so a partial array is worse than none.
  */
-function toolSteps(input: unknown): ToolStep[] | undefined {
+function toolRound(input: unknown): StoredToolRound | undefined {
+  const cell = object(input)
+  if (cell === undefined || typeof cell.text !== 'string' || !Array.isArray(cell.steps)) {
+    return undefined
+  }
+  const steps: ToolStep[] = []
+  for (const item of cell.steps) {
+    const step = toolStep(item)
+    if (step === undefined) return undefined
+    steps.push(step)
+  }
+  if (steps.length === 0) return undefined
+
+  let roundItems: unknown[] | undefined
+  if ('providerItems' in cell) {
+    roundItems = providerItemList(cell.providerItems)
+    if (roundItems === undefined) return undefined
+  }
+  return {
+    text: cell.text,
+    steps,
+    ...(roundItems === undefined ? {} : { providerItems: roundItems }),
+  }
+}
+
+function toolRounds(input: unknown): StoredToolRound[] | undefined {
   if (typeof input !== 'string' || input === '') return undefined
   try {
     const parsed: unknown = JSON.parse(input)
     if (!Array.isArray(parsed)) return undefined
-    const steps: ToolStep[] = []
+    const rounds: StoredToolRound[] = []
     for (const item of parsed) {
-      const step = toolStep(item)
-      if (step === undefined) return undefined
-      steps.push(step)
+      const round = toolRound(item)
+      if (round === undefined) return undefined
+      rounds.push(round)
     }
-    return steps
+    return rounds.length === 0 ? undefined : rounds
   } catch {
     return undefined
   }
@@ -209,7 +244,7 @@ function messageRow(row: unknown): (StoredMessage & { conversationId: string }) 
     return undefined
   }
 
-  const parsedSteps = toolSteps(cell.tool_steps)
+  const parsedRounds = toolRounds(cell.tool_steps)
   const parsedUsage = usage(cell)
 
   return {
@@ -221,7 +256,9 @@ function messageRow(row: unknown): (StoredMessage & { conversationId: string }) 
     status: parsedStatus,
     at: cell.created_at,
     attachments: [],
-    ...(parsedSteps === undefined ? {} : { toolSteps: parsedSteps }),
+    ...(parsedRole !== 'assistant' || parsedRounds === undefined
+      ? {}
+      : { toolRounds: parsedRounds }),
     ...(parsedUsage === undefined ? {} : { usage: parsedUsage }),
     ...(typeof cell.provider_id !== 'string' ? {} : { providerId: cell.provider_id }),
     ...(parsedApi === undefined ? {} : { providerApi: parsedApi }),
@@ -258,7 +295,7 @@ function conversationRow(row: unknown, messages: Message[]): Conversation | unde
 }
 
 function visibleMessage(
-  message: Omit<Message, 'attachments'> & { attachments: AttachmentMeta[] },
+  message: Omit<StoredMessage, 'attachments'> & { attachments: AttachmentMeta[] },
 ): Message {
   return {
     id: message.id,
@@ -269,7 +306,14 @@ function visibleMessage(
     at: message.at,
     attachments: message.attachments,
     ...(message.streamSeq === undefined ? {} : { streamSeq: message.streamSeq }),
-    ...(message.toolSteps === undefined ? {} : { toolSteps: message.toolSteps }),
+    ...(message.toolRounds === undefined
+      ? {}
+      : {
+          toolRounds: message.toolRounds.map((round) => ({
+            text: round.text,
+            steps: round.steps,
+          })),
+        }),
     ...(message.usage === undefined ? {} : { usage: message.usage }),
   }
 }
@@ -560,7 +604,7 @@ export type TurnOutcome = {
   providerApi?: ApiKind
   providerId?: string
   items?: unknown[]
-  toolSteps?: ToolStep[]
+  toolRounds?: StoredToolRound[]
   usage?: TokenUsage
 }
 
@@ -590,9 +634,9 @@ export function finishMessage(
         outcome.providerId ?? null,
         outcome.providerApi ?? null,
         outcome.items === undefined ? null : JSON.stringify(outcome.items),
-        outcome.toolSteps === undefined || outcome.toolSteps.length === 0
+        outcome.toolRounds === undefined || outcome.toolRounds.length === 0
           ? null
-          : JSON.stringify(outcome.toolSteps),
+          : JSON.stringify(outcome.toolRounds),
         outcome.usage?.inputTokens ?? null,
         outcome.usage?.outputTokens ?? null,
         outcome.usage?.reasoningTokens ?? null,

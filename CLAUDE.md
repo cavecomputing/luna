@@ -268,8 +268,11 @@ stored as provider metadata and sent as headers by main.
 
 Conversation metadata lives in `conversations`; ordered text messages live in `messages`.
 Assistant rows move from `streaming` to exactly one terminal state (`complete`, `cancelled`, or
-`error`). Responses output items used for local manual-history replay stay in main/SQLite and
-must never cross IPC. Both provider APIs use `store: false`; Luna is authoritative for history.
+`error`). Tool calls are stored as ordered rounds: each round holds one model response and the
+parallel calls/results it produced, while the row text is the final answer after every round.
+Responses output items for each round and the final answer stay in main/SQLite for exact manual
+history replay and must never cross IPC. Both provider APIs use `store: false`; Luna is
+authoritative for history.
 Some compatible models emit `<think>…</think>` inside text deltas. Parse those incrementally
 across arbitrary chunk boundaries, persist them in `messages.reasoning`, and render them in the
 Thinking disclosure—not as raw tags or as part of the final answer/history text.

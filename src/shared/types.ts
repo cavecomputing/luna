@@ -115,6 +115,20 @@ export type ToolStep = {
 }
 
 /**
+ * One model response that asked for tools, followed by those tools' results.
+ *
+ * Calls within a round were requested together and may run in parallel. Rounds
+ * themselves are ordered: the model saw every result from one before producing
+ * the next. The assistant row's own `text` remains the final answer after all
+ * rounds have completed.
+ */
+export type ToolRound = {
+  /** Visible text the model emitted alongside this round's calls. */
+  text: string
+  steps: ToolStep[]
+}
+
+/**
  * Tokens a turn consumed. Absent fields mean the provider reported nothing,
  * which is different from reporting zero.
  */
@@ -137,8 +151,8 @@ export type Message = {
   /** Epoch milliseconds. Formatting is the renderer's job. */
   at: number
   attachments: AttachmentMeta[]
-  /** Tools this assistant row called, in the order it called them. */
-  toolSteps?: ToolStep[]
+  /** Ordered model/tool rounds completed before this assistant answer. */
+  toolRounds?: ToolRound[]
   /** Summed across every request the turn made, not just the last one. */
   usage?: TokenUsage
 }

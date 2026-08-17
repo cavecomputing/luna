@@ -1,8 +1,8 @@
 import { err, ok, type Result } from '../shared/result.js'
 import { providerHeaders } from './openai.js'
 import type { ProviderConfig } from './providers.js'
-import type { StoredMessage } from './chats.js'
-import type { SamplerSettings, TokenUsage, ToolStep } from '../shared/types.js'
+import type { StoredMessage, StoredToolRound } from './chats.js'
+import type { SamplerSettings, TokenUsage, ToolRound, ToolStep } from '../shared/types.js'
 import type { ToolDefinition } from '../shared/tools.js'
 import { object } from './parse.js'
 import { SseParser, type SseEvent } from './sse.js'
@@ -25,9 +25,7 @@ export type ChatRequest = {
    * database — the assistant row stays `streaming` until the loop ends, and
    * requestBody skips rows that are not complete.
    */
-  pendingSteps?: readonly ToolStep[]
-  /** The partial answer text the model produced before calling those tools. */
-  pendingText?: string
+  pendingRounds?: readonly StoredToolRound[]
 }
 
 /** One tool call the model asked for, reassembled from stream fragments. */
@@ -128,22 +126,17 @@ function toolsBody(
  * a hard 400 from the provider, so there is no branch here that can produce a
  * half pair.
  */
-function chatSteps(
-  steps: readonly ToolStep[],
-  text: string,
-  messages: Record<string, unknown>[],
-): void {
-  if (steps.length === 0) return
+function chatRound(round: ToolRound, messages: Record<string, unknown>[]): void {
   messages.push({
     role: 'assistant',
-    content: text,
-    tool_calls: steps.map((step) => ({
+    content: round.text,
+    tool_calls: round.steps.map((step) => ({
       id: step.callId,
       type: 'function',
       function: { name: step.name, arguments: step.arguments },
     })),
   })
-  for (const step of steps) {
+  for (const step of round.steps) {
     messages.push({ role: 'tool', tool_call_id: step.callId, content: step.text })
   }
 }
@@ -165,10 +158,21 @@ function responseSteps(steps: readonly ToolStep[], input: unknown[], withCalls: 
   }
 }
 
+/** Replays one Responses round exactly when its provider output is available. */
+function responseRound(round: StoredToolRound, input: unknown[], exact: boolean): void {
+  if (exact && round.providerItems !== undefined) {
+    input.push(...round.providerItems)
+    responseSteps(round.steps, input, false)
+    return
+  }
+  if (round.text !== '') input.push({ role: 'assistant', content: round.text })
+  responseSteps(round.steps, input, true)
+}
+
 export function requestBody(request: ChatRequest): Record<string, unknown> {
   const sampling = samplingBody(request.sampling, request.provider.api)
   const tools = toolsBody(request.tools ?? [], request.provider.api)
-  const pending = request.pendingSteps ?? []
+  const pending = request.pendingRounds ?? []
 
   if (request.provider.api === 'chat-completions') {
     const messages: Record<string, unknown>[] = []
@@ -177,8 +181,9 @@ export function requestBody(request: ChatRequest): Record<string, unknown> {
     }
     for (const message of request.history) {
       if (message.status !== 'complete') continue
-      if (message.role === 'assistant' && message.toolSteps !== undefined) {
-        chatSteps(message.toolSteps, message.text, messages)
+      if (message.role === 'assistant' && message.toolRounds !== undefined) {
+        for (const round of message.toolRounds) chatRound(round, messages)
+        messages.push({ role: 'assistant', content: message.text })
         continue
       }
       messages.push({
@@ -186,7 +191,7 @@ export function requestBody(request: ChatRequest): Record<string, unknown> {
         content: message.role === 'user' ? chatContent(message) : message.text,
       })
     }
-    chatSteps(pending, request.pendingText ?? '', messages)
+    for (const round of pending) chatRound(round, messages)
     return {
       model: request.model,
       messages,
@@ -202,6 +207,14 @@ export function requestBody(request: ChatRequest): Record<string, unknown> {
   const input: unknown[] = []
   for (const message of request.history) {
     if (message.status !== 'complete') continue
+    if (message.role === 'assistant' && message.toolRounds !== undefined) {
+      const exact =
+        message.providerId === request.provider.id && message.providerApi === 'responses'
+      for (const round of message.toolRounds) responseRound(round, input, exact)
+      if (exact && message.providerItems !== undefined) input.push(...message.providerItems)
+      else input.push({ role: 'assistant', content: message.text })
+      continue
+    }
     if (
       message.role === 'assistant' &&
       message.providerId === request.provider.id &&
@@ -209,25 +222,14 @@ export function requestBody(request: ChatRequest): Record<string, unknown> {
       message.providerItems !== undefined
     ) {
       input.push(...message.providerItems)
-      // The stored items carry the calls; only their outputs are missing.
-      if (message.toolSteps !== undefined) responseSteps(message.toolSteps, input, false)
       continue
     }
     input.push({
       role: message.role,
       content: message.role === 'user' ? responseContent(message) : message.text,
     })
-    // Falling back to plain text loses the calls too, so synthesize both halves.
-    if (message.role === 'assistant' && message.toolSteps !== undefined) {
-      responseSteps(message.toolSteps, input, true)
-    }
   }
-  if (pending.length > 0) {
-    if ((request.pendingText ?? '') !== '') {
-      input.push({ role: 'assistant', content: request.pendingText })
-    }
-    responseSteps(pending, input, true)
-  }
+  for (const round of pending) responseRound(round, input, true)
 
   return {
     model: request.model,
