@@ -42,6 +42,10 @@ describe('sanitize', () => {
     expect(sanitize(`a${String.fromCharCode(0)}b${String.fromCharCode(8)}c`)).toBe('abc')
   })
 
+  it('strips bidirectional overrides that can visually reorder untrusted text', () => {
+    expect(sanitize('safe\u202eforged\u2066text')).toBe('safeforgedtext')
+  })
+
   it('leaves ordinary text alone', () => {
     expect(sanitize('Plain text — with punctuation.')).toBe('Plain text — with punctuation.')
   })

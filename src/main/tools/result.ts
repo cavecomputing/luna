@@ -45,6 +45,8 @@ const ESCAPE = new RegExp(`${ESC}[@-Z\\\\-_]`, 'g')
  */
 // eslint-disable-next-line no-control-regex -- matching control characters is the whole job
 const CONTROLS = new RegExp('[\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F]', 'g')
+/** Directional marks, overrides, and isolates can visually reorder plain text. */
+const BIDI = new RegExp('[\\u061C\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069]', 'g')
 
 /**
  * Strips escape sequences and control characters, keeping newline and tab.
@@ -54,7 +56,7 @@ const CONTROLS = new RegExp('[\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F]', '
  * reading to decide whether the tool did what they wanted.
  */
 export function sanitize(input: string): string {
-  return input.replace(CSI, '').replace(ESCAPE, '').replace(CONTROLS, '')
+  return input.replace(CSI, '').replace(ESCAPE, '').replace(CONTROLS, '').replace(BIDI, '')
 }
 
 function clip(input: string, max: number): { text: string; truncated: boolean } {

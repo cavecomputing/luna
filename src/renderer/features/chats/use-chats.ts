@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ChatDelta, ChatFinal } from '../../../shared/ipc.js'
+import type { ChatDelta, ChatFinal, ChatStart } from '../../../shared/ipc.js'
 import type { ConversationSummary, Message, Mode } from '../../../shared/types.js'
 import { byRecency } from './filter.js'
 
@@ -39,6 +39,12 @@ export function applyFinal(messages: Message[], final: ChatFinal): Message[] {
   return messages.map((message) =>
     message.id === final.message.id ? final.message : message,
   )
+}
+
+/** Adds the two freshly persisted rows without duplicating a raced reload. */
+export function applyStart(messages: Message[], start: ChatStart): Message[] {
+  const added = new Set(start.messages.map((message) => message.id))
+  return [...messages.filter((message) => !added.has(message.id)), ...start.messages]
 }
 
 /**
@@ -99,6 +105,9 @@ export function useChats(defaultMode: Mode) {
    * mid-stream from blanking the reply.
    */
   const live = useRef(new Map<string, ChatDelta>())
+  /** Rows returned by a send, kept until any older in-flight load is merged over them. */
+  const started = useRef(new Map<string, ChatStart>())
+  const loading = useRef(new Map<string, number>())
   const [draftMode, setDraftMode] = useState<Mode>()
   const [renameId, setRenameId] = useState<string>()
   const [error, setError] = useState<string>()
@@ -148,6 +157,13 @@ export function useChats(defaultMode: Mode) {
     const offDone = window.luna.onChatDone((value) => {
       live.current.delete(value.message.id)
       pending.delete(deltaKey({ conversationId: value.conversationId, messageId: value.message.id }))
+      const recent = started.current.get(value.conversationId)
+      if (recent !== undefined) {
+        started.current.set(value.conversationId, {
+          ...recent,
+          messages: applyFinal(recent.messages, value),
+        })
+      }
       setLoaded((current) =>
         current === undefined ? current : { ...current, messages: applyFinal(current.messages, value) },
       )
@@ -155,6 +171,13 @@ export function useChats(defaultMode: Mode) {
     const offError = window.luna.onChatError((value) => {
       live.current.delete(value.message.id)
       pending.delete(deltaKey({ conversationId: value.conversationId, messageId: value.message.id }))
+      const recent = started.current.get(value.conversationId)
+      if (recent !== undefined) {
+        started.current.set(value.conversationId, {
+          ...recent,
+          messages: applyFinal(recent.messages, value),
+        })
+      }
       setLoaded((current) =>
         current === undefined ? current : { ...current, messages: applyFinal(current.messages, value) },
       )
@@ -179,10 +202,23 @@ export function useChats(defaultMode: Mode) {
   useEffect(() => {
     if (openId === undefined) return undefined
     let alive = true
-    void window.luna.chats.messages(openId).then((result) => {
-      if (!alive || !result.ok) return
-      setLoaded({ id: openId, messages: applyDeltas(result.value, live.current.values()) })
-    })
+    loading.current.set(openId, (loading.current.get(openId) ?? 0) + 1)
+    void window.luna.chats
+      .messages(openId)
+      .then((result) => {
+        if (!alive || !result.ok) return
+        const recent = started.current.get(openId)
+        const messages = recent === undefined ? result.value : applyStart(result.value, recent)
+        setLoaded({ id: openId, messages: applyDeltas(messages, live.current.values()) })
+      })
+      .finally(() => {
+        const remaining = (loading.current.get(openId) ?? 1) - 1
+        if (remaining > 0) loading.current.set(openId, remaining)
+        else {
+          loading.current.delete(openId)
+          started.current.delete(openId)
+        }
+      })
     return () => {
       alive = false
     }
@@ -204,6 +240,7 @@ export function useChats(defaultMode: Mode) {
       return
     }
     setChats((current) => mergeChats(current, [result.value, ...current]))
+    setLoaded({ id: result.value.id, messages: [] })
     setOpenId(result.value.id)
   }
 
@@ -215,6 +252,7 @@ export function useChats(defaultMode: Mode) {
       return undefined
     }
     setChats((current) => mergeChats(current, [created.value, ...current]))
+    setLoaded({ id: created.value.id, messages: [] })
     setOpenId(created.value.id)
     return created.value
   }
@@ -233,6 +271,17 @@ export function useChats(defaultMode: Mode) {
       const without = current.filter((chat) => chat.id !== result.value.conversation.id)
       return mergeChats(current, [result.value.conversation, ...without])
     })
+    if ((loading.current.get(result.value.conversation.id) ?? 0) > 0) {
+      started.current.set(result.value.conversation.id, result.value)
+    }
+    setLoaded((current) =>
+      current !== undefined && current.id !== result.value.conversation.id
+        ? current
+        : {
+            id: result.value.conversation.id,
+            messages: applyStart(current?.messages ?? [], result.value),
+          },
+    )
     setOpenId(result.value.conversation.id)
     return true
   }

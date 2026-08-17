@@ -16,6 +16,26 @@ function reply(peer: JsonRpcPeer, id: number, result: unknown): void {
 }
 
 describe('JsonRpcPeer', () => {
+  it('returns a typed failure when writing to the transport throws', async () => {
+    const peer = new JsonRpcPeer(() => {
+      throw new Error('broken pipe')
+    })
+
+    await expect(peer.request('tools/list', {})).resolves.toMatchObject({
+      ok: false,
+      code: 'rpc/write',
+    })
+  })
+
+  it('does not throw when a best-effort notification cannot be written', () => {
+    const peer = new JsonRpcPeer(() => {
+      throw new Error('broken pipe')
+    })
+    expect(() => {
+      peer.notify('notifications/progress', {})
+    }).not.toThrow()
+  })
+
   it('resolves a request with the result carrying its id', async () => {
     const { peer, sent } = makePeer()
     const pending = peer.request('tools/list', {})

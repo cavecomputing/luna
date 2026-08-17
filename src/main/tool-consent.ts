@@ -24,6 +24,7 @@
 
 import type { ToolAnnotations, ToolDefinition } from '../shared/tools.js'
 import { ask } from './dialogs.js'
+import { sanitize } from './tools/result.js'
 
 export type Approval = 'deny' | 'once' | 'always'
 
@@ -56,7 +57,7 @@ const MAX_DETAIL_DESCRIPTION = 300
 
 /** Strips anything that could forge structure in a plain-text dialog. */
 function flatten(input: string, max: number): string {
-  const collapsed = input.replace(/\s+/g, ' ').trim()
+  const collapsed = sanitize(input).replace(/\s+/g, ' ').trim()
   return collapsed.length <= max ? collapsed : `${collapsed.slice(0, max)}…`
 }
 
@@ -80,8 +81,9 @@ export function hintLine(annotations: ToolAnnotations | undefined): string {
 export function detailFor(request: ApprovalRequest): string {
   const description = flatten(request.definition.description, MAX_DETAIL_DESCRIPTION)
   const args = flatten(request.arguments, MAX_DETAIL_ARGS)
+  const source = flatten(request.sourceLabel, 256)
   return [
-    `From: ${request.sourceLabel}`,
+    `From: ${source}`,
     description === '' ? '' : `Description provided by the tool: ${description}`,
     hintLine(request.definition.annotations),
     '',
@@ -114,7 +116,7 @@ export async function requestApproval(
       defaultId: 0,
       cancelId: 0,
       noLink: true,
-      message: `Allow ${request.definition.title ?? request.definition.name} to run?`,
+      message: `Allow ${flatten(request.definition.title ?? request.definition.name, 256)} to run?`,
       detail: detailFor(request),
     })
     if (answer === 2) return 'always' as const
@@ -162,15 +164,16 @@ export async function confirmStanding(
   const turn = queue.then(async () => {
     const description = flatten(request.definition.description, MAX_DETAIL_DESCRIPTION)
     const hints = hintLine(request.definition.annotations)
+    const source = flatten(request.sourceLabel, 256)
     const answer = await d.ask({
       type: 'warning',
       buttons: ['Cancel', 'Always allow'],
       defaultId: 0,
       cancelId: 0,
       noLink: true,
-      message: `Always allow ${request.definition.title ?? request.definition.name}?`,
+      message: `Always allow ${flatten(request.definition.title ?? request.definition.name, 256)}?`,
       detail: [
-        `From: ${request.sourceLabel}`,
+        `From: ${source}`,
         description === '' ? '' : `Description provided by the tool: ${description}`,
         hints,
         '',

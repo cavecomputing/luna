@@ -92,18 +92,26 @@ export class JsonRpcPeer {
         },
       })
 
-      this.send({ jsonrpc: '2.0', id, method, params })
+      try {
+        this.send({ jsonrpc: '2.0', id, method, params })
+      } catch {
+        settle(err('rpc/write', 'request could not be written'))
+      }
     })
   }
 
   /** Fire and forget. No id, so nothing correlates and nothing waits. */
   notify(method: string, params?: unknown): void {
     if (this.closed) return
-    this.send({
-      jsonrpc: '2.0',
-      method,
-      ...(params === undefined ? {} : { params }),
-    })
+    try {
+      this.send({
+        jsonrpc: '2.0',
+        method,
+        ...(params === undefined ? {} : { params }),
+      })
+    } catch {
+      // Notifications are best-effort and have no caller waiting for a Result.
+    }
   }
 
   /** Progress, logging, and subscription pushes all arrive this way. */
@@ -155,7 +163,11 @@ export class JsonRpcPeer {
 
   private cancel(id: number): void {
     if (this.closed) return
-    this.send({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: id } })
+    try {
+      this.send({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: id } })
+    } catch {
+      // Local cancellation still settles the request when the channel is gone.
+    }
   }
 
   private send(message: unknown): void {

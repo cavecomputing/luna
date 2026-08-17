@@ -168,10 +168,13 @@ describe('ChatCoordinator', () => {
   it('starts a persisted turn and publishes streaming completion', async () => {
     const d = makeDeps()
     const chat = new ChatCoordinator(d)
-    expect(await chat.send({ conversationId: 'chat-1', text: 'Hello', attachmentIds: [] })).toMatchObject({
+    const started = await chat.send({ conversationId: 'chat-1', text: 'Hello', attachmentIds: [] })
+    expect(started).toMatchObject({
       ok: true,
       value: { userMessageId: 'user-1', assistantMessageId: 'assistant-1' },
     })
+    if (!started.ok) return
+    expect(started.value.conversation).not.toHaveProperty('messages')
     await vi.waitFor(() => {
       expect(d.notifyDone).toHaveBeenCalledWith('chat-1', assistant('complete', 'Hello'))
     })
@@ -616,6 +619,39 @@ describe('tool loop', () => {
     )
   })
 
+  it('finalizes the assistant row when tool dispatch unexpectedly rejects', async () => {
+    const d = withTools()
+    d.stream = scripted([
+      { text: 'Trying.', calls: [{ callId: 'call-1', name: 'luna_echo', arguments: '{}' }] },
+    ])
+    d.callTool = vi.fn(() => Promise.reject(new Error('transport exploded')))
+    const chat = new ChatCoordinator(d)
+    await chat.send({ conversationId: 'chat-1', text: 'Hello', attachmentIds: [] })
+
+    await vi.waitFor(() => {
+      expect(d.finish).toHaveBeenCalledTimes(1)
+    })
+    expect(d.notifyError).toHaveBeenCalledWith(
+      'chat-1',
+      expect.objectContaining({ status: 'error' }),
+      'chat/internal',
+    )
+  })
+
+  it('continues without tools when catalog discovery unexpectedly rejects', async () => {
+    const d = withTools()
+    d.toolCatalog = vi.fn(() => Promise.reject(new Error('catalog exploded')))
+    const chat = new ChatCoordinator(d)
+    await chat.send({ conversationId: 'chat-1', text: 'Hello', attachmentIds: [] })
+
+    await vi.waitFor(() => {
+      expect(d.finish).toHaveBeenCalledTimes(1)
+    })
+    expect(d.stream).toHaveBeenCalledTimes(1)
+    const request = (d.stream as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as ChatRequest
+    expect(request.tools).toBeUndefined()
+  })
+
   it('sums usage across every round', async () => {
     const d = withTools()
     let round = 0
@@ -737,6 +773,26 @@ describe('tool loop', () => {
       })
       expect(d.callTool).not.toHaveBeenCalled()
       expect(d.approve).not.toHaveBeenCalled()
+    })
+
+    it('does not dispatch an ambiguous tool name shared by two sources', async () => {
+      const d = withTools()
+      d.toolCatalog = vi.fn().mockResolvedValue([
+        echo,
+        { ...echo, source: 'other', sourceLabel: 'Other server' },
+      ])
+      d.stream = scripted([
+        { text: 'Trying.', calls: [{ callId: 'call-1', name: 'luna_echo', arguments: '{}' }] },
+        { text: 'Unavailable.' },
+      ])
+      const chat = new ChatCoordinator(d)
+      await chat.send({ conversationId: 'chat-1', text: 'Hello', attachmentIds: [] })
+
+      await vi.waitFor(() => {
+        expect(d.finish).toHaveBeenCalledTimes(1)
+      })
+      expect(d.callTool).not.toHaveBeenCalled()
+      expect((d.stream as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).not.toHaveProperty('tools')
     })
   })
 

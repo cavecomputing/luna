@@ -317,6 +317,18 @@ describe('tool rounds and usage', () => {
     expect(find(db, 'chat-1')?.messages[1]?.usage).toEqual({ outputTokens: 12 })
   })
 
+  it('drops invalid counts instead of failing the terminal message write', () => {
+    const db = turn()
+    expect(() =>
+      finishMessage(db, 'assistant-1', 'Done', '', 'complete', 30, {
+        usage: { inputTokens: 1.5, outputTokens: Number.NaN },
+      }),
+    ).not.toThrow()
+
+    expect(find(db, 'chat-1')?.messages[1]).toMatchObject({ status: 'complete' })
+    expect(find(db, 'chat-1')?.messages[1]?.usage).toBeUndefined()
+  })
+
   it('clears tool rounds and usage when a failed turn is retried', () => {
     const db = turn()
     finishMessage(db, 'assistant-1', 'partial', '', 'error', 30, {

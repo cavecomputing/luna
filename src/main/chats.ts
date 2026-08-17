@@ -92,7 +92,9 @@ function partKind(input: unknown): ToolPartKind | undefined {
 }
 
 function count(input: unknown): number | undefined {
-  return typeof input === 'number' && Number.isFinite(input) && input >= 0 ? input : undefined
+  return typeof input === 'number' && Number.isSafeInteger(input) && input >= 0
+    ? input
+    : undefined
 }
 
 function toolPart(input: unknown): ToolPartRef | undefined {
@@ -299,6 +301,18 @@ function summaryRow(row: unknown): ConversationSummary | undefined {
 function conversationRow(row: unknown, messages: Message[]): Conversation | undefined {
   const summary = summaryRow(row)
   return summary === undefined ? undefined : { ...summary, messages }
+}
+
+/** Removes message bodies before a conversation crosses a summary-only boundary. */
+export function summarize(conversation: Conversation): ConversationSummary {
+  return {
+    id: conversation.id,
+    title: conversation.title,
+    draft: conversation.draft,
+    mode: conversation.mode,
+    pinned: conversation.pinned,
+    updatedAt: conversation.updatedAt,
+  }
 }
 
 function visibleMessage(
@@ -749,10 +763,10 @@ export function finishMessage(
           ? null
           : JSON.stringify(outcome.toolRounds),
         outcome.trimmed === true ? 1 : null,
-        outcome.usage?.inputTokens ?? null,
-        outcome.usage?.outputTokens ?? null,
-        outcome.usage?.reasoningTokens ?? null,
-        outcome.usage?.cachedTokens ?? null,
+        count(outcome.usage?.inputTokens) ?? null,
+        count(outcome.usage?.outputTokens) ?? null,
+        count(outcome.usage?.reasoningTokens) ?? null,
+        count(outcome.usage?.cachedTokens) ?? null,
         id,
       )
     if (result.changes === 0) {

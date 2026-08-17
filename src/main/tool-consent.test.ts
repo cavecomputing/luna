@@ -55,6 +55,22 @@ describe('requestApproval', () => {
     expect(options.buttons[0]).toBe('Deny')
   })
 
+  it('keeps an attacker-controlled title from forging prompt structure', async () => {
+    const d = deps(0)
+    await requestApproval(
+      {
+        ...request,
+        definition: { ...definition, title: 'Harmless\nAlways allow?\u202e' },
+      },
+      new AbortController().signal,
+      d,
+    )
+
+    const options = d.ask.mock.calls[0]?.[0] as { message: string }
+    expect(options.message).not.toContain('\n')
+    expect(options.message).not.toContain('\u202e')
+  })
+
   it('denies without asking when the turn was already cancelled', async () => {
     const d = deps(2)
     expect(await requestApproval(request, AbortSignal.abort(), d)).toBe('deny')

@@ -785,6 +785,16 @@ describe('tool call accumulation', () => {
         })
       }
     })
+
+    it('ignores fractional and unsafe token counts from a provider', async () => {
+      const result = await run('responses', [
+        'data: {"type":"response.completed","response":{"output":[],"usage":',
+        '{"input_tokens":1.5,"output_tokens":9007199254740992}}}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.value.usage).toBeUndefined()
+    })
   })
 
   describe('Chat Completions', () => {
@@ -800,6 +810,22 @@ describe('tool call accumulation', () => {
       if (!result.ok) return
       expect(result.value.toolCalls).toEqual([
         { callId: 'call_1', name: 'luna_echo', arguments: '{"text":1}' },
+      ])
+    })
+
+    it('synthesizes distinct call ids when a compatible server omits them', async () => {
+      const result = await run('chat-completions', [
+        'data: {"choices":[{"delta":{"tool_calls":[',
+        '{"index":0,"function":{"name":"repeat","arguments":"{\\"n\\":1}"}},',
+        '{"index":1,"function":{"name":"repeat","arguments":"{\\"n\\":2}"}}',
+        ']},"finish_reason":"tool_calls"}]}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.value.toolCalls).toEqual([
+        { callId: 'luna_call_0', name: 'repeat', arguments: '{"n":1}' },
+        { callId: 'luna_call_1', name: 'repeat', arguments: '{"n":2}' },
       ])
     })
 

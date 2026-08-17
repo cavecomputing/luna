@@ -58,17 +58,18 @@ export function readTools(value: unknown): ToolDefinition[] {
     const name = toolName(item?.name)
     // A schema is required and must be an object; a tool without one cannot be
     // described to a provider at all.
-    const schema = object(item?.inputSchema)
+    const schema = Array.isArray(item?.inputSchema) ? undefined : object(item?.inputSchema)
     if (item === undefined || name === undefined || schema === undefined) continue
     const description = text(item.description, 8192) ?? ''
     const title = text(item.title, 256)
     const annotations = object(item.annotations)
+    const outputSchema = Array.isArray(item.outputSchema) ? undefined : object(item.outputSchema)
     parsed.push({
       name,
       ...(title === undefined || title === '' ? {} : { title }),
       description,
       inputSchema: schema,
-      ...(object(item.outputSchema) === undefined ? {} : { outputSchema: item.outputSchema }),
+      ...(outputSchema === undefined ? {} : { outputSchema }),
       ...(annotations === undefined
         ? {}
         : {
@@ -159,9 +160,13 @@ export class Registry {
       arguments: call.arguments,
     }
 
-    let args: unknown
+    let args: Record<string, unknown>
     try {
-      args = call.arguments.trim() === '' ? {} : JSON.parse(call.arguments)
+      const parsed: unknown = call.arguments.trim() === '' ? {} : JSON.parse(call.arguments)
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        return failure(identity, 'The arguments must be a single JSON object.')
+      }
+      args = { ...parsed }
     } catch {
       // The model wrote malformed JSON. That is its mistake to fix, not a
       // reason to end the turn.

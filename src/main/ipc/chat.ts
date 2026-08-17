@@ -259,6 +259,16 @@ function effectiveContext(slot: ModelSlots[Mode]): number | undefined {
   return slot.contextTokens ?? slot.detectedContextTokens
 }
 
+/** A provider can address tools only by name, so collisions are unsafe to expose. */
+function unambiguousTools(catalog: readonly ToolInfo[]): ToolInfo[] {
+  const counts = new Map<string, number>()
+  for (const tool of catalog) {
+    const name = tool.definition.name
+    counts.set(name, (counts.get(name) ?? 0) + 1)
+  }
+  return catalog.filter((tool) => counts.get(tool.definition.name) === 1)
+}
+
 function selection(conversation: Conversation, d: Deps): Result<Selection> {
   const slot = d.slots()[conversation.mode]
   if (slot.providerId === null) {
@@ -332,7 +342,14 @@ export class ChatCoordinator {
     if (turn === undefined) return err('chat/invalid-attachments', 'chat attachments were invalid')
 
     this.launch(conversationId, assistantMessageId, selected.value, apiKey)
-    return ok({ ...turn })
+    return ok({
+      conversation: chats.summarize(turn.conversation),
+      userMessageId,
+      assistantMessageId,
+      messages: turn.conversation.messages.filter(
+        (item) => item.id === userMessageId || item.id === assistantMessageId,
+      ),
+    })
   }
 
   async retry(input: unknown): Promise<Result<undefined>> {
@@ -445,7 +462,13 @@ export class ChatCoordinator {
     }
     // Snapshotted once, alongside the history read: enabling a tool while this
     // turn is in flight must not change what this turn can reach.
-    const catalog = await this.d.toolCatalog(controller.signal)
+    let catalog: ToolInfo[] = []
+    try {
+      catalog = unambiguousTools(await this.d.toolCatalog(controller.signal))
+    } catch {
+      // Tool discovery is optional to an ordinary chat turn. A broken source
+      // must not strand the already-persisted assistant row in streaming.
+    }
     const plan = planHistory(
       history.map(sizeOf),
       historyBudget(selected.contextTokens ?? DEFAULT_CONTEXT_TOKENS),
@@ -582,6 +605,11 @@ export class ChatCoordinator {
       }
       // Falling out of the loop without an outcome means the cap was reached.
       outcome ??= { kind: 'error', code: 'chat/tool-loop-limit' }
+    } catch {
+      // Every expected provider, consent, and tool failure is already a Result.
+      // This guard is for a dependency that violates that contract: the row
+      // still has to reach a terminal state instead of remaining streaming.
+      outcome = { kind: 'error', code: 'chat/internal' }
     } finally {
       // Deregistering here rather than after the first stream keeps Stop working
       // for the whole turn, including while a tool is running.

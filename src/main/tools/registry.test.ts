@@ -52,6 +52,7 @@ describe('readTools', () => {
         tools: [
           { name: 'has space', description: '', inputSchema: { type: 'object' } },
           { name: 'no_schema', description: '' },
+          { name: 'array_schema', description: '', inputSchema: [] },
           { name: 'fine', description: '', inputSchema: { type: 'object' } },
         ],
       }).map((tool) => tool.name),
@@ -138,6 +139,18 @@ describe('Registry', () => {
       // The tool itself rejects the missing argument, which is a tool error.
       expect(outcome.step.isError).toBe(true)
       expect(outcome.modelText).toContain('required')
+    })
+
+    it('rejects valid JSON that is not an argument object before dispatch', async () => {
+      const registry = await ready()
+      const outcome = await registry.call(
+        'builtin',
+        { callId: 'call-1', name: 'luna_echo', arguments: 'null' },
+        live(),
+      )
+
+      expect(outcome.step.isError).toBe(true)
+      expect(outcome.modelText).toContain('JSON object')
     })
 
     it('names the available tools when the model invents one', async () => {

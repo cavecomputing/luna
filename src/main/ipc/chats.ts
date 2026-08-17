@@ -152,17 +152,17 @@ export function searchChats(input: unknown, d: Deps): Result<SearchHit[]> {
   return ok(d.search(query))
 }
 
-export function createChat(input: unknown, d: Deps): Result<Conversation> {
+export function createChat(input: unknown, d: Deps): Result<ConversationSummary> {
   const req = object(input)
   if (req === undefined || (req.mode !== 'fast' && req.mode !== 'expert')) {
     return err('chat/invalid', 'conversation mode was invalid')
   }
   const value = d.create(d.newId(), req.mode, d.now())
   announce(d)
-  return ok(value)
+  return ok(chats.summarize(value))
 }
 
-export function updateChatMode(input: unknown, d: Deps): Result<Conversation> {
+export function updateChatMode(input: unknown, d: Deps): Result<ConversationSummary> {
   const req = object(input)
   if (req === undefined) return err('chat/invalid', 'conversation mode update was invalid')
   const chatId = id(req.id)
@@ -172,7 +172,7 @@ export function updateChatMode(input: unknown, d: Deps): Result<Conversation> {
   const value = d.setMode(chatId, req.mode)
   if (value === undefined) return err('chat/missing', 'conversation was not found')
   announce(d)
-  return ok(value)
+  return ok(chats.summarize(value))
 }
 
 export function updateChatDraft(input: unknown, d: Deps): Result<undefined> {
@@ -185,7 +185,7 @@ export function updateChatDraft(input: unknown, d: Deps): Result<undefined> {
   return ok(undefined)
 }
 
-export function updateChatPinned(input: unknown, d: Deps): Result<Conversation> {
+export function updateChatPinned(input: unknown, d: Deps): Result<ConversationSummary> {
   const req = object(input)
   const chatId = id(req?.id)
   if (chatId === undefined || typeof req?.pinned !== 'boolean') {
@@ -194,10 +194,10 @@ export function updateChatPinned(input: unknown, d: Deps): Result<Conversation> 
   const value = d.setPinned(chatId, req.pinned)
   if (value === undefined) return err('chat/missing', 'conversation was not found')
   announce(d)
-  return ok(value)
+  return ok(chats.summarize(value))
 }
 
-export function updateChatTitle(input: unknown, d: Deps): Result<Conversation> {
+export function updateChatTitle(input: unknown, d: Deps): Result<ConversationSummary> {
   const req = object(input)
   const chatId = id(req?.id)
   const title = text(req?.title, 200)
@@ -207,7 +207,7 @@ export function updateChatTitle(input: unknown, d: Deps): Result<Conversation> {
   const value = d.setTitle(chatId, title)
   if (value === undefined) return err('chat/missing', 'conversation was not found')
   announce(d)
-  return ok(value)
+  return ok(chats.summarize(value))
 }
 
 export async function deleteChat(input: unknown, d: Deps): Promise<Result<undefined>> {

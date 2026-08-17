@@ -359,12 +359,24 @@ function callSlot(state: StreamState, key: string): StreamToolCall {
 }
 
 function orderedCalls(state: StreamState): StreamToolCall[] {
-  return [...state.toolCalls.values()]
-    .sort((a, b) => a.order - b.order)
-    .map((entry) => entry.call)
+  const used = new Set<string>()
+  const calls: StreamToolCall[] = []
+  for (const entry of [...state.toolCalls.values()].sort((a, b) => a.order - b.order)) {
+    const call = entry.call
     // A call with no name was never completed and cannot be dispatched.
-    .filter((call) => call.name !== '')
-    .map((call) => ({ ...call, callId: call.callId === '' ? call.name : call.callId }))
+    if (call.name === '') continue
+    let callId = call.callId
+    if (callId === '' || used.has(callId)) {
+      let suffix = entry.order
+      do {
+        callId = `luna_call_${String(suffix)}`
+        suffix += 1
+      } while (used.has(callId))
+    }
+    used.add(callId)
+    calls.push({ ...call, callId })
+  }
+  return calls
 }
 
 /** First report wins; a later chunk repeating it must not overwrite it. */
@@ -373,7 +385,9 @@ function recordUsage(state: StreamState, parsed: TokenUsage | undefined): void {
 }
 
 function positive(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : undefined
 }
 
 /** Responses reports totals under its own names, with details one level down. */

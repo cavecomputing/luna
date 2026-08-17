@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import type { ChatDelta, ChatFailure } from '../../../shared/ipc.js'
+import type { ChatDelta, ChatFailure, ChatFinal, ChatStart } from '../../../shared/ipc.js'
 import type { ConversationSummary, Message } from '../../../shared/types.js'
-import { ok } from '../../../shared/result.js'
+import { err, ok, type Result } from '../../../shared/result.js'
 import {
   applyDelta,
   applyDeltas,
@@ -137,8 +137,15 @@ describe('mergeChats', () => {
 })
 
 /** Captures the main -> renderer subscriptions so a test can push events. */
-function bridge(chats: ConversationSummary[]): { fail: (event: ChatFailure) => void } {
+function bridge(
+  chats: ConversationSummary[],
+  options: {
+    messages?: () => Promise<Result<Message[]>>
+    start?: ChatStart
+  } = {},
+): { fail: (event: ChatFailure) => void; done: (event: ChatFinal) => void } {
   let onError: (event: ChatFailure) => void = () => undefined
+  let onDone: (event: ChatFinal) => void = () => undefined
   Object.defineProperty(window, 'luna', {
     configurable: true,
     value: {
@@ -146,11 +153,22 @@ function bridge(chats: ConversationSummary[]): { fail: (event: ChatFailure) => v
         list: () => Promise.resolve(ok(chats)),
         // Message bodies are now fetched per conversation rather than arriving
         // with the list, so the hook needs this too.
-        messages: () => Promise.resolve(ok([])),
+        messages: options.messages ?? (() => Promise.resolve(ok([]))),
+      },
+      chat: {
+        send: () =>
+          Promise.resolve(
+            options.start === undefined
+              ? err('chat/unavailable', 'send was not configured')
+              : ok(options.start),
+          ),
       },
       onChats: () => () => undefined,
       onChatDelta: () => () => undefined,
-      onChatDone: () => () => undefined,
+      onChatDone: (fn: (event: ChatFinal) => void) => {
+        onDone = fn
+        return () => undefined
+      },
       onChatError: (fn: (event: ChatFailure) => void) => {
         onError = fn
         return () => undefined
@@ -161,6 +179,9 @@ function bridge(chats: ConversationSummary[]): { fail: (event: ChatFailure) => v
   return {
     fail: (event) => {
       onError(event)
+    },
+    done: (event) => {
+      onDone(event)
     },
   }
 }
@@ -204,5 +225,46 @@ describe('useChats', () => {
     })
     expect(result.current.openId).toBe('chat-2')
     expect(result.current.error).toBeUndefined()
+  })
+
+  it('shows a new turn even when an older message load lands after the send', async () => {
+    const summary = listed('chat-1')
+    let resolveMessages: (value: Result<Message[]>) => void = () => undefined
+    const heldMessages = new Promise<Result<Message[]>>((resolve) => {
+      resolveMessages = resolve
+    })
+    const start: ChatStart = {
+      conversation: { ...summary, updatedAt: 2 },
+      userMessageId: 'user-1',
+      assistantMessageId: 'assistant-1',
+      messages: [
+        { id: 'user-1', role: 'user', text: 'Hello', status: 'complete', at: 2, attachments: [] },
+        { id: 'assistant-1', role: 'assistant', text: '', status: 'streaming', at: 2, attachments: [] },
+      ],
+    }
+    bridge([summary], { messages: () => heldMessages, start })
+    const { result } = renderHook(() => useChats('fast'))
+    await waitFor(() => {
+      expect(result.current.openId).toBe('chat-1')
+    })
+
+    await act(async () => {
+      expect(await result.current.send('Hello')).toBe(true)
+    })
+    expect(result.current.open?.messages.map((message) => message.id)).toEqual([
+      'user-1',
+      'assistant-1',
+    ])
+
+    // This snapshot was taken before the send. It must not erase the rows the
+    // send response already supplied when its delayed IPC reply arrives.
+    await act(async () => {
+      resolveMessages(ok([]))
+      await heldMessages
+    })
+    expect(result.current.open?.messages.map((message) => message.id)).toEqual([
+      'user-1',
+      'assistant-1',
+    ])
   })
 })

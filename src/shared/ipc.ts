@@ -60,6 +60,8 @@ export type ChatStart = {
   conversation: ConversationSummary
   userMessageId: string
   assistantMessageId: string
+  /** The two rows persisted for this turn, so the open thread can paint immediately. */
+  messages: Message[]
 }
 
 export type ChatDelta = {
