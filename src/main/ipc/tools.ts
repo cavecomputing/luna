@@ -1,9 +1,10 @@
 /**
  * Reading and changing what tools may do.
  *
- * The renderer can turn a tool on and off and choose whether it asks each time.
- * It cannot answer a consent prompt — that decision is made in main, against a
- * native dialog, because the renderer is untrusted. See tool-consent.ts.
+ * The renderer can turn a tool on and off and revoke standing permission. It
+ * cannot create standing permission or answer a consent prompt — those
+ * decisions are made in main against a native dialog, because the renderer is
+ * untrusted. See tool-consent.ts.
  */
 
 import { err, ok, type Result } from '../../shared/result.js'
@@ -105,19 +106,14 @@ export async function setEnabled(input: unknown, d: Deps = deps): Promise<Result
   return ok(value)
 }
 
-export async function setPolicy(input: unknown, d: Deps = deps): Promise<Result<ToolInfo[]>> {
-  const req = object(input)
+export async function requireApproval(
+  input: unknown,
+  d: Deps = deps,
+): Promise<Result<ToolInfo[]>> {
   const found = target(input)
-  if (found === undefined || (req?.policy !== 'ask' && req?.policy !== 'allow')) {
-    return err('tool/invalid', 'tool policy was invalid')
-  }
-  const grant = d.setPolicy(found.source, found.name, req.policy, d.now())
-  if (grant === undefined) return err('tool/missing', 'tool was not found')
-  // Standing permission on a tool that is switched off would be a grant nobody
-  // can see the effect of, so it is refused rather than quietly stored.
-  if (req.policy === 'allow' && !grant.enabled) {
-    d.setPolicy(found.source, found.name, 'ask', d.now())
-    return err('tool/not-enabled', 'tool must be enabled first')
+  if (found === undefined) return err('tool/invalid', 'tool selection was invalid')
+  if (d.setPolicy(found.source, found.name, 'ask', d.now()) === undefined) {
+    return err('tool/missing', 'tool was not found')
   }
   const value = await survey(d, new AbortController().signal)
   d.notifyTools(value)
@@ -127,5 +123,5 @@ export async function setPolicy(input: unknown, d: Deps = deps): Promise<Result<
 export function register(): void {
   handle('tools:list', () => listTools())
   handle('tools:set-enabled', (_event, req) => setEnabled(req))
-  handle('tools:set-policy', (_event, req) => setPolicy(req))
+  handle('tools:require-approval', (_event, req) => requireApproval(req))
 }

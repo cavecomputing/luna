@@ -3,7 +3,6 @@ import type { Channel, EventData, EventName, Req, Res } from '../shared/ipc.js'
 import type { Prefs } from '../shared/prefs.js'
 import type { Result } from '../shared/result.js'
 import type { Mode, ProviderDraft, SamplerSettings } from '../shared/types.js'
-import type { ToolPolicy } from '../shared/tools.js'
 import type { AttachmentInput } from '../shared/ipc.js'
 
 function invoke<C extends Channel>(channel: C, req: Req<C>): Promise<Result<Res<C>>> {
@@ -70,8 +69,8 @@ const api = {
     list: () => invoke('tools:list', undefined),
     setEnabled: (source: string, name: string, enabled: boolean) =>
       invoke('tools:set-enabled', { source, name, enabled }),
-    setPolicy: (source: string, name: string, policy: ToolPolicy) =>
-      invoke('tools:set-policy', { source, name, policy }),
+    requireApproval: (source: string, name: string) =>
+      invoke('tools:require-approval', { source, name }),
   },
   chats: {
     list: () => invoke('chats:list', undefined),

@@ -162,6 +162,10 @@ attacker-controlled text, and a native box takes plain strings where the rendere
 through the markdown pipeline. Deny is both `defaultId` and `cancelId`: elsewhere in Luna the
 destructive verb is the affirmative answer, but here the safe answer *is* cancel.
 
+Only that execution-time native prompt may create an `allow` grant. Settings may show and revoke
+"Always allow," and the renderer may enable a tool in the default `ask` state, but no IPC payload
+can promote a tool to permanent permission.
+
 Prompts are queued so only one box is ever open, and the wait races the turn's abort signal.
 Electron cannot dismiss a message box programmatically, so an abort stops waiting and answers deny
 while the box stays on screen; without that, `stopAll()` and the privacy delete would deadlock
