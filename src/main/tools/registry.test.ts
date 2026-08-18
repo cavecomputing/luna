@@ -1,14 +1,33 @@
 import { describe, expect, it } from 'vitest'
+import { MODERN_VERSION } from '../mcp/client.js'
 import { loopback, type Responder } from '../rpc/loopback.js'
 import { builtinResponder } from './builtin.js'
-import { Registry, builtinSource, readTools, type Source } from './registry.js'
+import { Registry, builtinSource, type Source } from './registry.js'
 
 function live(): AbortSignal {
   return new AbortController().signal
 }
 
+/**
+ * Wraps a test responder in the era probe every server has to answer, so each
+ * fixture below can be about the one behaviour it is testing. A server that
+ * left this out would be treated as legacy and asked to `initialize`, which is
+ * correct of the registry and not what these tests are for.
+ */
 function sourceOf(respond: Responder, id = 'test'): Source {
-  return { id, label: 'Test', open: () => loopback(respond) }
+  const modern: Responder = (line, reply) => {
+    const message = JSON.parse(line) as { id?: unknown; method?: string }
+    if (message.method !== 'server/discover') {
+      respond(line, reply)
+      return
+    }
+    reply(JSON.stringify({
+      jsonrpc: '2.0',
+      id: message.id,
+      result: { resultType: 'complete', supportedVersions: [MODERN_VERSION] },
+    }))
+  }
+  return { id, label: 'Test', open: () => loopback(modern) }
 }
 
 async function ready(sources: readonly Source[] = [builtinSource()]): Promise<Registry> {
@@ -16,66 +35,6 @@ async function ready(sources: readonly Source[] = [builtinSource()]): Promise<Re
   await registry.discover(sources[0]?.id ?? 'builtin', live())
   return registry
 }
-
-describe('readTools', () => {
-  it('parses a well-formed tool', () => {
-    expect(
-      readTools({
-        tools: [{
-          name: 'get_weather',
-          title: 'Weather',
-          description: 'Gets weather.',
-          inputSchema: { type: 'object' },
-          annotations: { readOnlyHint: true, openWorldHint: true },
-        }],
-      }),
-    ).toEqual([{
-      name: 'get_weather',
-      title: 'Weather',
-      description: 'Gets weather.',
-      inputSchema: { type: 'object' },
-      annotations: { readOnlyHint: true, openWorldHint: true },
-    }])
-  })
-
-  /** Names the protocol allows but Luna's own id shape would have rejected. */
-  it('accepts a dotted tool name', () => {
-    const tools = readTools({
-      tools: [{ name: 'admin.tools.list', description: '', inputSchema: { type: 'object' } }],
-    })
-    expect(tools[0]?.name).toBe('admin.tools.list')
-  })
-
-  it('drops a tool with an unusable name or no schema', () => {
-    expect(
-      readTools({
-        tools: [
-          { name: 'has space', description: '', inputSchema: { type: 'object' } },
-          { name: 'no_schema', description: '' },
-          { name: 'array_schema', description: '', inputSchema: [] },
-          { name: 'fine', description: '', inputSchema: { type: 'object' } },
-        ],
-      }).map((tool) => tool.name),
-    ).toEqual(['fine'])
-  })
-
-  it('keeps only boolean annotation hints', () => {
-    const tools = readTools({
-      tools: [{
-        name: 'x',
-        description: '',
-        inputSchema: { type: 'object' },
-        annotations: { readOnlyHint: 'yes', destructiveHint: true },
-      }],
-    })
-    expect(tools[0]?.annotations).toEqual({ destructiveHint: true })
-  })
-
-  it('returns nothing for a malformed reply', () => {
-    expect(readTools(undefined)).toEqual([])
-    expect(readTools({ tools: 'lots' })).toEqual([])
-  })
-})
 
 describe('Registry', () => {
   it('discovers the built-in tool through the peer', async () => {

@@ -6,9 +6,15 @@
  * framing, correlation, timeout, and cancellation paths are all real. A
  * built-in that called a function directly would prove none of them worked.
  *
+ * That includes `server/discover`, which makes this a conformant modern server
+ * rather than a special case: the registry runs the same era probe against it
+ * as against anything the user installs, and the modern path is exercised on
+ * every launch instead of only when someone happens to own a new server.
+ *
  * `luna_echo` exists to exercise the loop end to end. It touches nothing.
  */
 
+import { MODERN_VERSION } from '../mcp/client.js'
 import { object } from '../parse.js'
 import type { Responder } from '../rpc/loopback.js'
 import type { ToolDefinition } from '../../shared/tools.js'
@@ -62,6 +68,16 @@ export function builtinResponder(): Responder {
     // arrives here and is simply ignored: nothing this server does is slow
     // enough to be worth interrupting.
     if (id === undefined || id === null) return
+
+    if (method === 'server/discover') {
+      reply(result(id, {
+        resultType: 'complete',
+        supportedVersions: [MODERN_VERSION],
+        capabilities: { tools: {} },
+        _meta: { 'io.modelcontextprotocol/serverInfo': { name: BUILTIN_LABEL, version: '1' } },
+      }))
+      return
+    }
 
     if (method === 'tools/list') {
       reply(result(id, { resultType: 'complete', tools: builtinTools }))

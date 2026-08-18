@@ -12,7 +12,7 @@
 
 import { err, ok, type Result } from '../../shared/result.js'
 import { TOOL_CALL_TIMEOUT_MS, type ToolDefinition } from '../../shared/tools.js'
-import { object, text, toolName } from '../parse.js'
+import { clientFor, handshake, type Client, type ClientInfo, type Era } from '../mcp/client.js'
 import { connect, type Connection } from '../rpc/connect.js'
 import { loopback } from '../rpc/loopback.js'
 import type { Transport } from '../rpc/transport.js'
@@ -24,7 +24,15 @@ export type Source = {
   label: string
   /** Built fresh each time the source is started, never shared between starts. */
   open: () => Transport
+  /**
+   * A previously determined era for this same configuration, if one is stored.
+   * A shortcut past the probe, never a commitment — see `handshake`.
+   */
+  era?: Era
 }
+
+/** Self-reported to every server. Unverified by the protocol, and display-only. */
+export const CLIENT_INFO: ClientInfo = { name: 'Luna', version: '1' }
 
 export type ToolCall = {
   callId: string
@@ -42,60 +50,10 @@ export function builtinSource(): Source {
   }
 }
 
-/**
- * Reads a tools/list reply.
- *
- * Every field comes from outside, so a tool that fails to parse is dropped
- * rather than trusted. Dropping one tool is safe in a way that dropping half a
- * call/result pair is not: the model simply never sees it.
- */
-export function readTools(value: unknown): ToolDefinition[] {
-  const cell = object(value)
-  if (!Array.isArray(cell?.tools)) return []
-  const parsed: ToolDefinition[] = []
-  for (const entry of cell.tools) {
-    const item = object(entry)
-    const name = toolName(item?.name)
-    // A schema is required and must be an object; a tool without one cannot be
-    // described to a provider at all.
-    const schema = Array.isArray(item?.inputSchema) ? undefined : object(item?.inputSchema)
-    if (item === undefined || name === undefined || schema === undefined) continue
-    const description = text(item.description, 8192) ?? ''
-    const title = text(item.title, 256)
-    const annotations = object(item.annotations)
-    const outputSchema = Array.isArray(item.outputSchema) ? undefined : object(item.outputSchema)
-    parsed.push({
-      name,
-      ...(title === undefined || title === '' ? {} : { title }),
-      description,
-      inputSchema: schema,
-      ...(outputSchema === undefined ? {} : { outputSchema }),
-      ...(annotations === undefined
-        ? {}
-        : {
-            annotations: {
-              ...(typeof annotations.readOnlyHint === 'boolean'
-                ? { readOnlyHint: annotations.readOnlyHint }
-                : {}),
-              ...(typeof annotations.destructiveHint === 'boolean'
-                ? { destructiveHint: annotations.destructiveHint }
-                : {}),
-              ...(typeof annotations.idempotentHint === 'boolean'
-                ? { idempotentHint: annotations.idempotentHint }
-                : {}),
-              ...(typeof annotations.openWorldHint === 'boolean'
-                ? { openWorldHint: annotations.openWorldHint }
-                : {}),
-            },
-          }),
-    })
-  }
-  return parsed
-}
-
 /** One live connection to a source, plus what it said it offers. */
 type Live = {
   connection: Connection
+  client: Client
   tools: ToolDefinition[]
 }
 
@@ -123,15 +81,23 @@ export class Registry {
     const started = await connection.start(signal)
     if (!started.ok) return started
 
-    const listed = await connection.peer.request('tools/list', {}, signal)
+    const agreed = await handshake(connection.peer, CLIENT_INFO, signal, {
+      ...(source.era === undefined ? {} : { cached: source.era }),
+    })
+    if (!agreed.ok) {
+      await connection.stop(0)
+      return agreed
+    }
+
+    const client = clientFor(connection.peer, agreed.value, CLIENT_INFO)
+    const listed = await client.listTools(signal)
     if (!listed.ok) {
       await connection.stop(0)
       return listed
     }
 
-    const tools = readTools(listed.value)
-    this.live.set(sourceId, { connection, tools })
-    return ok(tools)
+    this.live.set(sourceId, { connection, client, tools: listed.value })
+    return ok(listed.value)
   }
 
   /** Everything every source offers, paired with where it came from. */
@@ -180,11 +146,7 @@ export class Registry {
       return failure(identity, `No tool named ${call.name}. Available: ${available || 'none'}.`)
     }
 
-    const replied = await live.connection.peer.request(
-      'tools/call',
-      { name: call.name, arguments: args },
-      signal,
-    )
+    const replied = await live.client.callTool(call.name, args, signal)
     if (!replied.ok) {
       return failure(identity, `The tool did not complete (${replied.code}).`)
     }
