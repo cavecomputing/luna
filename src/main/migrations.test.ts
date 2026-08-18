@@ -64,8 +64,14 @@ function dropContextColumns(db: DatabaseSync): void {
   db.exec('ALTER TABLE messages DROP COLUMN trimmed')
 }
 
+/** Takes the MCP server table back off, so its creating step can run again. */
+function dropMcpServers(db: DatabaseSync): void {
+  db.exec('DROP TABLE mcp_servers')
+}
+
 /** Every rewind helper, for a replay that goes back before the newest steps. */
 function rewind(db: DatabaseSync): void {
+  dropMcpServers(db)
   dropContextColumns(db)
   dropToolGrants(db)
   dropToolColumns(db)
@@ -293,6 +299,7 @@ describe('migrate', () => {
     dropToolColumns(db)
     dropToolGrants(db)
     dropContextColumns(db)
+    dropMcpServers(db)
     db.exec('PRAGMA user_version = 11;')
 
     migrate(db)
@@ -355,6 +362,7 @@ describe('migrate', () => {
     dropToolColumns(db)
     dropToolGrants(db)
     dropContextColumns(db)
+    dropMcpServers(db)
     db.exec(`INSERT INTO conversations
       (id, title, mode, pinned, created_at, updated_at)
       VALUES ('chat-1', 'Chat', 'fast', 0, 1, 1);

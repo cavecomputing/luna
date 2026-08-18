@@ -29,6 +29,7 @@
  * This file owns no process and no stream. It is handed a peer.
  */
 
+import type { McpEra } from '../../shared/mcp.js'
 import { err, ok, type Result } from '../../shared/result.js'
 import type { ToolDefinition } from '../../shared/tools.js'
 import { object, text, toolName } from '../parse.js'
@@ -57,12 +58,10 @@ export const PROBE_TIMEOUT_MS = 5_000
 /** A server paginating `tools/list` forever is a server-controlled loop. */
 export const MAX_TOOL_PAGES = 20
 
-export type Era = 'modern' | 'legacy'
-
 export type ClientInfo = { name: string; version: string }
 
 export type Handshake = {
-  era: Era
+  era: McpEra
   version: string
   /** Self-reported and unverified. For display only; nothing branches on it. */
   serverName?: string
@@ -110,7 +109,7 @@ export type HandshakeOptions = {
    * specification allows persisting. A shortcut, never a commitment: a cached
    * answer that turns out to be wrong falls through to a full probe.
    */
-  cached?: Era
+  cached?: McpEra
   /** Injected so a test can prove the silence branch without waiting for it. */
   probeMs?: number
 }

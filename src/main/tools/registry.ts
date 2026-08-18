@@ -12,7 +12,8 @@
 
 import { err, ok, type Result } from '../../shared/result.js'
 import { TOOL_CALL_TIMEOUT_MS, type ToolDefinition } from '../../shared/tools.js'
-import { clientFor, handshake, type Client, type ClientInfo, type Era } from '../mcp/client.js'
+import type { McpEra } from '../../shared/mcp.js'
+import { clientFor, handshake, type Client, type ClientInfo } from '../mcp/client.js'
 import { connect, type Connection } from '../rpc/connect.js'
 import { loopback } from '../rpc/loopback.js'
 import type { Transport } from '../rpc/transport.js'
@@ -28,7 +29,7 @@ export type Source = {
    * A previously determined era for this same configuration, if one is stored.
    * A shortcut past the probe, never a commitment — see `handshake`.
    */
-  era?: Era
+  era?: McpEra
 }
 
 /** Self-reported to every server. Unverified by the protocol, and display-only. */

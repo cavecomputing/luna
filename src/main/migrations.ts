@@ -152,6 +152,26 @@ const steps: readonly string[] = [
   `ALTER TABLE model_slots ADD COLUMN detected_context_tokens INTEGER CHECK (
      detected_context_tokens IS NULL OR detected_context_tokens BETWEEN 1024 AND 10485760
    );`,
+  // MCP servers the user configured. Non-secret only: `env_names` lists the
+  // variable names a server takes, and the values are in platform secure
+  // storage like every other credential. `enabled` defaults to 0 so adding a
+  // server never starts a process on its own.
+  //
+  // `era` caches which era of the protocol a server turned out to speak, which
+  // the specification allows persisting. It is a shortcut past the startup
+  // probe and is cleared whenever it proves wrong, so it can never pin a
+  // server to a protocol it has since stopped speaking.
+  `CREATE TABLE mcp_servers (
+     id         TEXT PRIMARY KEY,
+     name       TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 128),
+     command    TEXT NOT NULL CHECK (length(command) BETWEEN 1 AND 1024),
+     args       TEXT NOT NULL,
+     cwd        TEXT,
+     env_names  TEXT NOT NULL,
+     enabled    INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+     era        TEXT CHECK (era IS NULL OR era IN ('modern', 'legacy')),
+     created_at INTEGER NOT NULL
+   ) STRICT;`,
 ]
 
 /** The version a fully migrated database reports. */
