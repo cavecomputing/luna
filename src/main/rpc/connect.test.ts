@@ -105,15 +105,20 @@ describe('connect', () => {
     if (!result.ok) expect(result.code).toBe('rpc/closed')
   })
 
-  it('stops delivering replies once the abort signal fires', async () => {
+  /**
+   * The signal passed to start() cancels the startup and nothing after it. It
+   * belongs to whoever wanted the channel — a turn, usually — and a turn ending
+   * is ordinary. Closing the connection on it would mean cancelling one reply
+   * silently took every tool down until the app restarted.
+   */
+  it('keeps the connection alive when the start signal is aborted later', async () => {
     const controller = new AbortController()
     const connection = connect(loopback(echoResponder), { timeoutMs: 50 })
     await connection.start(controller.signal)
 
     controller.abort()
-    const result = await connection.peer.request('tools/list', {})
 
-    expect(result.ok).toBe(false)
-    if (!result.ok) expect(result.code).toBe('rpc/closed')
+    expect(await connection.peer.request('tools/list', {})).toMatchObject({ ok: true })
+    await connection.stop(0)
   })
 })

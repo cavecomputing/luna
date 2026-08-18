@@ -194,6 +194,26 @@ describe('Registry', () => {
     expect(outcome.modelText).toContain('rpc/cancelled')
   })
 
+  /**
+   * The signal handed to discover() belongs to the turn that wanted a tool. It
+   * must cancel the startup and nothing after it: a cancelled turn is a normal
+   * thing to do, and it cannot be allowed to take a live server down with it.
+   */
+  it('keeps a source usable after the turn that discovered it is cancelled', async () => {
+    const registry = new Registry([builtinSource()])
+    const controller = new AbortController()
+    await registry.discover('builtin', controller.signal)
+    controller.abort()
+
+    const outcome = await registry.call(
+      'builtin',
+      { callId: 'call-1', name: 'luna_echo', arguments: '{"text":"still here"}' },
+      live(),
+    )
+    expect(outcome.step.isError).toBe(false)
+    expect(outcome.modelText).toBe('still here')
+  })
+
   it('closes every connection when stopped', async () => {
     const registry = await ready()
     await registry.stopAll()

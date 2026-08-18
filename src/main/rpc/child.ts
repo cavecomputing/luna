@@ -158,9 +158,15 @@ export function child(spec: ChildSpec, deps: SpawnDeps = defaults()): Transport 
 
       return new Promise<Result<undefined>>((settle) => {
         let answered = false
+        const onAbort = (): void => {
+          proc?.kill()
+        }
         const answer = (result: Result<undefined>): void => {
           if (answered) return
           answered = true
+          // Startup is over, so the caller's signal stops being ours to watch.
+          // It belongs to a turn, and a turn ending must not kill a live server.
+          signal.removeEventListener('abort', onAbort)
           settle(result)
         }
 
@@ -205,13 +211,7 @@ export function child(spec: ChildSpec, deps: SpawnDeps = defaults()): Transport 
           answer(ok(undefined))
         })
 
-        signal.addEventListener(
-          'abort',
-          () => {
-            started.kill()
-          },
-          { once: true },
-        )
+        signal.addEventListener('abort', onAbort, { once: true })
       })
     },
 

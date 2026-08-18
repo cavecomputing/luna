@@ -21,17 +21,11 @@ export function loopback(respond: Responder): Transport {
   let running = false
 
   return {
-    start: (signal: AbortSignal): Promise<Result<undefined>> => {
+    // Nothing to bring up, so there is nothing an abort could interrupt. The
+    // signal is deliberately ignored rather than wired to a close: it outlives
+    // this call, and a caller cancelling later must not take the channel down.
+    start: (): Promise<Result<undefined>> => {
       running = true
-      signal.addEventListener(
-        'abort',
-        () => {
-          if (!running) return
-          running = false
-          closes?.({ kind: 'stopped' })
-        },
-        { once: true },
-      )
       return Promise.resolve(ok(undefined))
     },
 

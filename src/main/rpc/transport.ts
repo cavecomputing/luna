@@ -22,6 +22,12 @@ export type Transport = {
   /**
    * Brings the channel up. Resolving means lines can be sent, not that anything
    * has answered — a protocol handshake is the layer above's business.
+   *
+   * `signal` cancels the startup and **nothing after it**. It belongs to
+   * whoever wanted the channel — a turn, usually — and a turn ending is an
+   * ordinary thing that must not take a running server with it. An
+   * implementation stops listening to it the moment start settles; `stop` is
+   * the only way to end a channel that came up.
    */
   start: (signal: AbortSignal) => Promise<Result<undefined>>
   /** One complete message. The transport appends the delimiter. */
