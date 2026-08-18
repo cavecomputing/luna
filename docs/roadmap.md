@@ -38,11 +38,11 @@ that assumed they were absent.
 
 ### F1. Tool calling
 
-**Needed by:** v1.1, v1.2, v1.3, v2.0. It is now the immediate next piece of work, because
-v1.1 is MCP server support and nothing in it functions without a tool loop.
+**Needed by:** v1.1, v1.2, v1.3, v2.0. Built, ahead of v1.1, because nothing in MCP server
+support functions without a tool loop.
 
-Today `chat-api.ts` sends no `tools` array and parses only text and reasoning deltas. Adding
-tool calling touches five things at once:
+`chat-api.ts` used to send no `tools` array and parse only text and reasoning deltas. Tool
+calling touched five things at once:
 
 1. **Request bodies** gain a tool list, in two different shapes — the Responses API and Chat
    Completions describe tools differently, and Luna supports both.
@@ -227,7 +227,8 @@ than a bare tool name, and the specification requires clients to treat them as u
 appear in the dialog attributed to the tool, they are inside the digest, and no code branches on
 them: a tool claiming `readOnlyHint` gets exactly the same gate as one that claims nothing.
 
-Still to come, with the tool loop: enforcing the grant at dispatch, and the Settings panel.
+Both remaining pieces are built: the grant is enforced at dispatch, and the Tools panel in
+Settings lists every discovered tool with its enable and "Always allow" state.
 
 ### F5. Update path
 
@@ -296,10 +297,16 @@ and the tool loop from F1 wired to dispatch to a server rather than to a built-i
 
 **Schema.** Done, in 1.1 development. See **Storage shape for tool calls** under Foundations.
 
-**Open decision:** stdio subprocesses only, or stdio plus remote HTTP servers? Stdio alone is
-a smaller first release and covers most existing servers. Remote servers add a network trust
-boundary and an auth story that F4 would have to cover in its first version rather than its
-second.
+**Transport — decided: stdio subprocesses only, with remote-ready seams.** Stdio is the smaller
+first release and covers most existing servers; remote servers add a network trust boundary and
+an auth story F4 would otherwise have to answer in its first version rather than its second.
+
+The seams are already in place, so choosing stdio first does not cost a rewrite later. `Transport`
+in `rpc/transport.ts` is the whole coupling to a wire, and it is deliberately asymmetric — `send`
+takes one framed message because we control what leaves, `onData` takes arbitrary chunks because
+we do not control what arrives. `connect.ts` and `JsonRpcPeer` are transport-agnostic above it,
+and the built-in source already proves the seam by running the same peer over an in-process
+loopback. Adding HTTP means one more `Transport`, not a second client.
 
 The default-exposure question is decided and built. See **Consent model** under Foundations.
 
