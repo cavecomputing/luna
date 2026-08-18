@@ -213,4 +213,84 @@ describe('JsonRpcPeer', () => {
       expect(sent).toEqual([])
     })
   })
+
+  /**
+   * The raw surface `request` is built on. MCP needs it: a server's era is
+   * decided from the peer's own error code and `data`, which the `Result` form
+   * deliberately flattens away.
+   */
+  describe('call', () => {
+    it('keeps the peer error code and data intact', async () => {
+      const { peer } = makePeer()
+      const pending = peer.call('server/discover', {})
+      peer.receive({
+        jsonrpc: '2.0',
+        id: 1,
+        error: {
+          code: -32022,
+          message: 'Unsupported protocol version',
+          data: { supported: ['2026-07-28', '2025-11-25'], requested: '1900-01-01' },
+        },
+      })
+
+      expect(await pending).toEqual({
+        kind: 'error',
+        code: -32022,
+        message: 'Unsupported protocol version',
+        data: { supported: ['2026-07-28', '2025-11-25'], requested: '1900-01-01' },
+      })
+    })
+
+    it('substitutes a code and message for an error missing them', async () => {
+      const { peer } = makePeer()
+      const pending = peer.call('a', {})
+      peer.receive({ jsonrpc: '2.0', id: 1, error: { code: 'nope' } })
+
+      expect(await pending).toEqual({ kind: 'error', code: 0, message: '', data: undefined })
+    })
+
+    it('reports a result as ok', async () => {
+      const { peer } = makePeer()
+      const pending = peer.call('tools/list', {})
+      reply(peer, 1, { tools: [] })
+
+      expect(await pending).toEqual({ kind: 'ok', value: { tools: [] } })
+    })
+
+    /**
+     * A local timeout must never look like a peer error, or a caller branching
+     * on an error code would read one out of a message the peer never sent.
+     */
+    it('distinguishes a local timeout from a peer error', async () => {
+      vi.useFakeTimers()
+      try {
+        const { peer } = makePeer(1_000)
+        const pending = peer.call('slow', {})
+        vi.advanceTimersByTime(1_001)
+
+        expect(await pending).toEqual({ kind: 'timeout' })
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('reports cancellation, closure, and an unwritable channel apart', async () => {
+      const { peer } = makePeer()
+      const controller = new AbortController()
+      const cancelled = peer.call('a', {}, controller.signal)
+      controller.abort()
+      expect(await cancelled).toEqual({ kind: 'cancelled' })
+
+      const pending = peer.call('b', {})
+      peer.close('peer exited')
+      expect(await pending).toEqual({ kind: 'closed', reason: 'peer exited' })
+      expect(await peer.call('c', {})).toEqual({ kind: 'closed', reason: 'peer is closed' })
+
+      const broken = new JsonRpcPeer(() => {
+        throw new Error('broken pipe')
+      })
+      expect(await broken.call('d', {})).toEqual({ kind: 'write' })
+    })
+  })
+
 })

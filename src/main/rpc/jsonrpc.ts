@@ -9,6 +9,12 @@
  *
  * Pure protocol. It is handed a `send` function and fed received values; it
  * owns no stream, no process, and no timers beyond its own request deadlines.
+ *
+ * Two result surfaces, deliberately. `request` answers a `Result`, which is what
+ * almost every caller wants and what the rest of Luna speaks. `call` answers an
+ * `RpcOutcome` carrying the peer's own error code and `data`, which a protocol
+ * built on top may need to branch on — MCP decides a server's era from exactly
+ * that payload. `request` is a mapping of `call`, so there is one code path.
  */
 
 import { err, ok, type Result } from '../../shared/result.js'
@@ -17,8 +23,24 @@ import { object } from '../parse.js'
 /** Default ceiling on a single request. Callers can lower it per peer. */
 export const DEFAULT_TIMEOUT_MS = 30_000
 
+/**
+ * What became of one request, before it is flattened into a `Result`.
+ *
+ * `error` is the far side answering in JSON-RPC terms and keeps its `code` and
+ * `data` intact; everything else happened on this side. Keeping them apart
+ * matters because a caller acting on a peer's error code must not mistake a
+ * local timeout for one.
+ */
+export type RpcOutcome =
+  | { kind: 'ok'; value: unknown }
+  | { kind: 'error'; code: number; message: string; data: unknown }
+  | { kind: 'timeout' }
+  | { kind: 'cancelled' }
+  | { kind: 'closed'; reason: string }
+  | { kind: 'write' }
+
 type Pending = {
-  resolve: (result: Result<unknown>) => void
+  resolve: (outcome: RpcOutcome) => void
   timer: ReturnType<typeof setTimeout>
   detach: () => void
 }
@@ -52,32 +74,32 @@ export class JsonRpcPeer {
   }
 
   /**
-   * Sends a request and waits for its response.
+   * Sends a request and waits for its response, reporting the raw outcome.
    *
    * Aborting does not merely stop waiting: it tells the far side to stop too,
    * with a `notifications/cancelled` referencing the id. A purely local abort
    * leaves the peer doing work nobody will read.
    */
-  async request(method: string, params: unknown, signal?: AbortSignal): Promise<Result<unknown>> {
-    if (this.closed) return err('rpc/closed', 'peer is closed')
-    if (signal?.aborted === true) return err('rpc/cancelled', 'cancelled before dispatch')
+  async call(method: string, params: unknown, signal?: AbortSignal): Promise<RpcOutcome> {
+    if (this.closed) return { kind: 'closed', reason: 'peer is closed' }
+    if (signal?.aborted === true) return { kind: 'cancelled' }
 
     const id = this.nextId
     this.nextId += 1
 
-    return new Promise<Result<unknown>>((resolve) => {
-      const settle = (result: Result<unknown>): void => {
+    return new Promise<RpcOutcome>((resolve) => {
+      const settle = (outcome: RpcOutcome): void => {
         const entry = this.pending.get(id)
         if (entry === undefined) return
         this.pending.delete(id)
         this.clearTimer(entry.timer)
         entry.detach()
-        resolve(result)
+        resolve(outcome)
       }
 
       const onAbort = (): void => {
         this.cancel(id)
-        settle(err('rpc/cancelled', 'cancelled'))
+        settle({ kind: 'cancelled' })
       }
       signal?.addEventListener('abort', onAbort, { once: true })
 
@@ -85,7 +107,7 @@ export class JsonRpcPeer {
         resolve: settle,
         timer: this.setTimer(() => {
           this.cancel(id)
-          settle(err('rpc/timeout', `${method} timed out`))
+          settle({ kind: 'timeout' })
         }, this.timeoutMs),
         detach: () => {
           signal?.removeEventListener('abort', onAbort)
@@ -95,9 +117,34 @@ export class JsonRpcPeer {
       try {
         this.send({ jsonrpc: '2.0', id, method, params })
       } catch {
-        settle(err('rpc/write', 'request could not be written'))
+        settle({ kind: 'write' })
       }
     })
+  }
+
+  /**
+   * `call`, flattened to the `Result` the rest of Luna speaks.
+   *
+   * The peer's numeric code lands in the message rather than the code, because
+   * `Err.code` is what callers switch on and it has to stay a small closed set.
+   * A caller that genuinely needs the number wants `call`.
+   */
+  async request(method: string, params: unknown, signal?: AbortSignal): Promise<Result<unknown>> {
+    const outcome = await this.call(method, params, signal)
+    switch (outcome.kind) {
+      case 'ok':
+        return ok(outcome.value)
+      case 'error':
+        return err('rpc/error', `peer returned error ${String(outcome.code)}`)
+      case 'timeout':
+        return err('rpc/timeout', `${method} timed out`)
+      case 'cancelled':
+        return err('rpc/cancelled', 'cancelled')
+      case 'closed':
+        return err('rpc/closed', outcome.reason)
+      case 'write':
+        return err('rpc/write', 'request could not be written')
+    }
   }
 
   /** Fire and forget. No id, so nothing correlates and nothing waits. */
@@ -140,11 +187,17 @@ export class JsonRpcPeer {
 
     const failure = object(cell.error)
     if (failure !== undefined) {
-      const code = typeof failure.code === 'number' ? failure.code : 0
-      entry.resolve(err('rpc/error', `peer returned error ${String(code)}`))
+      entry.resolve({
+        kind: 'error',
+        code: typeof failure.code === 'number' ? failure.code : 0,
+        // Kept for a caller that must branch on it. Never logged: an error
+        // message from outside can carry a path or user content.
+        message: typeof failure.message === 'string' ? failure.message : '',
+        data: failure.data,
+      })
       return
     }
-    entry.resolve(ok(cell.result))
+    entry.resolve({ kind: 'ok', value: cell.result })
   }
 
   /**
@@ -156,7 +209,7 @@ export class JsonRpcPeer {
   close(reason = 'peer closed'): void {
     this.closed = true
     for (const [id] of [...this.pending]) {
-      this.pending.get(id)?.resolve(err('rpc/closed', reason))
+      this.pending.get(id)?.resolve({ kind: 'closed', reason })
     }
     this.pending.clear()
   }
