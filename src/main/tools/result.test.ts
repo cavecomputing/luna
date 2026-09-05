@@ -156,14 +156,35 @@ describe('readResult', () => {
   })
 
   describe('bounds', () => {
+    /**
+     * The cap is a ceiling, not an approximation. The truncation marker comes
+     * out of the budget rather than being added to it — a limit the value
+     * overshoots by the length of its own footnote is not a limit.
+     */
     it('caps stored text harder than model text and marks it truncated', () => {
       const huge = 'x'.repeat(MAX_TOOL_RESULT_CHARS + 10)
       const outcome = readResult(identity, complete({ content: [{ type: 'text', text: huge }] }))
 
       expect(outcome.step.truncated).toBe(true)
-      expect(outcome.step.text.length).toBeLessThan(MAX_STORED_TOOL_RESULT_CHARS + 32)
-      expect(outcome.modelText.length).toBeLessThan(MAX_TOOL_RESULT_CHARS + 32)
+      expect(outcome.step.text.length).toBeLessThanOrEqual(MAX_STORED_TOOL_RESULT_CHARS)
+      expect(outcome.modelText.length).toBeLessThanOrEqual(MAX_TOOL_RESULT_CHARS)
       expect(outcome.step.text).toContain('[truncated]')
+    })
+
+    it('leaves text exactly at the cap alone', () => {
+      const exact = 'x'.repeat(MAX_TOOL_RESULT_CHARS)
+      const outcome = readResult(identity, complete({ content: [{ type: 'text', text: exact }] }))
+
+      expect(outcome.modelText).toBe(exact)
+      expect(outcome.modelText.length).toBe(MAX_TOOL_RESULT_CHARS)
+    })
+
+    it('cuts one character over the cap down to it', () => {
+      const over = 'x'.repeat(MAX_TOOL_RESULT_CHARS + 1)
+      const outcome = readResult(identity, complete({ content: [{ type: 'text', text: over }] }))
+
+      expect(outcome.modelText.length).toBe(MAX_TOOL_RESULT_CHARS)
+      expect(outcome.modelText.endsWith('[truncated]')).toBe(true)
     })
 
     it('does not mark ordinary output as truncated', () => {

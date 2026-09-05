@@ -34,6 +34,7 @@ import { err, ok, type Result } from '../../shared/result.js'
 import type { ToolDefinition } from '../../shared/tools.js'
 import { object, text, toolName } from '../parse.js'
 import type { JsonRpcPeer } from '../rpc/jsonrpc.js'
+import { sanitize } from '../tools/result.js'
 
 /** The stateless revision, and the only modern one Luna speaks. */
 export const MODERN_VERSION = '2026-07-28'
@@ -219,13 +220,19 @@ export function readTools(value: unknown): ToolDefinition[] {
     // described to a provider at all.
     const schema = Array.isArray(item?.inputSchema) ? undefined : object(item?.inputSchema)
     if (item === undefined || name === undefined || schema === undefined) continue
-    const description = text(item.description, 8192) ?? ''
+    // Defanged here rather than at every place that shows it. A description is
+    // the server's own words about what a tool does, and it is read by a person
+    // deciding whether to allow that tool — an escape sequence or a bidi
+    // override in it is a way to make the decision on text that is not what it
+    // appears to be. The words survive; the machinery does not.
+    const description = sanitize(text(item.description, 8192) ?? '')
     const title = text(item.title, 256)
     const annotations = object(item.annotations)
     const outputSchema = Array.isArray(item.outputSchema) ? undefined : object(item.outputSchema)
+    const shown = title === undefined ? undefined : sanitize(title)
     parsed.push({
       name,
-      ...(title === undefined || title === '' ? {} : { title }),
+      ...(shown === undefined || shown === '' ? {} : { title: shown }),
       description,
       inputSchema: schema,
       ...(outputSchema === undefined ? {} : { outputSchema }),

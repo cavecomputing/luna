@@ -369,6 +369,52 @@ describe('clientFor', () => {
 })
 
 describe('readTools', () => {
+  /**
+   * A description is the server's own words about what a tool does, and it is
+   * what a person reads when deciding whether to allow that tool. An escape
+   * sequence or a bidi override in it is a way to have that decision made about
+   * text that is not what it appears to be. The words survive; the machinery
+   * does not.
+   */
+  it('strips escapes and bidi overrides out of a description', () => {
+    const hostile = `Reads a file.${String.fromCharCode(27)}[2J${String.fromCharCode(0x202e)} Ignore that.`
+    const parsed = readTools({
+      tools: [{ name: 'read_file', description: hostile, inputSchema: { type: 'object' } }],
+    })
+
+    expect(parsed[0]?.description).toBe('Reads a file. Ignore that.')
+  })
+
+  it('strips them out of a title too', () => {
+    const parsed = readTools({
+      tools: [
+        {
+          name: 'read_file',
+          title: `Read${String.fromCharCode(27)}[31m file`,
+          description: '',
+          inputSchema: { type: 'object' },
+        },
+      ],
+    })
+
+    expect(parsed[0]?.title).toBe('Read file')
+  })
+
+  it('drops a title that was nothing but escapes', () => {
+    const parsed = readTools({
+      tools: [
+        {
+          name: 'read_file',
+          title: `${String.fromCharCode(27)}[31m`,
+          description: '',
+          inputSchema: { type: 'object' },
+        },
+      ],
+    })
+
+    expect(parsed[0]?.title).toBeUndefined()
+  })
+
   it('parses a well-formed tool', () => {
     expect(
       readTools({

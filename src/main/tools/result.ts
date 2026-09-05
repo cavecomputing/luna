@@ -59,9 +59,19 @@ export function sanitize(input: string): string {
   return input.replace(CSI, '').replace(ESCAPE, '').replace(CONTROLS, '').replace(BIDI, '')
 }
 
+const TRUNCATED = '\n[truncated]'
+
+/**
+ * Cuts text to a budget the marker is part of, not added to.
+ *
+ * A cap that the value overshoots by the length of its own footnote is not a
+ * cap. This one is the ceiling on what reaches the model and on what goes in a
+ * bounded column, so it has to hold exactly.
+ */
 function clip(input: string, max: number): { text: string; truncated: boolean } {
   if (input.length <= max) return { text: input, truncated: false }
-  return { text: `${input.slice(0, max)}\n[truncated]`, truncated: true }
+  const room = Math.max(0, max - TRUNCATED.length)
+  return { text: `${input.slice(0, room)}${TRUNCATED}`, truncated: true }
 }
 
 function partRef(item: Record<string, unknown>): ToolPartRef | undefined {
