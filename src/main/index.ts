@@ -16,6 +16,29 @@ import * as window from './window.js'
 
 let quitting = false
 let launched = false
+/** Set once the servers have actually been stopped, so the retry quit goes through. */
+let stopped = false
+
+/**
+ * A tool source can outlive the app that started it, so ending one is not
+ * instant: close its input, wait, signal, wait, and only then force it. That
+ * cannot happen inside `will-quit`, which does not wait for anything.
+ *
+ * So the first quit is held here, exactly once, and re-issued when the last
+ * server is really gone. The ceiling is ours rather than the servers': a
+ * program that refuses every way of being asked must not be able to keep the
+ * app on screen.
+ */
+const SHUTDOWN_CEILING_MS = 4_000
+
+function stopSources(): Promise<void> {
+  return Promise.race([
+    toolRegistry.stopAll(),
+    new Promise<void>((settle) => {
+      setTimeout(settle, SHUTDOWN_CEILING_MS).unref()
+    }),
+  ])
+}
 
 async function launch(): Promise<void> {
   if (launched) return
@@ -84,9 +107,16 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
   quitting = true
   window.beginQuit()
+  if (stopped) return
+
+  event.preventDefault()
+  void stopSources().finally(() => {
+    stopped = true
+    app.quit()
+  })
 })
 
 app.on('child-process-gone', (_event, details) => {
@@ -96,10 +126,8 @@ app.on('child-process-gone', (_event, details) => {
 // Checkpoints the WAL, so the next launch doesn't replay one.
 app.on('will-quit', () => {
   coordinator.stopAll()
-  // Tool sources are in-process today, so closing them is synchronous and
-  // belongs here. A subprocess source needs a graceful stop that cannot be
-  // awaited from this handler, and will hook into before-quit instead.
-  void toolRegistry.stopAll()
+  // Tool sources are already down: `before-quit` held the quit open until they
+  // were, because a subprocess cannot be ended from here. See stopSources.
   db.close()
 })
 
