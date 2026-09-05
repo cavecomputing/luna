@@ -7,6 +7,7 @@ import { Chat } from './panels/chat.js'
 import { Models, type FlushModels, type RegisterFlush } from './panels/models.js'
 import { Privacy } from './panels/privacy.js'
 import { Providers } from './panels/providers.js'
+import { Servers } from './panels/servers.js'
 import { Tools } from './panels/tools.js'
 import { cx } from '../../lib/cx.js'
 import styles from './settings-app.module.css'
@@ -17,10 +18,12 @@ import { Brush } from '../../ui/icons/brush.js'
 import { Shield } from '../../ui/icons/shield.js'
 import { Info } from '../../ui/icons/info.js'
 import { Bolt } from '../../ui/icons/bolt.js'
+import { Plug } from '../../ui/icons/plug.js'
 
 const icons: Record<SectionId, React.ReactNode> = {
   providers: <Server size={18} />,
   models: <Cube size={18} />,
+  servers: <Plug size={18} />,
   tools: <Bolt size={18} />,
   chat: <ChatBubble size={18} />,
   appearance: <Brush size={18} />,
@@ -84,6 +87,7 @@ export function SettingsApp(): React.JSX.Element {
       <main className={styles.panel} key={active}>
         <div className={styles.drag} />
         {active === 'providers' && <Providers />}
+        {active === 'servers' && <Servers />}
         {active === 'tools' && <Tools />}
         {active === 'models' && <Models registerFlush={registerFlush} />}
         {active === 'chat' && <Chat prefs={prefs} />}
