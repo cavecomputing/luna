@@ -59,6 +59,10 @@ function makeDeps(order: string[] = []): TestDeps {
       note('settleStreams')(undefined)
       return Promise.resolve()
     }),
+    stopSources: vi.fn(() => {
+      note('stopSources')(undefined)
+      return Promise.resolve()
+    }),
     clearPreviews: vi.fn(() => {
       note('clearPreviews')(undefined)
     }),
@@ -134,6 +138,9 @@ describe('deleteAll', () => {
     expect(order).toEqual([
       'stopStreams',
       'settleStreams',
+      // Servers go before the erase. A program Luna started, holding the
+      // variables Luna handed it, must not outlive the row describing it.
+      'stopSources',
       'clearPreviews',
       // Credentials go before the database: a crash between them must not leave
       // a decryptable key on disk with nothing in the app recording it.
@@ -233,5 +240,18 @@ describe('deleteAll', () => {
 
     expect(await deleteAll(d)).toEqual({ ok: true, value: { deleted: true } })
     expect(d.eraseDatabase).toHaveBeenCalled()
+  })
+
+  it('stops every running server before erasing what described it', async () => {
+    const d = makeDeps()
+    await deleteAll(d)
+    expect(d.stopSources).toHaveBeenCalledOnce()
+  })
+
+  it('does not stop a server when the confirmation is cancelled', async () => {
+    const d = makeDeps()
+    d.confirm = vi.fn(() => Promise.resolve(false))
+    await deleteAll(d)
+    expect(d.stopSources).not.toHaveBeenCalled()
   })
 })
