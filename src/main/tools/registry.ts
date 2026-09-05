@@ -1,18 +1,24 @@
 /**
  * What tools exist, and how one gets called.
  *
- * A source is anywhere tools come from. Today there is exactly one, Luna's own
- * built-in server; an MCP server is the same shape reached over a different
- * transport, which is why nothing here assumes the connection is local.
+ * A source is anywhere tools come from: Luna's own built-in server over an
+ * in-process loopback, or an MCP server the user configured, running as a
+ * subprocess. Nothing here knows which is which — that is the whole point of
+ * the transport seam.
+ *
+ * The set of sources changes while the app runs, so it arrives as a function
+ * rather than a list. Connections are lazy and cached, and the cache is the
+ * part that needs care: a cached connection to a dead process is worse than no
+ * connection at all, so a channel that closes evicts itself.
  *
  * The registry deliberately does not decide whether a call is allowed. That is
  * the consent layer's job, and keeping the two apart means a dispatch path can
  * never accidentally become an approval path.
  */
 
+import type { McpEra, McpStatus } from '../../shared/mcp.js'
 import { err, ok, type Result } from '../../shared/result.js'
 import { TOOL_CALL_TIMEOUT_MS, type ToolDefinition } from '../../shared/tools.js'
-import type { McpEra } from '../../shared/mcp.js'
 import { clientFor, handshake, type Client, type ClientInfo } from '../mcp/client.js'
 import { connect, type Connection } from '../rpc/connect.js'
 import { loopback } from '../rpc/loopback.js'
@@ -20,16 +26,50 @@ import type { Transport } from '../rpc/transport.js'
 import { BUILTIN_LABEL, BUILTIN_SOURCE, builtinResponder } from './builtin.js'
 import { failure, readResult, type CallIdentity, type ToolOutcome } from './result.js'
 
+/**
+ * How long one source gets to start, shake hands and list its tools.
+ *
+ * Sources are started in parallel, so this is the ceiling for the whole
+ * catalog rather than a per-source tax. It has to be comfortably above the
+ * era probe's own deadline, since a legacy server spends that before it even
+ * begins.
+ */
+export const DISCOVER_TIMEOUT_MS = 20_000
+
+/**
+ * How long a source that failed to start is left alone.
+ *
+ * Without it, a server that hangs would pay its full deadline on every turn.
+ * The user can clear it at any time from Settings, and any edit to the server
+ * clears it too — this only governs Luna retrying on its own.
+ */
+export const FAILURE_COOLDOWN_MS = 60_000
+
 export type Source = {
   id: string
   label: string
-  /** Built fresh each time the source is started, never shared between starts. */
-  open: () => Transport
+  /**
+   * Built fresh each time the source is started, never shared between starts.
+   *
+   * Asynchronous because a server's credentials come from platform secure
+   * storage, and they are read here — at the moment of spawning — rather than
+   * cached. Decrypted secrets then exist only for as long as it takes to hand
+   * them to the process that needs them.
+   */
+  open: () => Promise<Transport>
   /**
    * A previously determined era for this same configuration, if one is stored.
    * A shortcut past the probe, never a commitment — see `handshake`.
    */
   era?: McpEra
+  /**
+   * Told what the handshake actually concluded, so the next start can skip the
+   * probe. Null when a cached verdict turned out to be wrong and should go.
+   *
+   * The registry has nowhere to write this itself; the source knows where its
+   * configuration lives and the registry deliberately does not.
+   */
+  remember?: (era: McpEra | null) => void
 }
 
 /** Self-reported to every server. Unverified by the protocol, and display-only. */
@@ -42,12 +82,12 @@ export type ToolCall = {
   arguments: string
 }
 
-/** The one source that ships today. */
+/** Luna's own server, always present and never configurable. */
 export function builtinSource(): Source {
   return {
     id: BUILTIN_SOURCE,
     label: BUILTIN_LABEL,
-    open: () => loopback(builtinResponder()),
+    open: () => Promise.resolve(loopback(builtinResponder())),
   }
 }
 
@@ -58,13 +98,55 @@ type Live = {
   tools: ToolDefinition[]
 }
 
+/** What the Settings panel needs to say about a source without asking it. */
+export type SourceState = {
+  status: McpStatus
+  /** Stable code when `status` is 'failed'. */
+  errorCode?: string
+  era?: McpEra
+  version?: string
+  serverName?: string
+  toolCount: number
+}
+
+export type RegistryOptions = {
+  now?: () => number
+  discoverMs?: number
+  cooldownMs?: number
+}
+
 export class Registry {
   private readonly live = new Map<string, Live>()
+  /** In-flight starts, so two callers cannot spawn the same server twice. */
+  private readonly starting = new Map<string, Promise<Result<ToolDefinition[]>>>()
+  private readonly state = new Map<string, SourceState>()
+  /** When a failed source may be tried again. */
+  private readonly cooldown = new Map<string, number>()
 
-  constructor(private readonly sources: readonly Source[]) {}
+  private readonly now: () => number
+  private readonly discoverMs: number
+  private readonly cooldownMs: number
+
+  constructor(
+    private readonly sources: () => readonly Source[],
+    options: RegistryOptions = {},
+  ) {
+    this.now = options.now ?? Date.now
+    this.discoverMs = options.discoverMs ?? DISCOVER_TIMEOUT_MS
+    this.cooldownMs = options.cooldownMs ?? FAILURE_COOLDOWN_MS
+  }
 
   labelOf(source: string): string {
-    return this.sources.find((entry) => entry.id === source)?.label ?? source
+    return this.sources().find((entry) => entry.id === source)?.label ?? source
+  }
+
+  /** Everything currently known about every configured source. */
+  states(): Map<string, SourceState> {
+    const out = new Map<string, SourceState>()
+    for (const source of this.sources()) {
+      out.set(source.id, this.state.get(source.id) ?? { status: 'idle', toolCount: 0 })
+    }
+    return out
   }
 
   /**
@@ -75,41 +157,133 @@ export class Registry {
     const existing = this.live.get(sourceId)
     if (existing !== undefined) return ok(existing.tools)
 
-    const source = this.sources.find((entry) => entry.id === sourceId)
+    const source = this.sources().find((entry) => entry.id === sourceId)
     if (source === undefined) return err('tool/no-source', 'unknown tool source')
 
-    const connection = connect(source.open(), { timeoutMs: TOOL_CALL_TIMEOUT_MS })
-    const started = await connection.start(signal)
-    if (!started.ok) return started
+    // A second caller joins the first attempt rather than starting a rival
+    // process. Two `npx` servers answering the same stdin is not a hypothetical.
+    const running = this.starting.get(sourceId)
+    if (running !== undefined) return running
 
-    const agreed = await handshake(connection.peer, CLIENT_INFO, signal, {
+    const until = this.cooldown.get(sourceId)
+    if (until !== undefined && this.now() < until) {
+      return err('tool/cooling-down', 'source failed recently and is not being retried yet')
+    }
+
+    const attempt = this.start(source, signal).finally(() => {
+      this.starting.delete(sourceId)
+    })
+    this.starting.set(sourceId, attempt)
+    return attempt
+  }
+
+  private async start(source: Source, signal: AbortSignal): Promise<Result<ToolDefinition[]>> {
+    this.state.set(source.id, { status: 'starting', toolCount: 0 })
+
+    const deadline = AbortSignal.any([signal, AbortSignal.timeout(this.discoverMs)])
+
+    let transport: Transport
+    try {
+      transport = await source.open()
+    } catch {
+      // Almost always secure storage refusing to decrypt, which is a real
+      // failure and not one the model should be told about in detail.
+      this.state.set(source.id, {
+        status: 'failed',
+        errorCode: 'tool/no-credentials',
+        toolCount: 0,
+      })
+      this.cooldown.set(source.id, this.now() + this.cooldownMs)
+      return err('tool/no-credentials', 'source credentials were unavailable')
+    }
+
+    const connection = connect(transport, {
+      timeoutMs: TOOL_CALL_TIMEOUT_MS,
+      // A channel that ends takes its cached entry with it, so the next caller
+      // starts a fresh process instead of talking to a corpse.
+      onClose: () => {
+        if (this.live.get(source.id)?.connection !== connection) return
+        this.live.delete(source.id)
+        this.state.set(source.id, { status: 'idle', toolCount: 0 })
+      },
+    })
+
+    const fail = async (code: string): Promise<Result<ToolDefinition[]>> => {
+      await connection.stop(0)
+      this.state.set(source.id, { status: 'failed', errorCode: code, toolCount: 0 })
+      this.cooldown.set(source.id, this.now() + this.cooldownMs)
+      return err(code, 'source could not be started')
+    }
+
+    /** A remembered era that just failed is a wrong answer, so it is dropped. */
+    const forgetEra = (): void => {
+      if (source.era !== undefined) source.remember?.(null)
+    }
+
+    const started = await connection.start(deadline)
+    if (!started.ok) return fail(started.code)
+
+    const agreed = await handshake(connection.peer, CLIENT_INFO, deadline, {
       ...(source.era === undefined ? {} : { cached: source.era }),
     })
     if (!agreed.ok) {
-      await connection.stop(0)
-      return agreed
+      forgetEra()
+      return fail(agreed.code)
     }
+    if (agreed.value.era !== source.era) source.remember?.(agreed.value.era)
 
     const client = clientFor(connection.peer, agreed.value, CLIENT_INFO)
-    const listed = await client.listTools(signal)
-    if (!listed.ok) {
-      await connection.stop(0)
-      return listed
-    }
+    const listed = await client.listTools(deadline)
+    if (!listed.ok) return fail(listed.code)
 
-    this.live.set(sourceId, { connection, client, tools: listed.value })
+    this.live.set(source.id, { connection, client, tools: listed.value })
+    this.cooldown.delete(source.id)
+    this.state.set(source.id, {
+      status: 'ready',
+      era: agreed.value.era,
+      version: agreed.value.version,
+      ...(agreed.value.serverName === undefined ? {} : { serverName: agreed.value.serverName }),
+      toolCount: listed.value.length,
+    })
     return ok(listed.value)
   }
 
-  /** Everything every source offers, paired with where it came from. */
+  /**
+   * Everything every source offers, paired with where it came from.
+   *
+   * Started in parallel. Serially, the first call after launch would cost the
+   * sum of every server's startup, and one slow server would hold up the rest.
+   */
   async catalog(signal: AbortSignal): Promise<{ source: string; definition: ToolDefinition }[]> {
-    const out: { source: string; definition: ToolDefinition }[] = []
-    for (const source of this.sources) {
-      const found = await this.discover(source.id, signal)
-      if (!found.ok) continue
-      for (const definition of found.value) out.push({ source: source.id, definition })
-    }
-    return out
+    const found = await Promise.all(
+      this.sources().map(async (source) => {
+        const listed = await this.discover(source.id, signal)
+        return listed.ok
+          ? listed.value.map((definition) => ({ source: source.id, definition }))
+          : []
+      }),
+    )
+    return found.flat()
+  }
+
+  /**
+   * Drops a source's connection, because its definition changed or it is gone.
+   *
+   * Called by whoever owns the configuration. The registry cannot notice this
+   * on its own — two Source objects built from different rows look identical
+   * from here.
+   */
+  async forget(sourceId: string): Promise<void> {
+    const open = this.live.get(sourceId)
+    this.live.delete(sourceId)
+    this.state.delete(sourceId)
+    this.cooldown.delete(sourceId)
+    if (open !== undefined) await open.connection.stop(1_000)
+  }
+
+  /** Forgets a source and lets it be tried again immediately. */
+  async restart(sourceId: string): Promise<void> {
+    await this.forget(sourceId)
   }
 
   /**
@@ -161,5 +335,3 @@ export class Registry {
     await Promise.allSettled(open.map((entry) => entry.connection.stop(1_000)))
   }
 }
-
-export const toolSources: readonly Source[] = [builtinSource()]

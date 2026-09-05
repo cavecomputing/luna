@@ -14,7 +14,8 @@ import * as db from '../db.js'
 import { id, object, toolName } from '../parse.js'
 import * as grants from '../tool-grants.js'
 import type { Grant } from '../tool-grants.js'
-import { Registry, toolSources } from '../tools/registry.js'
+import { builtinSource, Registry } from '../tools/registry.js'
+import { sourcesFor } from '../mcp/sources.js'
 import type { ToolDefinition } from '../../shared/tools.js'
 import { confirmStanding } from '../tool-consent.js'
 import { broadcast, handle } from './bus.js'
@@ -32,7 +33,13 @@ type Deps = {
   notifyTools: (value: ToolInfo[]) => void
 }
 
-export const registry = new Registry(toolSources)
+/**
+ * Luna's own server plus whatever the user has switched on, resolved fresh each
+ * time the registry asks. A server added, edited or disabled in Settings is in
+ * or out of this list on the very next question — there is no second copy to
+ * keep in step.
+ */
+export const registry = new Registry(() => [builtinSource(), ...sourcesFor()])
 
 const deps: Deps = {
   catalog: (signal) => registry.catalog(signal),

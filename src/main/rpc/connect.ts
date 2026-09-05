@@ -18,7 +18,18 @@ export type Connection = {
   stop: (grace: number) => Promise<void>
 }
 
-export function connect(transport: Transport, options: PeerOptions = {}): Connection {
+export type ConnectOptions = PeerOptions & {
+  /**
+   * Told when the channel ends, however it ended.
+   *
+   * The peer alone cannot say this: it fails the requests that were waiting,
+   * but nobody learns that an idle connection has died. A caller holding one in
+   * a cache needs to know, or it hands out a corpse.
+   */
+  onClose?: (reason: CloseReason) => void
+}
+
+export function connect(transport: Transport, options: ConnectOptions = {}): Connection {
   const framer = new LineFramer()
   const peer = new JsonRpcPeer((line) => {
     transport.send(line)
@@ -38,6 +49,7 @@ export function connect(transport: Transport, options: PeerOptions = {}): Connec
       if (framed.ok) peer.receive(framed.value)
     }
     peer.close(reason.kind === 'exit' ? 'peer exited' : 'channel closed')
+    options.onClose?.(reason)
   })
 
   return {
