@@ -284,9 +284,18 @@ The reason is leverage. Building search by hand first would mean writing a tool 
 once Luna-specific, once standard — and the second write would land after the schema and
 consent model had already hardened around the first.
 
-### v1.1 — MCP server support
+### v1.1 — MCP server support — feature complete, unreleased
 
 Let the user connect Model Context Protocol servers and let the model call their tools.
+
+Everything below is built and works end to end against real servers. It moves to **Shipped**
+when 1.1 is actually released, not before.
+
+Three things the hostile-server suite (`main/mcp/hostile.test.ts`) turned up while proving it:
+a truncated tool result overshot its own cap by the length of the `[truncated]` marker; tool
+descriptions and titles reached both the model and the approval UI without being stripped of
+terminal escapes and bidi overrides; and quitting left a server that ignores EOF and SIGTERM
+running with its parent gone. All three are fixed.
 
 **Depends on:** F1, F2, F3, F4. All four, and F4 is the long pole.
 
@@ -295,7 +304,46 @@ enable, disable) with credentials in platform secure storage; a `mcp_servers` ta
 non-secret metadata; tool discovery and a per-server enable list; the consent surface from F4;
 and the tool loop from F1 wired to dispatch to a server rather than to a built-in.
 
+All of it is built. A stdio server is added in Settings → Servers, started as a subprocess,
+handshaken in either era, and its tools appear in Settings → Tools under the same per-tool
+consent every built-in gets.
+
 **Schema.** Done, in 1.1 development. See **Storage shape for tool calls** under Foundations.
+
+### Server lifecycle — decided
+
+A source is resolved from the database on every question rather than held in a list, so an edit
+in Settings takes effect on the next turn instead of the next launch. Everything else follows
+from a source being someone else's program:
+
+- **Lazy.** A configured server is not spawned until something asks what tools exist. A server
+  the user has switched on but not used costs nothing.
+- **One start at a time.** Two turns wanting a tool at the same moment join the same attempt.
+  Two copies of an `npx` server answering the same stdin is not hypothetical.
+- **Parallel across sources.** Serially, the first turn after launch would cost the sum of every
+  server's startup and one slow server would hold up the rest.
+- **A cooldown after a failure.** A server that hangs costs its discovery deadline once, not
+  every turn. Restart in Settings clears it, and so does any edit.
+- **Eviction on close.** A channel that ends drops its cached connection, because a cached
+  connection to a dead process fails in a way that reads as a broken tool rather than a stopped
+  server.
+- **The quit waits.** Ending a subprocess is close-input, wait, signal, wait, force — which
+  cannot happen in `will-quit`. `before-quit` holds the quit once and re-issues it when the last
+  server is gone, under a ceiling of ours so a program that ignores every signal cannot keep the
+  app on screen.
+
+### Enabling a server — decided
+
+Adding a server writes a row and starts nothing. Enabling one is what commits Luna to executing
+a program, and it arrives on the same IPC channel a compromised renderer can send anything on —
+so `mcp:set-enabled` is a *request*, and a native dialog owned by main is what actually turns it
+on. It shows the whole command line and the names of the variables the server receives, never
+their values. Cancelling succeeds with the server still off, the way declining a standing tool
+grant does. Switching one off never asks: a confirmation there would only train people to click
+through the one that matters.
+
+This is the same rule as the consent model above, one level up. A tool grant says what a running
+program may do; this says whether the program runs at all.
 
 **Transport — decided: stdio subprocesses only, with remote-ready seams.** Stdio is the smaller
 first release and covers most existing servers; remote servers add a network trust boundary and

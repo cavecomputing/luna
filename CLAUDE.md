@@ -50,6 +50,12 @@ Settled behaviour, decided — don't relitigate these while building:
 - **Conversation search is a centered, debounced `CmdOrCtrl+F` dialog**, not a permanently
   visible field. It searches conversation titles and message text, and must not change sidebar
   visibility. Row actions for pin and delete appear on hover and keyboard focus.
+- **An MCP server is added in Settings → Servers, and only main may start one.** A new
+  server is written switched off; enabling it is a *request* over `mcp:set-enabled` that main
+  answers with a native dialog showing the whole command line. Adding a row commits Luna to
+  nothing — running someone else's program is the decision, and it is made in main. The
+  server's environment variables live in `safeStorage` under `mcp-env/`; the renderer learns
+  only which names a server takes and whether something is stored.
 - **Keyboard shortcuts are declared in `shared/keyboard-shortcuts.ts`.** The native menu and
   Keyboard Shortcuts window both read that catalog. Add every future app shortcut there so the
   help window cannot drift out of date.
@@ -159,7 +165,12 @@ editing one type — the compiler then tells you every place that must change.
   A rejected `invoke` loses the error type and leaks stack traces into the renderer.
 - A renderer may revoke standing tool permission but may never create it. Only a native consent
   prompt owned by main may persist an `allow` grant — either the execution-time prompt or the
-  pre-approval one behind the Tools toggle. The renderer asks; main confirms and writes.
+  pre-approval one behind the Tools toggle. The renderer asks; main confirms and writes. The
+  same rule one level up: a renderer may switch an MCP server off, but only a native prompt may
+  switch one on.
+- A tool source id is `builtin` or `mcp:<server id>`. Validate it with `sourceId()`, never
+  `id()` — `id()`'s shape also guards filesystem paths in `secrets.ts`, so widening it to admit
+  the colon would be a security change rather than a convenience.
 
 Full pattern with code: [docs/architecture.md](docs/architecture.md#ipc).
 
@@ -413,6 +424,11 @@ Shared rules:
   `render-process-gone` and `child-process-gone`.
 - Never put a file path, token, or user content in a message shown to the user or sent to a
   crash reporter.
+- **Anything a server says is defanged where it is parsed, not where it is shown.** Tool names,
+  titles, descriptions and results all pass through `sanitize()` on the way in, so every
+  consumer — the model, the transcript, the native approval dialog, the Settings panel — gets
+  the same string. A terminal escape or a bidi override in a tool description is a way to have
+  someone approve text that is not what it appears to be.
 
 ## Privacy and secrets — YOU MUST
 
