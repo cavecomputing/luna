@@ -119,7 +119,17 @@ export function openSettings(): BrowserWindow {
 
   settingsCanClose = false
   win.on('close', (event) => {
-    if (settingsCanClose || win.webContents.isDestroyed() || recoveryWindows.has(win)) return
+    // Never veto during a quit. Electron reads a vetoed close as the quit
+    // being cancelled, and the flush this veto exists for has already had its
+    // turn in `flushSettings`.
+    if (
+      quitting ||
+      settingsCanClose ||
+      win.webContents.isDestroyed() ||
+      recoveryWindows.has(win)
+    ) {
+      return
+    }
     event.preventDefault()
     emit(win.webContents, 'settings:close-requested', undefined)
     settingsCloseTimer ??= setTimeout(() => {
@@ -348,6 +358,38 @@ function showRecovery(win: BrowserWindow): void {
 /** Called from before-quit so renderer teardown cannot reopen a recovery page. */
 export function beginQuit(): void {
   quitting = true
+}
+
+/**
+ * Gives Settings its one chance to persist debounced fields on the way out.
+ *
+ * Normally that chance comes from vetoing the close, but a vetoed close during
+ * a quit is a cancelled quit — which left Luna running with no windows and no
+ * way back to one, since `activate` refuses to build a window once quitting.
+ * So the ask happens here, before the quit reaches any window at all, and
+ * `beginQuit` has already told the close handler to stop vetoing.
+ *
+ * Resolves when Settings is gone or when the wait runs out, whichever is
+ * first. A renderer that cannot answer must not be able to hold the quit.
+ */
+export function flushSettings(ms: number): Promise<void> {
+  const win = settings
+  if (win === undefined || win.isDestroyed() || win.webContents.isDestroyed()) {
+    return Promise.resolve()
+  }
+  return new Promise<void>((settle) => {
+    let done = false
+    const finish = (): void => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      settle()
+    }
+    const timer = setTimeout(finish, ms)
+    timer.unref()
+    win.once('closed', finish)
+    emit(win.webContents, 'settings:close-requested', undefined)
+  })
 }
 
 /** Only a window currently showing the recovery page may restore its target. */

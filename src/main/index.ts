@@ -31,6 +31,9 @@ let stopped = false
  */
 const SHUTDOWN_CEILING_MS = 4_000
 
+/** How long Settings gets to write down whatever it was still holding. */
+const FLUSH_CEILING_MS = 1_500
+
 function stopSources(): Promise<void> {
   return Promise.race([
     toolRegistry.stopAll(),
@@ -113,7 +116,9 @@ app.on('before-quit', (event) => {
   if (stopped) return
 
   event.preventDefault()
-  void stopSources().finally(() => {
+  // Both at once: neither has anything to do with the other, and the quit
+  // should cost the longer of them rather than the sum.
+  void Promise.all([stopSources(), window.flushSettings(FLUSH_CEILING_MS)]).finally(() => {
     stopped = true
     app.quit()
   })
