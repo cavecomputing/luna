@@ -5,6 +5,7 @@
  * missing handler in src/main/ipc and the missing wrapper in src/preload.
  */
 
+import type { McpServerDraft, McpServerInfo } from './mcp.js'
 import type { Prefs } from './prefs.js'
 import type { ToolInfo } from './tools.js'
 import type {
@@ -142,6 +143,30 @@ export type Invocations = {
   'tools:allow-always': { req: { source: string; name: string }; res: ToolInfo[] }
   /** Revokes standing permission so an enabled tool asks before every call. */
   'tools:require-approval': { req: { source: string; name: string }; res: ToolInfo[] }
+  /** Configured MCP servers with their live status. Never their credentials. */
+  'mcp:list': { req: undefined; res: McpServerInfo[] }
+  /** Creates a server, switched off. Enabling it is a separate, confirmed step. */
+  'mcp:create': { req: McpServerDraft; res: McpServerInfo }
+  'mcp:update': { req: { id: string; server: McpServerDraft }; res: McpServerInfo }
+  'mcp:delete': { req: { id: string }; res: undefined }
+  /**
+   * Asks main to start or stop running a server. Turning one on means executing
+   * a program, so main confirms natively first — the renderer requests it and
+   * never decides it. A cancelled prompt succeeds with the server still off.
+   */
+  'mcp:set-enabled': { req: { id: string; enabled: boolean }; res: McpServerInfo }
+  /**
+   * Stores the variables a server is launched with. Null clears them.
+   *
+   * Values travel renderer to main once and are never sent back; the renderer
+   * only ever learns whether something is stored.
+   */
+  'mcp:set-env': {
+    req: { id: string; values: Record<string, string> | null }
+    res: McpServerInfo
+  }
+  /** Drops a live connection and tries the server again now, ignoring cooldown. */
+  'mcp:restart': { req: { id: string }; res: McpServerInfo }
   /** Titles and timestamps only. Message bodies come from chats:messages. */
   'chats:list': { req: undefined; res: ConversationSummary[] }
   /** The messages of one conversation, loaded when it is opened. */
@@ -199,6 +224,8 @@ export type Events = {
   'models:changed': ModelSlots
   /** A tool was enabled, disabled, or re-discovered with a changed definition. */
   'tools:changed': ToolInfo[]
+  /** A server was added, edited, removed, or changed what it is doing. */
+  'mcp:changed': McpServerInfo[]
   'chats:changed': ConversationSummary[]
   'attachments:changed': { conversationId: string; attachments: AttachmentMeta[] }
   /** Attachment rows changed; Settings reloads worker-computed storage totals. */

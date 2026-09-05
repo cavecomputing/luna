@@ -2,6 +2,7 @@ import * as appIpc from './app.js'
 import * as attachmentsIpc from './attachments.js'
 import * as chatIpc from './chat.js'
 import * as chatsIpc from './chats.js'
+import * as mcpIpc from './mcp.js'
 import * as prefsIpc from './prefs.js'
 import * as previewIpc from './preview.js'
 import * as privacyIpc from './privacy.js'
@@ -32,4 +33,5 @@ export function registerAll(): void {
   messagesIpc.register()
   settingsIpc.register()
   toolsIpc.register()
+  mcpIpc.register()
 }

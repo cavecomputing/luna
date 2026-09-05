@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { array, id, object, record, text, toolName } from './parse.js'
+import { array, id, object, record, sourceId, text, toolName } from './parse.js'
 
 describe('object', () => {
   it('returns a plain copy of an object', () => {
@@ -27,6 +27,25 @@ describe('id', () => {
     expect(id('path/traversal')).toBeUndefined()
     expect(id('x'.repeat(65))).toBeUndefined()
     expect(id(7)).toBeUndefined()
+  })
+})
+
+describe('sourceId', () => {
+  it('accepts the built-in source and a prefixed server', () => {
+    expect(sourceId('builtin')).toBe('builtin')
+    expect(sourceId('mcp:0b3f7a2e-9c1d-4e5f-8a6b-2d4e6f8a0c1e')).toBe(
+      'mcp:0b3f7a2e-9c1d-4e5f-8a6b-2d4e6f8a0c1e',
+    )
+  })
+
+  /** Each half is still an id(), so no separator or path segment gets through. */
+  it('rejects anything with a second separator or a path in it', () => {
+    expect(sourceId('mcp:a:b')).toBeUndefined()
+    expect(sourceId('mcp:../secrets')).toBeUndefined()
+    expect(sourceId('mcp:')).toBeUndefined()
+    expect(sourceId(':server')).toBeUndefined()
+    expect(sourceId('')).toBeUndefined()
+    expect(sourceId(7)).toBeUndefined()
   })
 })
 

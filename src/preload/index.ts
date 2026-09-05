@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import type { Channel, EventData, EventName, Req, Res } from '../shared/ipc.js'
 import type { Prefs } from '../shared/prefs.js'
 import type { Result } from '../shared/result.js'
+import type { McpServerDraft } from '../shared/mcp.js'
 import type { Mode, ProviderDraft, SamplerSettings } from '../shared/types.js'
 import type { AttachmentInput } from '../shared/ipc.js'
 
@@ -76,6 +77,17 @@ const api = {
     requireApproval: (source: string, name: string) =>
       invoke('tools:require-approval', { source, name }),
   },
+  mcp: {
+    list: () => invoke('mcp:list', undefined),
+    create: (server: McpServerDraft) => invoke('mcp:create', server),
+    update: (id: string, server: McpServerDraft) => invoke('mcp:update', { id, server }),
+    delete: (id: string) => invoke('mcp:delete', { id }),
+    setEnabled: (id: string, enabled: boolean) => invoke('mcp:set-enabled', { id, enabled }),
+    /** One way. Null clears; nothing ever comes back the other direction. */
+    setEnv: (id: string, values: Record<string, string> | null) =>
+      invoke('mcp:set-env', { id, values }),
+    restart: (id: string) => invoke('mcp:restart', { id }),
+  },
   chats: {
     list: () => invoke('chats:list', undefined),
     messages: (id: string) => invoke('chats:messages', { id }),
@@ -135,6 +147,8 @@ const api = {
     subscribe('models:changed', fn),
   onTools: (fn: (data: EventData<'tools:changed'>) => void) =>
     subscribe('tools:changed', fn),
+  onServers: (fn: (data: EventData<'mcp:changed'>) => void) =>
+    subscribe('mcp:changed', fn),
   onChats: (fn: (data: EventData<'chats:changed'>) => void) =>
     subscribe('chats:changed', fn),
   onAttachments: (fn: (data: EventData<'attachments:changed'>) => void) =>

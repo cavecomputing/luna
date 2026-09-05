@@ -11,7 +11,7 @@
 import { err, ok, type Result } from '../../shared/result.js'
 import { toolKey, type ToolInfo, type ToolPolicy } from '../../shared/tools.js'
 import * as db from '../db.js'
-import { id, object, toolName } from '../parse.js'
+import { object, sourceId, toolName } from '../parse.js'
 import * as grants from '../tool-grants.js'
 import type { Grant } from '../tool-grants.js'
 import { builtinSource, Registry } from '../tools/registry.js'
@@ -96,9 +96,22 @@ export async function listTools(d: Deps = deps): Promise<Result<ToolInfo[]>> {
   return ok(await survey(d, new AbortController().signal))
 }
 
+/**
+ * Re-discovers every source and tells every window what it found.
+ *
+ * Called when the set of servers changes, which the tools domain has no way to
+ * notice: a server the user just switched on is a source that did not exist a
+ * moment ago, and the Tools panel would otherwise sit on a list from before it.
+ */
+export async function refresh(d: Deps = deps): Promise<ToolInfo[]> {
+  const value = await survey(d, new AbortController().signal)
+  d.notifyTools(value)
+  return value
+}
+
 function target(input: unknown): { source: string; name: string } | undefined {
   const req = object(input)
-  const source = id(req?.source)
+  const source = sourceId(req?.source)
   const name = toolName(req?.name)
   return source === undefined || name === undefined ? undefined : { source, name }
 }

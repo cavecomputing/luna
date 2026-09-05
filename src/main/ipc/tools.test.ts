@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ToolDefinition } from '../../shared/tools.js'
 import { toolKey } from '../../shared/tools.js'
 import type { Grant } from '../tool-grants.js'
-import { allowAlways, listTools, requireApproval, setEnabled } from './tools.js'
+import { allowAlways, listTools, refresh, requireApproval, setEnabled } from './tools.js'
 
 /** The deps argument is optional in production, so strip the undefined here. */
 type TestDeps = NonNullable<Parameters<typeof listTools>[0]>
@@ -309,5 +309,65 @@ describe('allowAlways', () => {
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.code).toBe('tool/missing')
     expect(d.confirmStanding).not.toHaveBeenCalled()
+  })
+})
+
+describe('an MCP server as a source', () => {
+  const mcpTool: ToolDefinition = {
+    name: 'search_notes',
+    description: 'Searches notes.',
+    inputSchema: { type: 'object' },
+  }
+
+  function mcpDeps(): TestDeps {
+    return makeDeps({
+      catalog: vi
+        .fn()
+        .mockResolvedValue([{ source: 'mcp:server-1', definition: mcpTool }]),
+      labelOf: vi.fn().mockReturnValue('Notes'),
+    })
+  }
+
+  /**
+   * A server's source id carries a `mcp:` prefix so it can never collide with
+   * the built-in one. The id validator that guards filesystem paths rejects a
+   * colon, which would have made every server tool impossible to switch on.
+   */
+  it('can be enabled through the prefixed source id', async () => {
+    const deps = mcpDeps()
+    // Discovery is what writes the disabled row a grant is then changed on.
+    await listTools(deps)
+    const result = await setEnabled(
+      { source: 'mcp:server-1', name: 'search_notes', enabled: true },
+      deps,
+    )
+
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.value[0]?.enabled).toBe(true)
+  })
+
+  it('still rejects a source id carrying a path', async () => {
+    const result = await setEnabled(
+      { source: 'mcp:../other', name: 'search_notes', enabled: true },
+      mcpDeps(),
+    )
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.code).toBe('tool/invalid')
+  })
+})
+
+describe('refresh', () => {
+  /**
+   * A server switched on in Settings is a source that did not exist a moment
+   * ago. Nothing in the tools domain can notice that on its own.
+   */
+  it('re-discovers and tells every window what tools exist now', async () => {
+    const deps = makeDeps()
+    const value = await refresh(deps)
+
+    expect(deps.catalog).toHaveBeenCalled()
+    expect(deps.notifyTools).toHaveBeenCalledWith(value)
+    expect(value.map((tool) => tool.definition.name)).toEqual(['get_weather'])
   })
 })

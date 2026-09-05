@@ -189,6 +189,51 @@ export async function confirmStanding(
   return await turn.catch(() => false)
 }
 
+/**
+ * Confirms letting a configured server run, before it is ever started.
+ *
+ * Enabling a server is the moment Luna agrees to execute a program somebody
+ * named. That is a larger capability than any single tool grant, and it arrives
+ * over the same untrusted channel — a compromised page can send `mcp:set-enabled`
+ * with a command line of its choosing. So the switch is a request, and a native
+ * box owned by main is what actually turns it on.
+ *
+ * The whole command line is shown, because that is the thing being agreed to.
+ * Variable *names* appear too; their values do not, and never leave main.
+ */
+export async function confirmServer(
+  request: { name: string; command: string; args: readonly string[]; envNames: readonly string[] },
+  d: ConsentDeps = deps,
+): Promise<boolean> {
+  const turn = queue.then(async () => {
+    const line = [request.command, ...request.args].map((part) => flatten(part, 200)).join(' ')
+    const answer = await d.ask({
+      type: 'warning',
+      buttons: ['Cancel', 'Enable server'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      message: `Let Luna run ${flatten(request.name, 128)}?`,
+      detail: [
+        'Luna will start this program on your computer and let the model call the ' +
+          'tools it offers. It runs with your account\u2019s permissions.',
+        '',
+        `Command: ${flatten(line, 1024)}`,
+        request.envNames.length === 0
+          ? ''
+          : `It receives these variables: ${request.envNames.map((name) => flatten(name, 128)).join(', ')}`,
+        '',
+        'Each tool it offers still stays off until you turn that tool on.',
+      ]
+        .filter((entry, index, all) => !(entry === '' && all[index - 1] === ''))
+        .join('\n'),
+    })
+    return answer === 1
+  })
+  queue = turn.catch(() => undefined)
+  return await turn.catch(() => false)
+}
+
 /** Test seam: the module-level queue outlives a single call by design. */
 export function resetQueue(): void {
   queue = Promise.resolve()

@@ -21,6 +21,20 @@ export function text(input: unknown, max: number): string | undefined {
 }
 
 /**
+ * Where a tool came from: `builtin`, or `mcp:` and a server id.
+ *
+ * `id()` cannot do this — its shape also guards filesystem paths in secrets.ts,
+ * and a colon has no business there. The two halves are each an `id()`, so a
+ * source name can still never contain a separator or a path segment.
+ */
+export function sourceId(input: unknown): string | undefined {
+  return typeof input === 'string' &&
+    /^[a-zA-Z0-9_-]{1,64}(:[a-zA-Z0-9_-]{1,64})?$/.test(input)
+    ? input
+    : undefined
+}
+
+/**
  * A tool's name, which is not one of our ids.
  *
  * The Model Context Protocol allows dots and up to 128 characters, so `id()`

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ToolDefinition } from '../shared/tools.js'
 import {
+  confirmServer,
   confirmStanding,
   detailFor,
   hintLine,
@@ -289,6 +290,103 @@ describe('confirmStanding', () => {
 
     const first = requestApproval(request, new AbortController().signal, d)
     const second = confirmStanding(standing, d)
+    await Promise.resolve()
+    release[0]?.()
+    await first
+    await Promise.resolve()
+    release[1]?.()
+    await second
+
+    expect(peak).toBe(1)
+  })
+})
+
+describe('confirmServer', () => {
+  const server = {
+    name: 'Files',
+    command: 'npx',
+    args: ['-y', '@example/files-server', '--root', '/opt/notes'],
+    envNames: ['FILES_TOKEN'],
+  }
+
+  it('enables only when the affirmative button is chosen', async () => {
+    expect(await confirmServer(server, deps(1))).toBe(true)
+    expect(await confirmServer(server, deps(0))).toBe(false)
+  })
+
+  /** Escape must not start somebody else's program. */
+  it('makes cancel the default and the escape answer', async () => {
+    const d = deps(0)
+    await confirmServer(server, d)
+
+    expect(d.ask).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultId: 0, cancelId: 0, type: 'warning', noLink: true }),
+    )
+    const options = d.ask.mock.calls[0]?.[0] as { buttons: string[] }
+    expect(options.buttons[0]).toBe('Cancel')
+  })
+
+  it('shows the whole command line, because that is what is being agreed to', async () => {
+    const d = deps(0)
+    await confirmServer(server, d)
+    const options = d.ask.mock.calls[0]?.[0] as { detail: string; message: string }
+
+    expect(options.detail).toContain('npx -y @example/files-server --root /opt/notes')
+    expect(options.message).toContain('Files')
+  })
+
+  /**
+   * Names, never values. A person needs to know a token is being handed over;
+   * the token itself has no business in a dialog, a screenshot, or a log.
+   */
+  it('names the variables the server receives without showing any value', async () => {
+    const d = deps(0)
+    await confirmServer(server, d)
+    const options = d.ask.mock.calls[0]?.[0] as { detail: string }
+
+    expect(options.detail).toContain('FILES_TOKEN')
+  })
+
+  it('says nothing about variables when the server takes none', async () => {
+    const d = deps(0)
+    await confirmServer({ ...server, envNames: [] }, d)
+    const options = d.ask.mock.calls[0]?.[0] as { detail: string }
+
+    expect(options.detail).not.toContain('variables')
+  })
+
+  /**
+   * A server name is text somebody pasted, and a dialog is plain strings. A
+   * name carrying newlines could otherwise forge lines of its own.
+   */
+  it('flattens a command line that tries to forge extra lines', async () => {
+    const d = deps(0)
+    await confirmServer({ ...server, args: ['--root\nCommand: /bin/sh'] }, d)
+    const options = d.ask.mock.calls[0]?.[0] as { detail: string }
+
+    expect(options.detail).toContain('--root Command: /bin/sh')
+    expect(options.detail.split('\n').filter((line) => line.startsWith('Command:'))).toHaveLength(1)
+  })
+
+  it('shares the one-box-at-a-time queue', async () => {
+    let open = 0
+    let peak = 0
+    const release: (() => void)[] = []
+    const d: ConsentDeps = {
+      ask: () => {
+        open += 1
+        peak = Math.max(peak, open)
+        return new Promise<number>((resolve) => {
+          release.push(() => {
+            open -= 1
+            resolve(0)
+          })
+        })
+      },
+    }
+
+    const first = confirmServer(server, d)
+    const second = confirmServer(server, d)
     await Promise.resolve()
     release[0]?.()
     await first
