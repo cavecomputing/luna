@@ -407,6 +407,53 @@ describe('Registry', () => {
     expect(outcome.step.isError).toBe(true)
   })
 
+  /**
+   * Editing a server while a turn is discovering it. `forget` finds nothing to
+   * drop, because the connection does not exist yet — and the start that was
+   * already running then caches a connection built from the configuration that
+   * was just replaced. The edit silently does not take, and the old process
+   * keeps running.
+   */
+  it('discards a start that finished after the source was forgotten', async () => {
+    const stopped: string[] = []
+    let release: (() => void) | undefined
+    const source: Source = {
+      ...sourceOf(builtinResponder()),
+      open: () =>
+        new Promise<Transport>((settle) => {
+          release = () => {
+            const inner = loopback(builtinResponder())
+            settle({
+              ...inner,
+              stop: async (grace: number) => {
+                stopped.push('stopped')
+                await inner.stop(grace)
+              },
+            })
+          }
+        }),
+    }
+    const registry = new Registry(() => [source])
+
+    const pending = registry.discover('test', live())
+    await Promise.resolve()
+    await registry.forget('test')
+    release?.()
+    await pending
+
+    // Nothing cached from before the edit, and the process that was mid-start
+    // was not simply left running.
+    expect(registry.states().get('test')).toEqual({ status: 'idle', toolCount: 0 })
+    expect(stopped).toEqual(['stopped'])
+
+    const outcome = await registry.call(
+      'test',
+      { callId: 'call-1', name: 'luna_echo', arguments: '{}' },
+      live(),
+    )
+    expect(outcome.step.isError).toBe(true)
+  })
+
   it('closes every connection when stopped', async () => {
     const registry = await ready()
     await registry.stopAll()

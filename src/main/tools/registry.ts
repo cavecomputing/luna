@@ -122,6 +122,15 @@ export class Registry {
   private readonly state = new Map<string, SourceState>()
   /** When a failed source may be tried again. */
   private readonly cooldown = new Map<string, number>()
+  /**
+   * Bumped whenever a source is forgotten, so a start already in flight can
+   * tell that the configuration it was built from is no longer the one.
+   *
+   * `forget` cannot cancel such a start — there is no connection to close yet —
+   * and without this the start would finish and cache a connection to the old
+   * command line, leaving the edit with no effect and the old process running.
+   */
+  private readonly epoch = new Map<string, number>()
 
   private readonly now: () => number
   private readonly discoverMs: number
@@ -178,6 +187,10 @@ export class Registry {
   }
 
   private async start(source: Source, signal: AbortSignal): Promise<Result<ToolDefinition[]>> {
+    const era = this.epoch.get(source.id) ?? 0
+    /** True once this attempt is describing a configuration nobody asked for. */
+    const stale = (): boolean => (this.epoch.get(source.id) ?? 0) !== era
+
     this.state.set(source.id, { status: 'starting', toolCount: 0 })
 
     const deadline = AbortSignal.any([signal, AbortSignal.timeout(this.discoverMs)])
@@ -188,13 +201,23 @@ export class Registry {
     } catch {
       // Almost always secure storage refusing to decrypt, which is a real
       // failure and not one the model should be told about in detail.
-      this.state.set(source.id, {
-        status: 'failed',
-        errorCode: 'tool/no-credentials',
-        toolCount: 0,
-      })
-      this.cooldown.set(source.id, this.now() + this.cooldownMs)
+      if (!stale()) {
+        this.state.set(source.id, {
+          status: 'failed',
+          errorCode: 'tool/no-credentials',
+          toolCount: 0,
+        })
+        this.cooldown.set(source.id, this.now() + this.cooldownMs)
+      }
       return err('tool/no-credentials', 'source credentials were unavailable')
+    }
+
+    // The wait for open() is the widest part of the window: it reads secrets
+    // off disk. A source forgotten during it gets its transport closed rather
+    // than started.
+    if (stale()) {
+      await transport.stop(0)
+      return err('tool/stale', 'source changed while it was starting')
     }
 
     const connection = connect(transport, {
@@ -210,6 +233,9 @@ export class Registry {
 
     const fail = async (code: string): Promise<Result<ToolDefinition[]>> => {
       await connection.stop(0)
+      // A source forgotten mid-start has no failure to report: nobody is
+      // waiting on the configuration this attempt was describing.
+      if (stale()) return err('tool/stale', 'source changed while it was starting')
       this.state.set(source.id, { status: 'failed', errorCode: code, toolCount: 0 })
       this.cooldown.set(source.id, this.now() + this.cooldownMs)
       return err(code, 'source could not be started')
@@ -235,6 +261,11 @@ export class Registry {
     const client = clientFor(connection.peer, agreed.value, CLIENT_INFO)
     const listed = await client.listTools(deadline)
     if (!listed.ok) return fail(listed.code)
+
+    if (stale()) {
+      await connection.stop(1_000)
+      return err('tool/stale', 'source changed while it was starting')
+    }
 
     this.live.set(source.id, { connection, client, tools: listed.value })
     this.cooldown.delete(source.id)
@@ -274,6 +305,10 @@ export class Registry {
    * from here.
    */
   async forget(sourceId: string): Promise<void> {
+    // Before anything else, so a start already in flight sees it and throws
+    // away what it was about to cache.
+    this.epoch.set(sourceId, (this.epoch.get(sourceId) ?? 0) + 1)
+
     const open = this.live.get(sourceId)
     this.live.delete(sourceId)
     this.state.delete(sourceId)
