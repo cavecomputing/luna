@@ -19,16 +19,18 @@ Update it as part of the work, not afterward:
 
 ## Where Luna is now
 
-1.0 is a single-turn chat client. One user message produces exactly one assistant reply, which
-ends in exactly one terminal state (`complete`, `cancelled`, or `error`). The model produces
-text and optional reasoning. It cannot call anything, and Luna cannot run anything on its
-behalf.
+1.1 is a chat client that can act. One user message still produces exactly one assistant reply
+ending in exactly one terminal state (`complete`, `cancelled`, or `error`) — but between the
+request and that reply there is now a bounded loop, and the model can call tools: Luna's own
+built-in, or any the user's MCP servers offer.
 
-That single-turn shape is the main thing the roadmap changes.
+That was the main thing the roadmap set out to change, and it is done. What follows builds on
+it rather than around it.
 
-1.0.2 hardened the backup and recovery paths against silent data loss. Nothing about the
-feature set changed; the relevance here is that the storage layer is now trustworthy enough to
-migrate, which every version below requires.
+Two properties are worth restating because everything below assumes them. **Nothing runs
+without a person having said so**, per tool, in a native prompt owned by main — including the
+decision to run a server at all. And **the storage layer is trustworthy enough to migrate**,
+which 1.0.2 established and every version below requires.
 
 ## Foundations
 
@@ -301,12 +303,13 @@ The reason is leverage. Building search by hand first would mean writing a tool 
 once Luna-specific, once standard — and the second write would land after the schema and
 consent model had already hardened around the first.
 
-### v1.1 — MCP server support — feature complete, unreleased
+### v1.1 — MCP server support — shipped
 
 Let the user connect Model Context Protocol servers and let the model call their tools.
 
-Everything below is built and works end to end against real servers. It moves to **Shipped**
-when 1.1 is actually released, not before.
+Shipped in 1.1.0. The detail below stays here because the decisions it records — the transport
+choice, the server lifecycle, the consent shape — are still the reasons the code looks the way
+it does, and the next transport will need them.
 
 Three things the hostile-server suite (`main/mcp/hostile.test.ts`) turned up while proving it:
 a truncated tool result overshot its own cap by the length of the `[truncated]` marker; tool
@@ -462,3 +465,13 @@ Both of the hardening items listed here previously shipped in 1.0.3. Every file 
   recovery working copies at startup so a crash no longer leaves conversations readable on
   disk until the next erase, and covered `ipc/settings.ts` — including the authorization
   branch deciding which window may close Settings.
+- **1.0.4** — Fixed Responses replay for compatible servers that expose plaintext reasoning.
+  Sending it back as input is rejected, so it is dropped on the way out — in a plain reply, in
+  a tool round, and in the final output of a message that has tool rounds.
+- **1.1.0** — MCP server support. A stdio server is added in Settings → Servers, started as a
+  subprocess under a native prompt that shows the whole command line, handshaken in either era
+  of the protocol, and its tools appear in Settings → Tools under the same per-tool consent
+  every built-in gets. Credentials live in platform secure storage and never reach a renderer.
+  Also the first end-to-end tests (F7), and the three fixes the hostile-server suite turned up:
+  a truncated tool result that overshot its own cap, tool descriptions that reached the approval
+  UI undefanged, and a quit that could leave a server running with its parent gone.

@@ -92,6 +92,10 @@ e2e is Playwright against the **packaged** app, in `e2e/`. Not against `electron
 the parts most likely to break are the ones the dev server replaces — the custom protocol the
 renderer loads over, the asar bundle, and the CSP.
 
+**The suite takes over the keyboard while it runs.** Playwright drives a real Electron window,
+which takes focus; typing during those few seconds goes into the app under test and fails it.
+A failure that looks like flake is usually this. Nothing to fix — just don't type through it.
+
 Two things there are load-bearing, both in `e2e/luna.ts`:
 
 - **Every launch gets a throwaway `userData`.** The database, conversations and provider
