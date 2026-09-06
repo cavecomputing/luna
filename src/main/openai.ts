@@ -5,6 +5,32 @@ import type { ProviderConfig } from './providers.js'
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>
 
+function positive(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 1024
+    ? Math.floor(value)
+    : undefined
+}
+
+/**
+ * The context window, wherever this server happens to put it.
+ *
+ * There is no standard field: OpenAI's own /v1/models omits it entirely, while
+ * OpenRouter puts it at `context_length` and llama.cpp reports `meta.n_ctx`.
+ * Checked in order of how specific each one is — a served window beats the
+ * model's trained maximum, since a server may load a model with less.
+ */
+function contextLength(cell: Record<string, unknown>): number | undefined {
+  const meta = object(cell.meta)
+  const top = object(cell.top_provider)
+  return (
+    positive(cell.context_length) ??
+    positive(top?.context_length) ??
+    positive(cell.context_window) ??
+    positive(meta?.n_ctx) ??
+    positive(meta?.n_ctx_train)
+  )
+}
+
 function model(row: unknown): ProviderModel | undefined {
   const cell = object(row)
   if (cell === undefined || typeof cell.id !== 'string' || cell.id.trim() === '') return undefined
@@ -14,6 +40,8 @@ function model(row: unknown): ProviderModel | undefined {
   if (typeof cell.created === 'number' && Number.isFinite(cell.created)) {
     value.created = cell.created
   }
+  const context = contextLength(cell)
+  if (context !== undefined) value.contextLength = context
   return value
 }
 

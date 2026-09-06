@@ -9,7 +9,13 @@ import {
   type WebContents,
 } from 'electron'
 import { err, ok, type Result } from '../../shared/result.js'
-import type { Conversation, Mode } from '../../shared/types.js'
+import type {
+  Conversation,
+  ConversationSummary,
+  Message,
+  Mode,
+  SearchHit,
+} from '../../shared/types.js'
 import * as chats from '../chats.js'
 import * as jobs from '../attachment-jobs.js'
 import { saveExport } from '../chat-export.js'
@@ -19,7 +25,9 @@ import { id, object, text } from '../parse.js'
 import { broadcast, emit, handle } from './bus.js'
 
 type Deps = {
-  list: () => Conversation[]
+  list: () => ConversationSummary[]
+  messages: (id: string) => Message[]
+  search: (query: string) => SearchHit[]
   get: (id: string) => Conversation | undefined
   create: (id: string, mode: Mode, now: number) => Conversation
   setMode: (id: string, mode: Mode) => Conversation | undefined
@@ -29,7 +37,7 @@ type Deps = {
   remove: (id: string) => boolean
   newId: () => string
   now: () => number
-  notify: (value: Conversation[]) => void
+  notify: (value: ConversationSummary[]) => void
   cancelConversation: (id: string) => void
   confirmDelete: () => Promise<boolean>
   notifyAttachmentStorage: () => void
@@ -99,6 +107,8 @@ async function confirmDelete(): Promise<boolean> {
 
 const deps: Deps = {
   list: chats.load,
+  messages: chats.messages,
+  search: chats.search,
   get: chats.get,
   create: (id, mode, now) => chats.create(db.handle(), id, mode, now),
   setMode: (id, mode) => chats.setMode(db.handle(), id, mode),
@@ -124,21 +134,35 @@ function announce(d: Deps): void {
   d.notify(d.list())
 }
 
-export function listChats(d: Deps): Result<Conversation[]> {
+export function listChats(d: Deps): Result<ConversationSummary[]> {
   return ok(d.list())
 }
 
-export function createChat(input: unknown, d: Deps): Result<Conversation> {
+/** Loaded when a conversation is opened, not when the list changes. */
+export function chatMessages(input: unknown, d: Deps): Result<Message[]> {
+  const conversationId = id(object(input)?.id)
+  if (conversationId === undefined) return err('chat/invalid', 'conversation id was invalid')
+  if (d.get(conversationId) === undefined) return err('chat/missing', 'conversation was not found')
+  return ok(d.messages(conversationId))
+}
+
+export function searchChats(input: unknown, d: Deps): Result<SearchHit[]> {
+  const query = text(object(input)?.query, 512)
+  if (query === undefined) return err('chat/invalid', 'search query was invalid')
+  return ok(d.search(query))
+}
+
+export function createChat(input: unknown, d: Deps): Result<ConversationSummary> {
   const req = object(input)
   if (req === undefined || (req.mode !== 'fast' && req.mode !== 'expert')) {
     return err('chat/invalid', 'conversation mode was invalid')
   }
   const value = d.create(d.newId(), req.mode, d.now())
   announce(d)
-  return ok(value)
+  return ok(chats.summarize(value))
 }
 
-export function updateChatMode(input: unknown, d: Deps): Result<Conversation> {
+export function updateChatMode(input: unknown, d: Deps): Result<ConversationSummary> {
   const req = object(input)
   if (req === undefined) return err('chat/invalid', 'conversation mode update was invalid')
   const chatId = id(req.id)
@@ -148,7 +172,7 @@ export function updateChatMode(input: unknown, d: Deps): Result<Conversation> {
   const value = d.setMode(chatId, req.mode)
   if (value === undefined) return err('chat/missing', 'conversation was not found')
   announce(d)
-  return ok(value)
+  return ok(chats.summarize(value))
 }
 
 export function updateChatDraft(input: unknown, d: Deps): Result<undefined> {
@@ -161,7 +185,7 @@ export function updateChatDraft(input: unknown, d: Deps): Result<undefined> {
   return ok(undefined)
 }
 
-export function updateChatPinned(input: unknown, d: Deps): Result<Conversation> {
+export function updateChatPinned(input: unknown, d: Deps): Result<ConversationSummary> {
   const req = object(input)
   const chatId = id(req?.id)
   if (chatId === undefined || typeof req?.pinned !== 'boolean') {
@@ -170,10 +194,10 @@ export function updateChatPinned(input: unknown, d: Deps): Result<Conversation> 
   const value = d.setPinned(chatId, req.pinned)
   if (value === undefined) return err('chat/missing', 'conversation was not found')
   announce(d)
-  return ok(value)
+  return ok(chats.summarize(value))
 }
 
-export function updateChatTitle(input: unknown, d: Deps): Result<Conversation> {
+export function updateChatTitle(input: unknown, d: Deps): Result<ConversationSummary> {
   const req = object(input)
   const chatId = id(req?.id)
   const title = text(req?.title, 200)
@@ -183,7 +207,7 @@ export function updateChatTitle(input: unknown, d: Deps): Result<Conversation> {
   const value = d.setTitle(chatId, title)
   if (value === undefined) return err('chat/missing', 'conversation was not found')
   announce(d)
-  return ok(value)
+  return ok(chats.summarize(value))
 }
 
 export async function deleteChat(input: unknown, d: Deps): Promise<Result<undefined>> {
@@ -248,6 +272,8 @@ export function setCancelConversation(fn: (id: string) => void): void {
 
 export function register(): void {
   handle('chats:list', () => listChats(deps))
+  handle('chats:messages', (_event, req) => chatMessages(req, deps))
+  handle('chats:search', (_event, req) => searchChats(req, deps))
   handle('chats:create', (_event, req) => createChat(req, deps))
   handle('chats:set-mode', (_event, req) => updateChatMode(req, deps))
   handle('chats:set-draft', (_event, req) => updateChatDraft(req, deps))

@@ -24,6 +24,8 @@ export type ProviderModel = {
   id: string
   ownedBy?: string
   created?: number
+  /** Context window, when the server reports one. Not every server does. */
+  contextLength?: number
 }
 
 /** Optional request-level sampling overrides for one model slot. */
@@ -55,6 +57,10 @@ export const defaultSamplerSettings: SamplerSettings = {
 export type ModelSlot = {
   providerId: string | null
   model: string
+  /** A window the user typed. Overrides whatever the server reported. */
+  contextTokens?: number
+  /** The window this model's server last reported, when it reported one. */
+  detectedContextTokens?: number
   sampling: SamplerSettings
 }
 
@@ -80,6 +86,65 @@ export type AttachmentMeta = {
   size: number
 }
 
+/** What a tool returned besides text. The bytes stay out of the transcript. */
+export type ToolPartKind = 'image' | 'audio' | 'resource' | 'resource_link'
+
+export type ToolPartRef = {
+  kind: ToolPartKind
+  mediaType?: string
+  /** Byte length of the part we chose not to inline. */
+  size?: number
+  /** Present for resource links. Server-supplied, so render it as escaped text. */
+  uri?: string
+}
+
+/**
+ * One tool call and its result, stored on the assistant row that made it.
+ *
+ * `name` is the tool's own name, unprefixed; `source` says who provides it, so
+ * a grant can always be traced back even when two servers export the same name.
+ */
+export type ToolStep = {
+  callId: string
+  source: string
+  name: string
+  /** Argument JSON exactly as the model produced it. Not reformatted. */
+  arguments: string
+  /** Flattened text parts, capped. Everything else is referenced in `parts`. */
+  text: string
+  /** Structured result data, validated whole or dropped. Never partially kept. */
+  structured?: unknown
+  parts?: ToolPartRef[]
+  /** A tool-reported failure, which the model is told about so it can retry. */
+  isError: boolean
+  truncated: boolean
+}
+
+/**
+ * One model response that asked for tools, followed by those tools' results.
+ *
+ * Calls within a round were requested together and may run in parallel. Rounds
+ * themselves are ordered: the model saw every result from one before producing
+ * the next. The assistant row's own `text` remains the final answer after all
+ * rounds have completed.
+ */
+export type ToolRound = {
+  /** Visible text the model emitted alongside this round's calls. */
+  text: string
+  steps: ToolStep[]
+}
+
+/**
+ * Tokens a turn consumed. Absent fields mean the provider reported nothing,
+ * which is different from reporting zero.
+ */
+export type TokenUsage = {
+  inputTokens?: number
+  outputTokens?: number
+  reasoningTokens?: number
+  cachedTokens?: number
+}
+
 export type Message = {
   id: string
   role: Role
@@ -92,9 +157,23 @@ export type Message = {
   /** Epoch milliseconds. Formatting is the renderer's job. */
   at: number
   attachments: AttachmentMeta[]
+  /** Ordered model/tool rounds completed before this assistant answer. */
+  toolRounds?: ToolRound[]
+  /** True when history had to be left out of this turn's request. */
+  trimmed?: boolean
+  /** Summed across every request the turn made, not just the last one. */
+  usage?: TokenUsage
 }
 
-export type Conversation = {
+/**
+ * A conversation without its messages.
+ *
+ * This is what the sidebar, search results, and every `chats:changed`
+ * broadcast carry. Message bodies are fetched for the conversation actually
+ * being read, so the cost of opening one chat does not scale with how many
+ * chats exist.
+ */
+export type ConversationSummary = {
   id: string
   title: string
   /** Unsent composer text, persisted separately for each conversation. */
@@ -104,5 +183,16 @@ export type Conversation = {
   pinned: boolean
   /** Epoch milliseconds of the most recent message. */
   updatedAt: number
+}
+
+/** A summary plus the messages themselves, for the thread being displayed. */
+export type Conversation = ConversationSummary & {
   messages: Message[]
+}
+
+/** One conversation matching a search, with the line that matched. */
+export type SearchHit = {
+  conversation: ConversationSummary
+  /** A window around the first message match. Absent when only the title hit. */
+  excerpt?: string
 }

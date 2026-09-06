@@ -24,6 +24,9 @@ type Deps = {
   drop: (id: string) => boolean
   slots: () => ModelSlots
   setSlot: (slot: Mode, providerId: string | null, model: string) => ModelSlots
+  setContext: (slot: Mode, contextTokens: number | null) => ModelSlots
+  /** Stores context windows a server reported; returns slots only if any moved. */
+  recordDetected: (providerId: string, models: readonly ProviderModel[]) => ModelSlots | undefined
   setSampling: (slot: Mode, sampling: SamplerSettings) => ModelSlots
   hasKey: (id: string) => Promise<boolean>
   readKey: (id: string) => Promise<string | undefined>
@@ -46,6 +49,8 @@ const deps: Deps = {
   drop: providers.drop,
   slots: providers.slots,
   setSlot: providers.setSlot,
+  setContext: providers.setContext,
+  recordDetected: providers.recordDetectedContext,
   setSampling: providers.setSampling,
   hasKey: secrets.has,
   readKey: secrets.read,
@@ -206,7 +211,14 @@ export async function getModels(input: unknown, d: Deps): Promise<Result<Provide
   } catch {
     return err('secret/unavailable', 'secure credential read failed')
   }
-  return d.discover(provider, apiKey)
+  const found = await d.discover(provider, apiKey)
+  // Discovery is the only moment Luna learns a model's real window, so record
+  // it now. Slots pointing elsewhere are untouched.
+  if (found.ok) {
+    const value = d.recordDetected(providerId, found.value)
+    if (value !== undefined) d.notifyModels(value)
+  }
+  return found
 }
 
 export function getSlots(d: Deps): Result<ModelSlots> {
@@ -229,6 +241,22 @@ export function updateSlot(input: unknown, d: Deps): Result<ModelSlots> {
   }
 
   const value = d.setSlot(req.slot, providerId, model)
+  d.notifyModels(value)
+  return ok(value)
+}
+
+/** Bounds match the CHECK on model_slots.context_tokens. */
+export function updateContext(input: unknown, d: Deps): Result<ModelSlots> {
+  const req = object(input)
+  if (req === undefined || (req.slot !== 'fast' && req.slot !== 'expert')) {
+    return err('model/invalid', 'model slot was invalid')
+  }
+  const contextTokens =
+    req.contextTokens === null ? null : bounded(req.contextTokens, 1024, 10_485_760)
+  if (contextTokens === undefined) {
+    return err('model/invalid', 'context window was invalid')
+  }
+  const value = d.setContext(req.slot, contextTokens)
   d.notifyModels(value)
   return ok(value)
 }
@@ -309,5 +337,6 @@ export function register(): void {
   handle('providers:models', (_event, req) => getModels(req, deps))
   handle('models:get', () => getSlots(deps))
   handle('models:set', (_event, req) => updateSlot(req, deps))
+  handle('models:set-context', (_event, req) => updateContext(req, deps))
   handle('models:set-sampling', (_event, req) => updateSampling(req, deps))
 }

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import type { Conversation } from '../../../shared/types.js'
+import type { ConversationSummary as Conversation } from '../../../shared/types.js'
 import styles from './chat-item.module.css'
 import { cx } from '../../lib/cx.js'
 import { IconButton } from '../../ui/icon-button.js'

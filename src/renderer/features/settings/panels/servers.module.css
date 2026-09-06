@@ -1,0 +1,190 @@
+.toolbar,
+.formHead,
+.actions,
+.rowActions {
+  display: flex;
+  align-items: center;
+}
+
+.toolbar {
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding-bottom: var(--s-3);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.count,
+.meta,
+.command,
+.field small,
+.status {
+  color: var(--text-muted);
+  font-size: var(--t-sm);
+}
+
+.primary,
+.secondary,
+.danger {
+  min-height: 32px;
+  padding: 0 var(--s-3);
+  border-radius: var(--r-md);
+  font-size: var(--t-md);
+  font-weight: 600;
+  transition:
+    background var(--fast) var(--ease),
+    transform var(--fast) var(--ease);
+}
+
+.primary:active:not(:disabled),
+.secondary:active:not(:disabled),
+.danger:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.primary {
+  color: var(--accent-on);
+  background: var(--accent);
+}
+
+.primary:hover {
+  background: var(--accent-hover);
+}
+
+.secondary {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.danger {
+  margin-left: auto;
+  color: var(--danger);
+}
+
+.primary:disabled,
+.secondary:disabled,
+.danger:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.list {
+  display: grid;
+  gap: var(--s-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.server {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
+.identity {
+  display: grid;
+  flex: 1;
+  gap: 1px;
+  min-width: 0;
+  text-align: left;
+}
+
+.name {
+  font-weight: 600;
+}
+
+.command {
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowActions {
+  gap: var(--s-2);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.formHead {
+  justify-content: space-between;
+}
+
+.formHead h2 {
+  margin: 0;
+  font-size: var(--t-lg);
+}
+
+.close {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-md);
+  color: var(--text-muted);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.close:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+  font-size: var(--t-md);
+  font-weight: 600;
+}
+
+.field input {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  color: var(--text);
+  background: var(--surface);
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.field small {
+  font-weight: 400;
+}
+
+.secrets {
+  display: grid;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  background: var(--surface-hover);
+}
+
+.status {
+  margin: 0;
+}
+
+.actions {
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  padding-top: var(--s-1);
+}

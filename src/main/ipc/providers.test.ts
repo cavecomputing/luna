@@ -11,6 +11,7 @@ import {
   getSlots,
   listProviders,
   setKey,
+  updateContext,
   updateProvider,
   updateSampling,
   updateSlot,
@@ -65,6 +66,8 @@ function makeDeps(): TestDeps {
       return before !== items.length
     }),
     slots: vi.fn(() => slots),
+    setContext: vi.fn(() => slots),
+    recordDetected: vi.fn(() => undefined),
     setSlot: vi.fn((slot: Mode, providerId: string | null, model: string) => {
       slots = { ...slots, [slot]: { ...slots[slot], providerId, model } }
       return slots
@@ -311,5 +314,42 @@ describe('model IPC actions', () => {
     [{ slot: 'fast', providerId: 'example', model: 42 }],
   ])('returns model/invalid for malformed assignments', (input) => {
     expect(updateSlot(input, makeDeps())).toMatchObject({ ok: false, code: 'model/invalid' })
+  })
+})
+
+describe('updateContext', () => {
+  it('stores a context window for one slot', () => {
+    const d = makeDeps()
+    const result = updateContext({ slot: 'fast', contextTokens: 32_768 }, d)
+
+    expect(result.ok).toBe(true)
+    expect(d.setContext).toHaveBeenCalledWith('fast', 32_768)
+    expect(d.notifyModels).toHaveBeenCalledTimes(1)
+  })
+
+  /** Clearing it returns the slot to Luna's default estimate. */
+  it('accepts null to clear the override', () => {
+    const d = makeDeps()
+    const result = updateContext({ slot: 'expert', contextTokens: null }, d)
+
+    expect(result.ok).toBe(true)
+    expect(d.setContext).toHaveBeenCalledWith('expert', null)
+  })
+
+  it('rejects a window outside the stored bounds or a bad slot', () => {
+    const d = makeDeps()
+    for (const bad of [
+      { slot: 'fast', contextTokens: 512 },
+      { slot: 'fast', contextTokens: 99_999_999 },
+      { slot: 'fast', contextTokens: 'lots' },
+      { slot: 'turbo', contextTokens: 4096 },
+      'nonsense',
+    ]) {
+      const result = updateContext(bad, d)
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.code).toBe('model/invalid')
+    }
+    expect(d.setContext).not.toHaveBeenCalled()
+    expect(d.notifyModels).not.toHaveBeenCalled()
   })
 })

@@ -28,6 +28,8 @@ type TestDeps = Parameters<typeof createChat>[1]
 function makeDeps(): TestDeps {
   let items = [chat()]
   return {
+    messages: vi.fn(() => []),
+    search: vi.fn(() => []),
     list: vi.fn(() => items),
     get: vi.fn((id: string) => items.find((item) => item.id === id)),
     create: vi.fn((id: string, mode: Mode, now: number) => {
@@ -127,19 +129,23 @@ describe('conversation IPC actions', () => {
   it('lists and creates conversations', () => {
     const d = makeDeps()
     expect(listChats(d)).toEqual({ ok: true, value: [chat()] })
-    expect(createChat({ mode: 'expert' }, d)).toMatchObject({
+    const created = createChat({ mode: 'expert' }, d)
+    expect(created).toMatchObject({
       ok: true,
       value: { id: 'chat-new', mode: 'expert' },
     })
+    if (created.ok) expect(created.value).not.toHaveProperty('messages')
     expect(d.notify).toHaveBeenCalledTimes(1)
   })
 
   it('updates mode, title, and pin state', () => {
     const d = makeDeps()
-    expect(updateChatMode({ id: 'chat-1', mode: 'expert' }, d)).toMatchObject({
+    const updated = updateChatMode({ id: 'chat-1', mode: 'expert' }, d)
+    expect(updated).toMatchObject({
       ok: true,
       value: { mode: 'expert' },
     })
+    if (updated.ok) expect(updated.value).not.toHaveProperty('messages')
     expect(updateChatPinned({ id: 'chat-1', pinned: true }, d)).toMatchObject({
       ok: true,
       value: { pinned: true },

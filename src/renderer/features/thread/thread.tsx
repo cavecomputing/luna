@@ -4,6 +4,7 @@ import { Greeting } from './greeting.js'
 import { Message } from './message.js'
 import styles from './thread.module.css'
 import { followStep, isNearBottom } from './scroll-follow.js'
+import { conversationTokens, formatTokens } from './usage.js'
 
 type Props = {
   chat: Conversation | undefined
@@ -23,6 +24,7 @@ export function Thread({ chat, expandThinking }: Props): React.JSX.Element {
   // Messages past this count arrived after mount, so they get an entrance.
   // History loaded from disk mounts with the thread and stays still.
   const [mountedCount] = useState(count)
+  const total = conversationTokens(chat?.messages ?? [])
 
   useEffect(() => {
     end.current?.scrollIntoView({ block: 'end' })
@@ -98,6 +100,10 @@ export function Thread({ chat, expandThinking }: Props): React.JSX.Element {
               expandThinking={expandThinking}
             />
           ))}
+
+          {total !== undefined && (
+            <p className={styles.total}>{formatTokens(total)} tokens in this conversation</p>
+          )}
 
           <div ref={end} />
         </div>

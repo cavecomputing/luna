@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ProviderConfig } from './providers.js'
 import { defaultSamplerSettings } from '../shared/types.js'
 import { requestBody, streamChat, type ChatRequest } from './chat-api.js'
+import type { ToolStep } from '../shared/types.js'
+import type { ToolDefinition } from '../shared/tools.js'
 
 const provider: ProviderConfig = {
   id: 'openai',
@@ -451,5 +453,584 @@ describe('streamChat', () => {
     expect(
       await streamChat(request('chat-completions'), new AbortController().signal, () => undefined, fetcher),
     ).toMatchObject({ ok: false, code: 'chat/stream-ended' })
+  })
+})
+
+describe('tool calling', () => {
+  const echo: ToolDefinition = {
+    name: 'luna_echo',
+    description: 'Echoes text.',
+    inputSchema: { type: 'object', properties: { text: { type: 'string' } } },
+  }
+
+  const step: ToolStep = {
+    callId: 'call_1',
+    source: 'builtin',
+    name: 'luna_echo',
+    arguments: '{"text":"hi"}',
+    text: 'hi',
+    isError: false,
+    truncated: false,
+  }
+
+  function bare(api: ProviderConfig['api']): ChatRequest {
+    return {
+      provider: { ...provider, api },
+      model: 'model-1',
+      systemPrompt: '',
+      history: [],
+      sampling: { ...defaultSamplerSettings },
+    }
+  }
+
+  describe('request body', () => {
+    /** With no tools enabled the request must be byte-identical to before. */
+    it('adds nothing at all when there are no tools', () => {
+      expect(requestBody(request('responses'))).not.toHaveProperty('tools')
+      expect(requestBody(request('chat-completions'))).not.toHaveProperty('tools')
+      expect(requestBody(request('chat-completions'))).not.toHaveProperty('stream_options')
+    })
+
+    it('describes a tool in the Chat Completions shape', () => {
+      const body = requestBody({ ...bare('chat-completions'), tools: [echo] })
+      expect(body.tools).toEqual([
+        {
+          type: 'function',
+          function: {
+            name: 'luna_echo',
+            description: 'Echoes text.',
+            parameters: echo.inputSchema,
+          },
+        },
+      ])
+      expect(body.stream_options).toEqual({ include_usage: true })
+    })
+
+    it('describes a tool in the Responses shape', () => {
+      const body = requestBody({ ...bare('responses'), tools: [echo] })
+      expect(body.tools).toEqual([
+        {
+          type: 'function',
+          name: 'luna_echo',
+          description: 'Echoes text.',
+          parameters: echo.inputSchema,
+        },
+      ])
+    })
+  })
+
+  describe('replaying stored rounds', () => {
+    const secondStep: ToolStep = {
+      ...step,
+      callId: 'call_2',
+      arguments: '{"text":"again"}',
+      text: 'again',
+    }
+
+    it('preserves two Chat Completions rounds before the final answer', () => {
+      const body = requestBody({
+        ...bare('chat-completions'),
+        history: [
+          {
+            id: 'a1',
+            role: 'assistant',
+            text: 'Both checks passed.',
+            status: 'complete',
+            at: 1,
+            attachments: [],
+            toolRounds: [
+              { text: 'First check.', steps: [step] },
+              { text: 'Second check.', steps: [secondStep] },
+            ],
+          },
+        ],
+      })
+      expect(body.messages).toEqual([
+        {
+          role: 'assistant',
+          content: 'First check.',
+          tool_calls: [
+            { id: 'call_1', type: 'function', function: { name: 'luna_echo', arguments: '{"text":"hi"}' } },
+          ],
+        },
+        { role: 'tool', tool_call_id: 'call_1', content: 'hi' },
+        {
+          role: 'assistant',
+          content: 'Second check.',
+          tool_calls: [
+            {
+              id: 'call_2',
+              type: 'function',
+              function: { name: 'luna_echo', arguments: '{"text":"again"}' },
+            },
+          ],
+        },
+        { role: 'tool', tool_call_id: 'call_2', content: 'again' },
+        { role: 'assistant', content: 'Both checks passed.' },
+      ])
+    })
+
+    it('interleaves exact Responses rounds and final provider output', () => {
+      const firstItems = [
+        { type: 'reasoning', encrypted_content: 'encrypted-first' },
+        { type: 'function_call', call_id: 'call_1', name: 'luna_echo' },
+      ]
+      const secondItems = [
+        { type: 'reasoning', encrypted_content: 'encrypted-second' },
+        { type: 'function_call', call_id: 'call_2', name: 'luna_echo' },
+      ]
+      const finalItems = [{ type: 'message', role: 'assistant', content: 'Both checks passed.' }]
+      const body = requestBody({
+        ...bare('responses'),
+        history: [
+          {
+            id: 'a1',
+            role: 'assistant',
+            text: 'Both checks passed.',
+            status: 'complete',
+            at: 1,
+            attachments: [],
+            providerApi: 'responses',
+            providerId: 'openai',
+            providerItems: finalItems,
+            toolRounds: [
+              { text: 'First check.', steps: [step], providerItems: firstItems },
+              { text: 'Second check.', steps: [secondStep], providerItems: secondItems },
+            ],
+          },
+        ],
+      })
+      expect(body.input).toEqual([
+        ...firstItems,
+        { type: 'function_call_output', call_id: 'call_1', output: 'hi' },
+        ...secondItems,
+        { type: 'function_call_output', call_id: 'call_2', output: 'again' },
+        ...finalItems,
+      ])
+    })
+
+    /**
+     * The same rule as a plain reply, one level down. A tool round's stored
+     * output is replayed as input too, so a compatible server's plaintext
+     * reasoning has to be dropped there as well — a provider rejects it
+     * whichever list it arrives in.
+     */
+    it('omits plaintext reasoning from a replayed tool round', () => {
+      const roundItems = [
+        { type: 'reasoning', content: [{ type: 'reasoning_text', text: 'Thinking aloud.' }] },
+        { type: 'function_call', call_id: 'call_1', name: 'luna_echo' },
+      ]
+      const finalItems = [
+        { type: 'reasoning', encrypted_content: '' },
+        { type: 'message', role: 'assistant', content: 'Checked.' },
+      ]
+      const body = requestBody({
+        ...bare('responses'),
+        history: [
+          {
+            id: 'a1',
+            role: 'assistant',
+            text: 'Checked.',
+            status: 'complete',
+            at: 1,
+            attachments: [],
+            providerApi: 'responses',
+            providerId: 'openai',
+            providerItems: finalItems,
+            toolRounds: [{ text: 'First check.', steps: [step], providerItems: roundItems }],
+          },
+        ],
+      })
+
+      expect(body.input).toEqual([
+        { type: 'function_call', call_id: 'call_1', name: 'luna_echo' },
+        { type: 'function_call_output', call_id: 'call_1', output: 'hi' },
+        { type: 'message', role: 'assistant', content: 'Checked.' },
+      ])
+    })
+
+    it('keeps encrypted reasoning in a replayed tool round', () => {
+      const roundItems = [
+        { type: 'reasoning', encrypted_content: 'encrypted-round' },
+        { type: 'function_call', call_id: 'call_1', name: 'luna_echo' },
+      ]
+      const body = requestBody({
+        ...bare('responses'),
+        history: [
+          {
+            id: 'a1',
+            role: 'assistant',
+            text: 'Checked.',
+            status: 'complete',
+            at: 1,
+            attachments: [],
+            providerApi: 'responses',
+            providerId: 'openai',
+            providerItems: [{ type: 'message', role: 'assistant', content: 'Checked.' }],
+            toolRounds: [{ text: 'First check.', steps: [step], providerItems: roundItems }],
+          },
+        ],
+      })
+
+      expect(body.input).toEqual([
+        ...roundItems,
+        { type: 'function_call_output', call_id: 'call_1', output: 'hi' },
+        { type: 'message', role: 'assistant', content: 'Checked.' },
+      ])
+    })
+
+    it('synthesizes round chronology when the Responses provider changes', () => {
+      const body = requestBody({
+        ...bare('responses'),
+        history: [
+          {
+            id: 'a1',
+            role: 'assistant',
+            text: 'Both checks passed.',
+            status: 'complete',
+            at: 1,
+            attachments: [],
+            providerApi: 'responses',
+            providerId: 'someone-else',
+            providerItems: [{ type: 'message', content: 'provider-private' }],
+            toolRounds: [
+              {
+                text: 'First check.',
+                steps: [step],
+                providerItems: [{ type: 'function_call', call_id: 'call_1' }],
+              },
+              { text: 'Second check.', steps: [secondStep] },
+            ],
+          },
+        ],
+      })
+      expect(body.input).toEqual([
+        { role: 'assistant', content: 'First check.' },
+        { type: 'function_call', call_id: 'call_1', name: 'luna_echo', arguments: '{"text":"hi"}' },
+        { type: 'function_call_output', call_id: 'call_1', output: 'hi' },
+        { role: 'assistant', content: 'Second check.' },
+        {
+          type: 'function_call',
+          call_id: 'call_2',
+          name: 'luna_echo',
+          arguments: '{"text":"again"}',
+        },
+        { type: 'function_call_output', call_id: 'call_2', output: 'again' },
+        { role: 'assistant', content: 'Both checks passed.' },
+      ])
+    })
+
+    it('carries exact mid-turn Responses output into the next request', () => {
+      const providerItems = [
+        { type: 'reasoning', encrypted_content: 'encrypted-pending' },
+        { type: 'function_call', call_id: 'call_1', name: 'luna_echo' },
+      ]
+      const body = requestBody({
+        ...bare('responses'),
+        pendingRounds: [{ text: 'Working on it.', steps: [step], providerItems }],
+      })
+      expect(body.input).toEqual([
+        ...providerItems,
+        { type: 'function_call_output', call_id: 'call_1', output: 'hi' },
+      ])
+    })
+
+    it('carries mid-turn Chat Completions rounds not yet in the database', () => {
+      const body = requestBody({
+        ...bare('chat-completions'),
+        pendingRounds: [{ text: 'Working on it.', steps: [step] }],
+      })
+      expect(body.messages).toEqual([
+        {
+          role: 'assistant',
+          content: 'Working on it.',
+          tool_calls: [
+            { id: 'call_1', type: 'function', function: { name: 'luna_echo', arguments: '{"text":"hi"}' } },
+          ],
+        },
+        { role: 'tool', tool_call_id: 'call_1', content: 'hi' },
+      ])
+    })
+  })
+})
+
+describe('tool call accumulation', () => {
+  const noop = (): void => undefined
+
+  async function run(api: ProviderConfig['api'], parts: string[]) {
+    const fetcher = vi.fn().mockResolvedValue(sse(parts))
+    const req: ChatRequest = {
+      provider: { ...provider, api },
+      model: 'model-1',
+      systemPrompt: '',
+      history: [],
+      sampling: { ...defaultSamplerSettings },
+    }
+    return await streamChat(req, new AbortController().signal, noop, fetcher)
+  }
+
+  describe('Responses', () => {
+    it('assembles arguments split mid-token across three chunks', async () => {
+      const result = await run('responses', [
+        'data: {"type":"response.output_item.added","output_index":0,',
+        '"item":{"id":"fc_1","type":"function_call","call_id":"call_1","name":"luna_echo"}}\n\n',
+        'data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","delta":"{\\"te'
+        , 'xt\\":\\"hel',
+        'lo\\"}"}\n\n',
+        'data: {"type":"response.completed","response":{"output":[]}}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.value.toolCalls).toEqual([
+        { callId: 'call_1', name: 'luna_echo', arguments: '{"text":"hello"}' },
+      ])
+    })
+
+    /** A delta can beat the item that names it. */
+    it('backfills the name when output_item.added arrives after the first delta', async () => {
+      const result = await run('responses', [
+        'data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","delta":"{}"}\n\n',
+        'data: {"type":"response.output_item.added","output_index":0,"item":{"id":"fc_1",',
+        '"type":"function_call","call_id":"call_9","name":"late_name"}}\n\n',
+        'data: {"type":"response.completed","response":{"output":[]}}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.value.toolCalls).toEqual([
+        { callId: 'call_9', name: 'late_name', arguments: '{}' },
+      ])
+    })
+
+    it('keeps two concurrent calls apart by output index', async () => {
+      const result = await run('responses', [
+        'data: {"type":"response.output_item.added","output_index":0,"item":{"id":"a","type":"function_call","call_id":"c1","name":"first"}}\n\n',
+        'data: {"type":"response.output_item.added","output_index":1,"item":{"id":"b","type":"function_call","call_id":"c2","name":"second"}}\n\n',
+        'data: {"type":"response.function_call_arguments.delta","item_id":"b","delta":"{\\"b\\":2}"}\n\n',
+        'data: {"type":"response.function_call_arguments.delta","item_id":"a","delta":"{\\"a\\":1}"}\n\n',
+        'data: {"type":"response.completed","response":{"output":[]}}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.value.toolCalls).toEqual([
+        { callId: 'c1', name: 'first', arguments: '{"a":1}' },
+        { callId: 'c2', name: 'second', arguments: '{"b":2}' },
+      ])
+    })
+
+    it('uses the whole-value done form only when nothing accumulated', async () => {
+      const result = await run('responses', [
+        'data: {"type":"response.output_item.added","output_index":0,"item":{"id":"a","type":"function_call","call_id":"c1","name":"f"}}\n\n',
+        'data: {"type":"response.function_call_arguments.done","item_id":"a","arguments":"{\\"whole\\":1}"}\n\n',
+        'data: {"type":"response.completed","response":{"output":[]}}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.value.toolCalls?.[0]?.arguments).toBe('{"whole":1}')
+    })
+
+    it('does not overwrite accumulated arguments with the done form', async () => {
+      const result = await run('responses', [
+        'data: {"type":"response.output_item.added","output_index":0,"item":{"id":"a","type":"function_call","call_id":"c1","name":"f"}}\n\n',
+        'data: {"type":"response.function_call_arguments.delta","item_id":"a","delta":"{\\"streamed\\":1}"}\n\n',
+        'data: {"type":"response.function_call_arguments.done","item_id":"a","arguments":"{\\"whole\\":2}"}\n\n',
+        'data: {"type":"response.completed","response":{"output":[]}}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.value.toolCalls?.[0]?.arguments).toBe('{"streamed":1}')
+    })
+
+    it('recovers a call that only appeared in the final output array', async () => {
+      const result = await run('responses', [
+        'data: {"type":"response.completed","response":{"output":[',
+        '{"id":"fc_9","type":"function_call","call_id":"c9","name":"swept","arguments":"{}"}]}}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.value.toolCalls?.[0]?.name).toBe('swept')
+    })
+
+    it('keeps two final-only calls to the same function distinct and ordered', async () => {
+      const result = await run('responses', [
+        'data: {"type":"response.completed","response":{"output":[',
+        '{"id":"fc_1","type":"function_call","call_id":"c1","name":"repeat","arguments":"{\\"n\\":1}"},',
+        '{"id":"fc_2","type":"function_call","call_id":"c2","name":"repeat","arguments":"{\\"n\\":2}"}]}}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.value.toolCalls).toEqual([
+        { callId: 'c1', name: 'repeat', arguments: '{"n":1}' },
+        { callId: 'c2', name: 'repeat', arguments: '{"n":2}' },
+      ])
+    })
+
+    it('merges a streamed call by call ID without dropping a same-name final call', async () => {
+      const result = await run('responses', [
+        'data: {"type":"response.output_item.added","output_index":0,"item":',
+        '{"type":"function_call","call_id":"c1","name":"repeat"}}\n\n',
+        'data: {"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\\"n\\":1}"}\n\n',
+        'data: {"type":"response.completed","response":{"output":[',
+        '{"id":"fc_1","type":"function_call","call_id":"c1","name":"repeat","arguments":"{\\"n\\":1}"},',
+        '{"id":"fc_2","type":"function_call","call_id":"c2","name":"repeat","arguments":"{\\"n\\":2}"}]}}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.value.toolCalls).toEqual([
+        { callId: 'c1', name: 'repeat', arguments: '{"n":1}' },
+        { callId: 'c2', name: 'repeat', arguments: '{"n":2}' },
+      ])
+    })
+
+    it('uses output index when the streamed call has no provider identifiers', async () => {
+      const result = await run('responses', [
+        'data: {"type":"response.output_item.added","output_index":0,"item":',
+        '{"type":"function_call","name":"indexed"}}\n\n',
+        'data: {"type":"response.function_call_arguments.delta","output_index":0,"delta":"{}"}\n\n',
+        'data: {"type":"response.completed","response":{"output":[',
+        '{"id":"fc_1","type":"function_call","call_id":"c1","name":"indexed","arguments":"{}"}]}}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.value.toolCalls).toEqual([
+        { callId: 'c1', name: 'indexed', arguments: '{}' },
+      ])
+    })
+
+    it('reads token usage from the completed event', async () => {
+      const result = await run('responses', [
+        'data: {"type":"response.completed","response":{"output":[],"usage":',
+        '{"input_tokens":120,"output_tokens":40,"output_tokens_details":{"reasoning_tokens":8},',
+        '"input_tokens_details":{"cached_tokens":100}}}}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.value.usage).toEqual({
+          inputTokens: 120,
+          outputTokens: 40,
+          reasoningTokens: 8,
+          cachedTokens: 100,
+        })
+      }
+    })
+
+    it('ignores fractional and unsafe token counts from a provider', async () => {
+      const result = await run('responses', [
+        'data: {"type":"response.completed","response":{"output":[],"usage":',
+        '{"input_tokens":1.5,"output_tokens":9007199254740992}}}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.value.usage).toBeUndefined()
+    })
+  })
+
+  describe('Chat Completions', () => {
+    it('assembles fragments keyed by index with id and name on the first only', async () => {
+      const result = await run('chat-completions', [
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1",',
+        '"function":{"name":"luna_echo","arguments":"{\\"te"}}]}}]}\n\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"xt\\":1}"}}]}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.value.toolCalls).toEqual([
+        { callId: 'call_1', name: 'luna_echo', arguments: '{"text":1}' },
+      ])
+    })
+
+    it('synthesizes distinct call ids when a compatible server omits them', async () => {
+      const result = await run('chat-completions', [
+        'data: {"choices":[{"delta":{"tool_calls":[',
+        '{"index":0,"function":{"name":"repeat","arguments":"{\\"n\\":1}"}},',
+        '{"index":1,"function":{"name":"repeat","arguments":"{\\"n\\":2}"}}',
+        ']},"finish_reason":"tool_calls"}]}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.value.toolCalls).toEqual([
+        { callId: 'luna_call_0', name: 'repeat', arguments: '{"n":1}' },
+        { callId: 'luna_call_1', name: 'repeat', arguments: '{"n":2}' },
+      ])
+    })
+
+    /** Regression guard: finish_reason already ended the stream before tools. */
+    it('treats tool_calls as a finishing reason', async () => {
+      const result = await run('chat-completions', [
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c","function":{"name":"f","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}\n\n',
+      ])
+      expect(result.ok).toBe(true)
+    })
+
+    it('reads usage from a final chunk whose choices array is empty', async () => {
+      const result = await run('chat-completions', [
+        'data: {"choices":[{"delta":{"content":"hi"},"finish_reason":"stop"}]}\n\n',
+        'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":3}}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.value.usage).toEqual({ inputTokens: 10, outputTokens: 3 })
+    })
+  })
+
+  describe('failure during accumulation', () => {
+    it('reports a provider error rather than a half-built call', async () => {
+      const result = await run('responses', [
+        'data: {"type":"response.output_item.added","output_index":0,"item":{"id":"a","type":"function_call","call_id":"c","name":"f"}}\n\n',
+        'data: {"type":"response.function_call_arguments.delta","item_id":"a","delta":"{\\"half"}\n\n',
+        'data: {"type":"response.failed"}\n\n',
+      ])
+
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.code).toBe('chat/provider')
+    })
+
+    it('cancels mid-accumulation', async () => {
+      const controller = new AbortController()
+      const fetcher = vi.fn().mockImplementation(() => {
+        controller.abort()
+        return Promise.reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+      })
+      const result = await streamChat(
+        {
+          provider: { ...provider, api: 'responses' },
+          model: 'model-1',
+          systemPrompt: '',
+          history: [],
+          sampling: { ...defaultSamplerSettings },
+        },
+        controller.signal,
+        noop,
+        fetcher,
+      )
+
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.code).toBe('chat/cancelled')
+    })
+
+    /**
+     * Malformed argument JSON is the model's mistake, not a broken stream. It
+     * comes back intact so the dispatcher can turn it into a tool error the
+     * model can retry against.
+     */
+    it('returns malformed argument JSON as-is rather than failing the stream', async () => {
+      const result = await run('responses', [
+        'data: {"type":"response.output_item.added","output_index":0,"item":{"id":"a","type":"function_call","call_id":"c","name":"f"}}\n\n',
+        'data: {"type":"response.function_call_arguments.delta","item_id":"a","delta":"{not json"}\n\n',
+        'data: {"type":"response.completed","response":{"output":[]}}\n\n',
+      ])
+
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.value.toolCalls?.[0]?.arguments).toBe('{not json')
+    })
   })
 })

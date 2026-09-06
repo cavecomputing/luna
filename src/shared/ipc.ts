@@ -5,10 +5,13 @@
  * missing handler in src/main/ipc and the missing wrapper in src/preload.
  */
 
+import type { McpServerDraft, McpServerInfo } from './mcp.js'
 import type { Prefs } from './prefs.js'
+import type { ToolInfo } from './tools.js'
 import type {
   AttachmentMeta,
-  Conversation,
+  ConversationSummary,
+  SearchHit,
   Message,
   ModelSlots,
   Mode,
@@ -55,9 +58,11 @@ export type AttachmentCleanup = {
 }
 
 export type ChatStart = {
-  conversation: Conversation
+  conversation: ConversationSummary
   userMessageId: string
   assistantMessageId: string
+  /** The two rows persisted for this turn, so the open thread can paint immediately. */
+  messages: Message[]
 }
 
 export type ChatDelta = {
@@ -119,16 +124,60 @@ export type Invocations = {
     req: { slot: Mode; providerId: string | null; model: string }
     res: ModelSlots
   }
+  /** Null clears the override and returns the slot to Luna's default estimate. */
+  'models:set-context': {
+    req: { slot: Mode; contextTokens: number | null }
+    res: ModelSlots
+  }
   'models:set-sampling': {
     req: { slot: Mode; sampling: SamplerSettings }
     res: ModelSlots
   }
-  'chats:list': { req: undefined; res: Conversation[] }
-  'chats:create': { req: { mode: Mode }; res: Conversation }
-  'chats:set-mode': { req: { id: string; mode: Mode }; res: Conversation }
+  /** Connects to every tool source and returns the catalog with its grants. */
+  'tools:list': { req: undefined; res: ToolInfo[] }
+  'tools:set-enabled': { req: { source: string; name: string; enabled: boolean }; res: ToolInfo[] }
+  /**
+   * Asks main to grant standing permission. Main confirms natively first, so
+   * the renderer requests the grant but never creates it.
+   */
+  'tools:allow-always': { req: { source: string; name: string }; res: ToolInfo[] }
+  /** Revokes standing permission so an enabled tool asks before every call. */
+  'tools:require-approval': { req: { source: string; name: string }; res: ToolInfo[] }
+  /** Configured MCP servers with their live status. Never their credentials. */
+  'mcp:list': { req: undefined; res: McpServerInfo[] }
+  /** Creates a server, switched off. Enabling it is a separate, confirmed step. */
+  'mcp:create': { req: McpServerDraft; res: McpServerInfo }
+  'mcp:update': { req: { id: string; server: McpServerDraft }; res: McpServerInfo }
+  'mcp:delete': { req: { id: string }; res: undefined }
+  /**
+   * Asks main to start or stop running a server. Turning one on means executing
+   * a program, so main confirms natively first — the renderer requests it and
+   * never decides it. A cancelled prompt succeeds with the server still off.
+   */
+  'mcp:set-enabled': { req: { id: string; enabled: boolean }; res: McpServerInfo }
+  /**
+   * Stores the variables a server is launched with. Null clears them.
+   *
+   * Values travel renderer to main once and are never sent back; the renderer
+   * only ever learns whether something is stored.
+   */
+  'mcp:set-env': {
+    req: { id: string; values: Record<string, string> | null }
+    res: McpServerInfo
+  }
+  /** Drops a live connection and tries the server again now, ignoring cooldown. */
+  'mcp:restart': { req: { id: string }; res: McpServerInfo }
+  /** Titles and timestamps only. Message bodies come from chats:messages. */
+  'chats:list': { req: undefined; res: ConversationSummary[] }
+  /** The messages of one conversation, loaded when it is opened. */
+  'chats:messages': { req: { id: string }; res: Message[] }
+  /** Searches titles and message text in SQLite rather than in the renderer. */
+  'chats:search': { req: { query: string }; res: SearchHit[] }
+  'chats:create': { req: { mode: Mode }; res: ConversationSummary }
+  'chats:set-mode': { req: { id: string; mode: Mode }; res: ConversationSummary }
   'chats:set-draft': { req: { id: string; draft: string }; res: undefined }
-  'chats:set-pinned': { req: { id: string; pinned: boolean }; res: Conversation }
-  'chats:rename': { req: { id: string; title: string }; res: Conversation }
+  'chats:set-pinned': { req: { id: string; pinned: boolean }; res: ConversationSummary }
+  'chats:rename': { req: { id: string; title: string }; res: ConversationSummary }
   'chats:delete': { req: { id: string }; res: undefined }
   'chats:menu': { req: { id: string }; res: undefined }
   'attachments:add': {
@@ -173,7 +222,11 @@ export type Events = {
   'providers:changed': Provider[]
   /** Fast or Expert was assigned to a different provider/model pair. */
   'models:changed': ModelSlots
-  'chats:changed': Conversation[]
+  /** A tool was enabled, disabled, or re-discovered with a changed definition. */
+  'tools:changed': ToolInfo[]
+  /** A server was added, edited, removed, or changed what it is doing. */
+  'mcp:changed': McpServerInfo[]
+  'chats:changed': ConversationSummary[]
   'attachments:changed': { conversationId: string; attachments: AttachmentMeta[] }
   /** Attachment rows changed; Settings reloads worker-computed storage totals. */
   'attachments:storage-changed': undefined

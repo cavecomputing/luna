@@ -1,0 +1,240 @@
+/**
+ * Asking a person before a tool runs.
+ *
+ * The prompt is a native message box driven from main, not a renderer dialog.
+ * Three reasons, in order of weight:
+ *
+ * 1. A renderer is untrusted by construction — bus.ts checks the sender on
+ *    every channel precisely because a compromised page can send anything. A
+ *    consent decision arriving over IPC is a decision a compromised page can
+ *    forge. This is the same reasoning that put delete-all and clear-attachments
+ *    on `ask()`.
+ * 2. Tool names, descriptions, and arguments are attacker-controlled text. A
+ *    native box takes plain strings; the renderer would put them through the
+ *    markdown pipeline.
+ * 3. Events are one-way with no correlation id, so asking the renderer a
+ *    question would mean inventing a reply protocol — request ids, timeouts,
+ *    window-closed handling, duplicate and forged reply guards — in the same
+ *    change as the tool loop.
+ *
+ * Deny is both the default button and the cancel button. Elsewhere in Luna the
+ * destructive verb is the affirmative answer; here the safe answer *is* cancel,
+ * and deny-by-default requires them to be the same index.
+ */
+
+import type { ToolAnnotations, ToolDefinition } from '../shared/tools.js'
+import { ask } from './dialogs.js'
+import { sanitize } from './tools/result.js'
+
+export type Approval = 'deny' | 'once' | 'always'
+
+export type ApprovalRequest = {
+  sourceLabel: string
+  definition: ToolDefinition
+  /** Argument JSON as the model produced it. */
+  arguments: string
+}
+
+export type ConsentDeps = {
+  ask: (options: {
+    type: 'warning'
+    buttons: string[]
+    defaultId: number
+    cancelId: number
+    noLink: true
+    message: string
+    detail: string
+  }) => Promise<number>
+}
+
+const deps: ConsentDeps = { ask }
+
+/** Only one native box at a time, however many turns are in flight. */
+let queue: Promise<unknown> = Promise.resolve()
+
+const MAX_DETAIL_ARGS = 500
+const MAX_DETAIL_DESCRIPTION = 300
+
+/** Strips anything that could forge structure in a plain-text dialog. */
+function flatten(input: string, max: number): string {
+  const collapsed = sanitize(input).replace(/\s+/g, ' ').trim()
+  return collapsed.length <= max ? collapsed : `${collapsed.slice(0, max)}…`
+}
+
+/**
+ * Renders the tool's own hints.
+ *
+ * These are shown because they are the most useful thing a person has to go on,
+ * and attributed to the tool because the protocol requires treating them as
+ * untrusted. Nothing in Luna branches on them.
+ */
+export function hintLine(annotations: ToolAnnotations | undefined): string {
+  if (annotations === undefined) return ''
+  const claims: string[] = []
+  if (annotations.readOnlyHint === true) claims.push('only reads')
+  if (annotations.destructiveHint === true) claims.push('may delete or overwrite')
+  if (annotations.openWorldHint === true) claims.push('reaches external services')
+  if (claims.length === 0) return ''
+  return `The tool reports that it ${claims.join(', ')}.`
+}
+
+export function detailFor(request: ApprovalRequest): string {
+  const description = flatten(request.definition.description, MAX_DETAIL_DESCRIPTION)
+  const args = flatten(request.arguments, MAX_DETAIL_ARGS)
+  const source = flatten(request.sourceLabel, 256)
+  return [
+    `From: ${source}`,
+    description === '' ? '' : `Description provided by the tool: ${description}`,
+    hintLine(request.definition.annotations),
+    '',
+    `Arguments: ${args === '' ? '(none)' : args}`,
+  ]
+    .filter((line, index, all) => !(line === '' && all[index - 1] === ''))
+    .join('\n')
+}
+
+/**
+ * Asks, once the queue reaches this request.
+ *
+ * The wait races the turn's abort signal. Electron cannot dismiss a message box
+ * programmatically, so on abort this stops waiting and answers deny while the
+ * box stays on screen; a later click is discarded. Without that race, stopAll()
+ * and the privacy delete would both block behind an unanswered modal.
+ */
+export async function requestApproval(
+  request: ApprovalRequest,
+  signal: AbortSignal,
+  d: ConsentDeps = deps,
+): Promise<Approval> {
+  if (signal.aborted) return 'deny'
+
+  const turn = queue.then(async () => {
+    if (signal.aborted) return 'deny' as const
+    const answer = await d.ask({
+      type: 'warning',
+      buttons: ['Deny', 'Allow once', 'Always allow'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      message: `Allow ${flatten(request.definition.title ?? request.definition.name, 256)} to run?`,
+      detail: detailFor(request),
+    })
+    if (answer === 2) return 'always' as const
+    return answer === 1 ? ('once' as const) : ('deny' as const)
+  })
+
+  // The queue advances on the box being answered, not on the caller giving up,
+  // so an abandoned prompt cannot let a second one open behind it.
+  queue = turn.catch(() => undefined)
+
+  return await new Promise<Approval>((resolve) => {
+    let settled = false
+    const finish = (value: Approval): void => {
+      if (settled) return
+      settled = true
+      signal.removeEventListener('abort', onAbort)
+      resolve(value)
+    }
+    function onAbort(): void {
+      finish('deny')
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+    turn.then(finish, () => {
+      finish('deny')
+    })
+  })
+}
+
+/**
+ * Confirms granting a tool standing permission, ahead of any call.
+ *
+ * The Tools panel offers this as a toggle, but the renderer cannot write the
+ * grant itself — it asks, and main puts a native box in front of a person
+ * first. That keeps the rule that only a native prompt owned by main can
+ * persist an `allow`, while still letting someone approve a tool before its
+ * first use instead of being interrupted mid-turn.
+ *
+ * There are no arguments to show, because nothing has been called yet. That is
+ * exactly the tradeoff being agreed to, so the copy says so.
+ */
+export async function confirmStanding(
+  request: Omit<ApprovalRequest, 'arguments'>,
+  d: ConsentDeps = deps,
+): Promise<boolean> {
+  const turn = queue.then(async () => {
+    const description = flatten(request.definition.description, MAX_DETAIL_DESCRIPTION)
+    const hints = hintLine(request.definition.annotations)
+    const source = flatten(request.sourceLabel, 256)
+    const answer = await d.ask({
+      type: 'warning',
+      buttons: ['Cancel', 'Always allow'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      message: `Always allow ${flatten(request.definition.title ?? request.definition.name, 256)}?`,
+      detail: [
+        `From: ${source}`,
+        description === '' ? '' : `Description provided by the tool: ${description}`,
+        hints,
+        '',
+        'Luna will run this tool whenever the model asks, without showing you the ' +
+          'arguments first. You can turn this off at any time in Settings.',
+      ]
+        .filter((line, index, all) => !(line === '' && all[index - 1] === ''))
+        .join('\n'),
+    })
+    return answer === 1
+  })
+  queue = turn.catch(() => undefined)
+  return await turn.catch(() => false)
+}
+
+/**
+ * Confirms letting a configured server run, before it is ever started.
+ *
+ * Enabling a server is the moment Luna agrees to execute a program somebody
+ * named. That is a larger capability than any single tool grant, and it arrives
+ * over the same untrusted channel — a compromised page can send `mcp:set-enabled`
+ * with a command line of its choosing. So the switch is a request, and a native
+ * box owned by main is what actually turns it on.
+ *
+ * The whole command line is shown, because that is the thing being agreed to.
+ * Variable *names* appear too; their values do not, and never leave main.
+ */
+export async function confirmServer(
+  request: { name: string; command: string; args: readonly string[]; envNames: readonly string[] },
+  d: ConsentDeps = deps,
+): Promise<boolean> {
+  const turn = queue.then(async () => {
+    const line = [request.command, ...request.args].map((part) => flatten(part, 200)).join(' ')
+    const answer = await d.ask({
+      type: 'warning',
+      buttons: ['Cancel', 'Enable server'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      message: `Let Luna run ${flatten(request.name, 128)}?`,
+      detail: [
+        'Luna will start this program on your computer and let the model call the ' +
+          'tools it offers. It runs with your account\u2019s permissions.',
+        '',
+        `Command: ${flatten(line, 1024)}`,
+        request.envNames.length === 0
+          ? ''
+          : `It receives these variables: ${request.envNames.map((name) => flatten(name, 128)).join(', ')}`,
+        '',
+        'Each tool it offers still stays off until you turn that tool on.',
+      ]
+        .filter((entry, index, all) => !(entry === '' && all[index - 1] === ''))
+        .join('\n'),
+    })
+    return answer === 1
+  })
+  queue = turn.catch(() => undefined)
+  return await turn.catch(() => false)
+}
+
+/** Test seam: the module-level queue outlives a single call by design. */
+export function resetQueue(): void {
+  queue = Promise.resolve()
+}

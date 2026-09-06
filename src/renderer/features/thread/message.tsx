@@ -7,6 +7,8 @@ import styles from './message.module.css'
 import { cx } from '../../lib/cx.js'
 import { useSmoothText } from './use-smooth-text.js'
 import { MessageAttachments } from '../attachments/message-attachments.js'
+import { ToolRounds } from './tool-rounds.js'
+import { formatTokens, totalTokens, usageDetail } from './usage.js'
 
 type Props = {
   message: Msg
@@ -54,6 +56,7 @@ export function Message({
     visibleText === '' &&
     visibleReasoning === ''
   const reasoningLive = isThinkingLive(message.status, visibleText)
+  const tokens = totalTokens(message.usage)
 
   return (
     <article
@@ -103,6 +106,14 @@ export function Message({
               </div>
             </details>
           )}
+          {!mine && message.trimmed === true && (
+            <p className={styles.trimmed}>
+              Earlier messages were left out of this request to fit the model’s context.
+            </p>
+          )}
+          {!mine && message.toolRounds !== undefined && (
+            <ToolRounds rounds={message.toolRounds} />
+          )}
           {visibleText !== '' && <Markdown text={visibleText} canRenderHtml={canRenderText} />}
         </div>
         {!mine && message.status === 'error' && message.text !== '' && (
@@ -111,9 +122,16 @@ export function Message({
         {!mine && message.status === 'cancelled' && message.text !== '' && (
           <p className={styles.interrupted}>Stopped</p>
         )}
-        <time className={styles.when} dateTime={new Date(message.at).toISOString()}>
-          {clock(message.at)}
-        </time>
+        <div className={styles.meta}>
+          <time className={styles.when} dateTime={new Date(message.at).toISOString()}>
+            {clock(message.at)}
+          </time>
+          {!mine && tokens !== undefined && message.usage !== undefined && (
+            <span className={styles.tokens} title={usageDetail(message.usage)}>
+              {formatTokens(tokens)} tokens
+            </span>
+          )}
+        </div>
       </div>
     </article>
   )

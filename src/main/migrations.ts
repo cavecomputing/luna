@@ -113,6 +113,65 @@ const steps: readonly string[] = [
   // (Electron 43) removes the column's own CHECK with it, and messages' foreign
   // key onto conversations survives the rewrite.
   `ALTER TABLE conversations DROP COLUMN icon;`,
+  // Tool calls live on the assistant row that made them, as JSON, beside the
+  // provider items already stored there. A tool role would mean rebuilding this
+  // STRICT table to loosen its CHECK, and attachments' foreign key onto
+  // messages(id) has to survive that byte for byte. One row per turn also keeps
+  // finishMessage's exactly-once guard and beginTurn's ordinal arithmetic intact.
+  `ALTER TABLE messages ADD COLUMN tool_steps TEXT;`,
+  // Nullable, because a provider reporting nothing is not the same as zero.
+  `ALTER TABLE messages ADD COLUMN input_tokens INTEGER;
+   ALTER TABLE messages ADD COLUMN output_tokens INTEGER;
+   ALTER TABLE messages ADD COLUMN reasoning_tokens INTEGER;
+   ALTER TABLE messages ADD COLUMN cached_tokens INTEGER;`,
+  // Which tools may run. No row means never approved, and `enabled` defaults to
+  // 0 so a tool that appears without anyone looking cannot execute. `digest`
+  // fingerprints the definition that was approved, so a server that rewrites a
+  // tool's description or annotations loses the grant. Nothing here is secret.
+  `CREATE TABLE tool_grants (
+     source      TEXT NOT NULL,
+     tool_name   TEXT NOT NULL CHECK (length(tool_name) BETWEEN 1 AND 128),
+     enabled     INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+     policy      TEXT NOT NULL DEFAULT 'ask' CHECK (policy IN ('ask', 'allow')),
+     digest      TEXT NOT NULL,
+     seen_at     INTEGER NOT NULL,
+     approved_at INTEGER,
+     PRIMARY KEY (source, tool_name)
+   ) STRICT;`,
+  // How much context each slot's model has, and whether a turn had to leave
+  // history out. Both nullable: an unset window means "use the default", and an
+  // unset flag means the question predates this column.
+  `ALTER TABLE model_slots ADD COLUMN context_tokens INTEGER CHECK (
+     context_tokens IS NULL OR context_tokens BETWEEN 1024 AND 10485760
+   );
+   ALTER TABLE messages ADD COLUMN trimmed INTEGER CHECK (trimmed IS NULL OR trimmed IN (0, 1));`,
+  // What the server said this slot's model accepts, recorded at discovery.
+  // Kept apart from context_tokens so a typed override and a detected value
+  // stay distinguishable, and clearing the override falls back here rather
+  // than to a guess.
+  `ALTER TABLE model_slots ADD COLUMN detected_context_tokens INTEGER CHECK (
+     detected_context_tokens IS NULL OR detected_context_tokens BETWEEN 1024 AND 10485760
+   );`,
+  // MCP servers the user configured. Non-secret only: `env_names` lists the
+  // variable names a server takes, and the values are in platform secure
+  // storage like every other credential. `enabled` defaults to 0 so adding a
+  // server never starts a process on its own.
+  //
+  // `era` caches which era of the protocol a server turned out to speak, which
+  // the specification allows persisting. It is a shortcut past the startup
+  // probe and is cleared whenever it proves wrong, so it can never pin a
+  // server to a protocol it has since stopped speaking.
+  `CREATE TABLE mcp_servers (
+     id         TEXT PRIMARY KEY,
+     name       TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 128),
+     command    TEXT NOT NULL CHECK (length(command) BETWEEN 1 AND 1024),
+     args       TEXT NOT NULL,
+     cwd        TEXT,
+     env_names  TEXT NOT NULL,
+     enabled    INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+     era        TEXT CHECK (era IS NULL OR era IN ('modern', 'legacy')),
+     created_at INTEGER NOT NULL
+   ) STRICT;`,
 ]
 
 /** The version a fully migrated database reports. */

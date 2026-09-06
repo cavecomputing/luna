@@ -2,12 +2,14 @@ import * as appIpc from './app.js'
 import * as attachmentsIpc from './attachments.js'
 import * as chatIpc from './chat.js'
 import * as chatsIpc from './chats.js'
+import * as mcpIpc from './mcp.js'
 import * as prefsIpc from './prefs.js'
 import * as previewIpc from './preview.js'
 import * as privacyIpc from './privacy.js'
 import * as providersIpc from './providers.js'
 import * as settingsIpc from './settings.js'
 import * as messagesIpc from './messages.js'
+import * as toolsIpc from './tools.js'
 
 /** Every IPC domain registers here. One line per new domain file. */
 export function registerAll(): void {
@@ -30,4 +32,6 @@ export function registerAll(): void {
   providersIpc.register()
   messagesIpc.register()
   settingsIpc.register()
+  toolsIpc.register()
+  mcpIpc.register()
 }

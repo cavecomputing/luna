@@ -19,16 +19,18 @@ Update it as part of the work, not afterward:
 
 ## Where Luna is now
 
-1.0 is a single-turn chat client. One user message produces exactly one assistant reply, which
-ends in exactly one terminal state (`complete`, `cancelled`, or `error`). The model produces
-text and optional reasoning. It cannot call anything, and Luna cannot run anything on its
-behalf.
+1.1 is a chat client that can act. One user message still produces exactly one assistant reply
+ending in exactly one terminal state (`complete`, `cancelled`, or `error`) — but between the
+request and that reply there is now a bounded loop, and the model can call tools: Luna's own
+built-in, or any the user's MCP servers offer.
 
-That single-turn shape is the main thing the roadmap changes.
+That was the main thing the roadmap set out to change, and it is done. What follows builds on
+it rather than around it.
 
-1.0.2 hardened the backup and recovery paths against silent data loss. Nothing about the
-feature set changed; the relevance here is that the storage layer is now trustworthy enough to
-migrate, which every version below requires.
+Two properties are worth restating because everything below assumes them. **Nothing runs
+without a person having said so**, per tool, in a native prompt owned by main — including the
+decision to run a server at all. And **the storage layer is trustworthy enough to migrate**,
+which 1.0.2 established and every version below requires.
 
 ## Foundations
 
@@ -38,45 +40,133 @@ that assumed they were absent.
 
 ### F1. Tool calling
 
-**Needed by:** v1.1, v1.2, v1.3, v2.0. It is now the immediate next piece of work, because
-v1.1 is MCP server support and nothing in it functions without a tool loop.
+**Needed by:** v1.1, v1.2, v1.3, v2.0. Built, ahead of v1.1, because nothing in MCP server
+support functions without a tool loop.
 
-Today `chat-api.ts` sends no `tools` array and parses only text and reasoning deltas. Adding
-tool calling touches five things at once:
+`chat-api.ts` used to send no `tools` array and parse only text and reasoning deltas. Tool
+calling touched five things at once:
 
 1. **Request bodies** gain a tool list, in two different shapes — the Responses API and Chat
    Completions describe tools differently, and Luna supports both.
 2. **Stream parsing** must accumulate tool-call fragments. Arguments arrive as partial JSON
    strings keyed by call index, split across SSE chunks, and are only parseable once complete.
    This is the same class of problem as `parseThinkingTags` and deserves the same care.
-3. **The turn loop** stops being one request. It becomes: request → tool call → execute →
-   feed the result back → request again, until the model stops calling tools. `ChatCoordinator`
-   currently assumes one request per assistant row.
-4. **Storage.** `messages.role` is `CHECK (role IN ('user', 'assistant'))`. Tool calls and tool
-   results need a role, or a separate table, plus a migration. One user turn will produce
-   several rows.
+3. **The turn loop.** Built. `ChatCoordinator.run()` is a bounded loop: request → tool calls →
+   execute → feed the results back → request again, capped at `MAX_TOOL_ITERATIONS` rounds and
+   `MAX_TOOL_CALLS_PER_TURN` calls. The loop body never writes a row, so there is still exactly
+   one terminal write per assistant message, after the loop. See **The turn loop** below.
+4. **Storage.** Decided and built: ordered model/tool rounds are JSON in `tool_steps` on the
+   assistant row that made them, not a new role and not a separate table. One user turn still
+   produces exactly two rows. See **Storage shape for tool calls** below.
 5. **Cancellation** must interrupt the loop, not just the current HTTP request, and must still
    leave every row in a terminal state.
 
 Treat this as its own piece of work with its own tests before any tool that depends on it.
 
+### Storage shape for tool calls — decided
+
+Tool rounds live in a JSON `tool_steps` column on the assistant row, added by migration step 12.
+Each round contains the model text and the parallel calls/results from one request, preserving
+the fact that a later round was produced only after the model saw every earlier result. The row's
+text is the final answer after all rounds. Responses output items are kept per round and for the
+final answer so manual replay can include encrypted reasoning in its original order; those items
+stay in main/SQLite and never cross IPC. Token counts are four nullable INTEGER columns added by
+step 13; nullable because a provider reporting nothing is not the same as reporting zero.
+
+Widening `messages.role` was the obvious reading and is the wrong call. SQLite cannot loosen a
+CHECK in place, so it means rebuilding a STRICT table whose ids `attachments.message_id`
+references with `ON DELETE CASCADE`, under `PRAGMA foreign_keys = ON`, while
+`database-recovery.ts` grades every snapshot with `foreign_key_check`. It also breaks four things
+that assume one assistant row per turn: `retryConversation()` requires the retry target sit at
+`max(ordinal)`; `recoverInterrupted()` flips every streaming row to error, orphaning tool rows;
+`beginTurn()` allocates ordinals as max+1/+2 under `UNIQUE (conversation_id, ordinal)`; and
+`chat-export.ts` copies `role` straight into documented format v1.
+
+A separate table avoids the rebuild but splits `finishMessage()`'s exactly-once guarantee — one
+UPDATE's `WHERE id = ? AND role = 'assistant' AND status = 'streaming'` — across two tables, and
+makes `history()` a join where the drop-a-bad-row convention could drop half of a call/result
+pair. Both provider APIs reject that with a hard 400.
+
+Two consequences worth remembering:
+
+- **The `status != 'complete'` trap never materialized.** `requestBody` skips non-complete rows,
+  which would have hidden mid-loop rows from the next request in the same turn. There are no
+  mid-loop rows: the loop assembles its context in memory and does not round-trip through SQLite
+  until the turn ends.
+- **`tool_steps` validates whole-or-nothing.** One unreadable round invalidates the column and the
+  row replays as plain text, because a partial array can lose a call/result pair or move a later
+  model request ahead of the result it depended on.
+
+### The turn loop — built
+
+`run()` loops over rounds. Each round streams one model response; if it asked for no tools the
+turn is complete, otherwise the calls are dispatched and their results become the next request's
+`pendingRounds`. Nothing mid-turn touches the database.
+
+Details that are easy to get wrong and are covered by tests:
+
+- **`active.delete` moved into a `finally` around the whole loop.** It used to fire the moment the
+  first stream resolved, which would have made Stop a no-op during tool execution and between
+  rounds — exactly when a user reaches for it.
+- **The delta sequence never resets.** `streamSeq` is the renderer's ordering guard, so restarting
+  at 1 on round two would make the second reply look stale and get discarded.
+- **Committed text and the live round are tracked separately.** A round that fails before emitting
+  any delta still reports what earlier rounds produced, which a single combined buffer got wrong.
+- **A stopped turn never contacts the provider.** The abort check at the top of each round covers
+  the first one too, so cancelling during setup costs nothing.
+- **Refusals are tool errors, not turn failures.** A denied, unknown, or disabled tool becomes a
+  step the model is told about, so it can apologize or route around it.
+- **Failed turns still record rounds and usage.** A turn that ran three tools and then broke should
+  show what it did and what it cost.
+
+The catalog is snapshotted once per turn, so enabling a tool mid-turn cannot change what that turn
+can reach. Standing permission is persisted only from the native prompt's "Always allow".
+
 ### F2. Token and cost accounting
 
 **Needed by:** v1.1 onward. Strongly recommended before shipping any tool loop.
 
-Luna records no usage at all. Once a model can call tools, one user message can silently trigger
-many provider requests. A user must be able to see what a conversation cost. At minimum: capture
-the `usage` block both APIs return, store it per assistant row, and total it per conversation.
+Once a model can call tools, one user message can silently trigger many provider requests. A user
+must be able to see what a conversation cost. At minimum: capture the `usage` block both APIs
+return, store it per assistant row, and total it per conversation.
+
+Built. Migration step 13 stores four nullable counts per assistant row; both APIs' `usage` blocks
+are read and summed across every round of a turn; each reply shows its tokens with a breakdown on
+hover, and the thread shows a running total.
+
+Cost in currency stays out of scope. Pricing varies per model, changes without notice, and Luna
+talks to servers that charge nothing — a token count is true everywhere, a dollar figure would be
+a guess. A provider that reported nothing shows nothing rather than zero, since those are
+different claims.
 
 ### F3. Context management
 
 **Needed by:** v1.1 onward.
 
-Luna sends the entire conversation history on every turn, with no truncation, summarization, or
-token counting. That is correct and simple for short chats. It fails once search results and
-code output enter the transcript, and it fails first on models with smaller context windows.
-Needed: a token estimate, a defined policy for what gets dropped or summarized, and a visible
-indication when history has been trimmed.
+Built, as measure-and-trim. `shared/tokens.ts` estimates tokens without a tokenizer dependency —
+four characters per token, with CJK counted separately because averaging it in undercounts a
+Japanese or Chinese conversation badly, which is exactly where dropping messages hurts.
+
+`planHistory` drops the oldest turns first and always resumes at a user message, so history never
+opens on a reply to a question the model cannot see. The trailing turn is kept whatever it costs:
+sending nothing is a worse failure than sending one oversized turn. History gets 60% of the
+window; the rest is headroom for the reply, this turn's tool results, and the estimate being low.
+
+The window is resolved in order of how well it is actually known: a value the user typed, else
+what the server reported at discovery, else a 128K default. Migration step 16 stores the typed
+override and the trimmed flag; step 17 stores the detected value separately, so clearing an
+override falls back to discovery rather than to a guess.
+
+Auto-detection turned out to be worth doing. There is no standard field, but the servers that
+matter do report one: OpenRouter puts it at `context_length` on every model it lists, and
+llama.cpp reports `meta.n_ctx`. OpenAI's own `/v1/models` says nothing, which is where the
+default still earns its place. A served window beats a trained maximum, since a server may load a
+model with less than it supports.
+
+A turn that had to leave history out records it on the assistant row, and the reply says so.
+
+Deferred: summarization, real tokenizers, and a live context meter in the composer showing how
+full the window is before you send.
 
 ### F4. Permission and consent model
 
@@ -103,6 +193,61 @@ Three things follow that Luna has no answer for today:
   server's own output argues otherwise.
 
 This remains the item most likely to be skipped and most expensive to add later.
+
+### Consent model — decided
+
+Per-tool approval, default off, in the `tool_grants` table (migration step 14). Absence of a row
+means no; a newly discovered tool is written disabled, so a server that quietly gains a tool gains
+no capability with it.
+
+Approval is of a **definition**, not a name. `digest` covers the description, the schemas, and the
+annotations, so a server that rewrites what a tool claims to do — the injection route that leaves
+the name untouched — loses the grant and has to ask again. Disabling a tool also drops any
+standing permission, so re-enabling never silently restores "never ask me again".
+The digest canonicalizes schemas by recursively sorting object keys while preserving arrays as
+arrays, so structurally different schemas cannot collide through their serialized shape.
+
+**The prompt is a native dialog driven from main**, not a renderer one. `bus.ts` checks the sender
+on every channel because a compromised page can send anything, which means a consent decision
+arriving over IPC is a decision a compromised page can forge — the same reasoning that already put
+delete-all and clear-attachments on `ask()`. Tool descriptions and arguments are also
+attacker-controlled text, and a native box takes plain strings where the renderer would run them
+through the markdown pipeline. Deny is both `defaultId` and `cancelId`: elsewhere in Luna the
+destructive verb is the affirmative answer, but here the safe answer *is* cancel.
+
+Only that execution-time native prompt may create an `allow` grant. Settings may show and revoke
+"Always allow," and the renderer may enable a tool in the default `ask` state, but no IPC payload
+can promote a tool to permanent permission.
+
+Prompts are queued so only one box is ever open, and the wait races the turn's abort signal.
+Electron cannot dismiss a message box programmatically, so an abort stops waiting and answers deny
+while the box stays on screen; without that, `stopAll()` and the privacy delete would deadlock
+behind an unanswered modal.
+
+**Annotations are shown, never trusted.** `readOnlyHint` and friends make far better consent copy
+than a bare tool name, and the specification requires clients to treat them as untrusted. So they
+appear in the dialog attributed to the tool, they are inside the digest, and no code branches on
+them: a tool claiming `readOnlyHint` gets exactly the same gate as one that claims nothing.
+
+Both remaining pieces are built: the grant is enforced at dispatch, and the Tools panel in
+Settings lists every discovered tool with its enable and "Always allow" state.
+
+### F7. End-to-end tests
+
+**Needed by:** anything with a surface a unit test cannot reach.
+
+Built, as Playwright against the packaged app in `e2e/`. It exists because the MCP work had a
+seam nothing else could cover: the panel, the IPC boundary, the database, the subprocess and the
+native consent prompt only meet in a running app.
+
+Two decisions worth keeping. Every launch gets a throwaway `userData`, because the alternative
+is a test suite that runs against a real person's conversations and keys. And the native consent
+dialog is replaced inside the running main process rather than behind a flag in shipped code — a
+consent prompt with an `if (testing)` around it is a consent prompt that can be turned off.
+
+Covered today: adding a server, the consent prompt in both answers, discovery leaving tools
+switched off, a credential stored and never returned, deletion, and a command that is not a
+program. Not covered: a full turn with a model, which would need a provider and a key.
 
 ### F5. Update path
 
@@ -158,9 +303,19 @@ The reason is leverage. Building search by hand first would mean writing a tool 
 once Luna-specific, once standard — and the second write would land after the schema and
 consent model had already hardened around the first.
 
-### v1.1 — MCP server support
+### v1.1 — MCP server support — shipped
 
 Let the user connect Model Context Protocol servers and let the model call their tools.
+
+Shipped in 1.1.0. The detail below stays here because the decisions it records — the transport
+choice, the server lifecycle, the consent shape — are still the reasons the code looks the way
+it does, and the next transport will need them.
+
+Three things the hostile-server suite (`main/mcp/hostile.test.ts`) turned up while proving it:
+a truncated tool result overshot its own cap by the length of the `[truncated]` marker; tool
+descriptions and titles reached both the model and the approval UI without being stripped of
+terminal escapes and bidi overrides; and quitting left a server that ignores EOF and SIGTERM
+running with its parent gone. All three are fixed.
 
 **Depends on:** F1, F2, F3, F4. All four, and F4 is the long pole.
 
@@ -169,18 +324,59 @@ enable, disable) with credentials in platform secure storage; a `mcp_servers` ta
 non-secret metadata; tool discovery and a per-server enable list; the consent surface from F4;
 and the tool loop from F1 wired to dispatch to a server rather than to a built-in.
 
-**Schema.** `messages.role` is `CHECK (role IN ('user', 'assistant'))`. Tool calls and tool
-results need a role or a separate table, plus a migration, and one user turn will produce
-several rows. This lands before any MCP code, not alongside it.
+All of it is built. A stdio server is added in Settings → Servers, started as a subprocess,
+handshaken in either era, and its tools appear in Settings → Tools under the same per-tool
+consent every built-in gets.
 
-**Open decision:** stdio subprocesses only, or stdio plus remote HTTP servers? Stdio alone is
-a smaller first release and covers most existing servers. Remote servers add a network trust
-boundary and an auth story that F4 would have to cover in its first version rather than its
-second.
+**Schema.** Done, in 1.1 development. See **Storage shape for tool calls** under Foundations.
 
-**Open decision:** how much of a server's tool surface is exposed by default. Enabling every
-discovered tool is the simplest thing to build and the hardest to reason about once a server
-updates and quietly gains a tool the user never approved.
+### Server lifecycle — decided
+
+A source is resolved from the database on every question rather than held in a list, so an edit
+in Settings takes effect on the next turn instead of the next launch. Everything else follows
+from a source being someone else's program:
+
+- **Lazy.** A configured server is not spawned until something asks what tools exist. A server
+  the user has switched on but not used costs nothing.
+- **One start at a time.** Two turns wanting a tool at the same moment join the same attempt.
+  Two copies of an `npx` server answering the same stdin is not hypothetical.
+- **Parallel across sources.** Serially, the first turn after launch would cost the sum of every
+  server's startup and one slow server would hold up the rest.
+- **A cooldown after a failure.** A server that hangs costs its discovery deadline once, not
+  every turn. Restart in Settings clears it, and so does any edit.
+- **Eviction on close.** A channel that ends drops its cached connection, because a cached
+  connection to a dead process fails in a way that reads as a broken tool rather than a stopped
+  server.
+- **The quit waits.** Ending a subprocess is close-input, wait, signal, wait, force — which
+  cannot happen in `will-quit`. `before-quit` holds the quit once and re-issues it when the last
+  server is gone, under a ceiling of ours so a program that ignores every signal cannot keep the
+  app on screen.
+
+### Enabling a server — decided
+
+Adding a server writes a row and starts nothing. Enabling one is what commits Luna to executing
+a program, and it arrives on the same IPC channel a compromised renderer can send anything on —
+so `mcp:set-enabled` is a *request*, and a native dialog owned by main is what actually turns it
+on. It shows the whole command line and the names of the variables the server receives, never
+their values. Cancelling succeeds with the server still off, the way declining a standing tool
+grant does. Switching one off never asks: a confirmation there would only train people to click
+through the one that matters.
+
+This is the same rule as the consent model above, one level up. A tool grant says what a running
+program may do; this says whether the program runs at all.
+
+**Transport — decided: stdio subprocesses only, with remote-ready seams.** Stdio is the smaller
+first release and covers most existing servers; remote servers add a network trust boundary and
+an auth story F4 would otherwise have to answer in its first version rather than its second.
+
+The seams are already in place, so choosing stdio first does not cost a rewrite later. `Transport`
+in `rpc/transport.ts` is the whole coupling to a wire, and it is deliberately asymmetric — `send`
+takes one framed message because we control what leaves, `onData` takes arbitrary chunks because
+we do not control what arrives. `connect.ts` and `JsonRpcPeer` are transport-agnostic above it,
+and the built-in source already proves the seam by running the same peer over an in-process
+loopback. Adding HTTP means one more `Transport`, not a second client.
+
+The default-exposure question is decided and built. See **Consent model** under Foundations.
 
 ### v1.2 — Reusable skills
 
@@ -245,10 +441,12 @@ Proposals, not decisions. Each is small relative to the versions above.
 - **Edit and resend a user message; regenerate a reply.** 1.0 can only retry a reply that failed
   or was stopped. Editing a message and re-running from that point is expected behavior in a
   chat client, and it becomes more valuable once turns are expensive.
-- **Conversation list performance.** `chats.load()` reads every message of every conversation on
-  every `chats:changed` broadcast, which fires on each stream start and finish. It is fine at
-  1.0's scale. Tool loops make conversations much longer, so this should be fixed before v1.1
-  rather than after.
+- **Conversation list performance.** Fixed. `chats.load()` used to read every message of every
+  conversation on every `chats:changed` broadcast — three times per message sent, and the tool
+  columns added to that read made it worse. The sidebar now carries titles and timestamps only,
+  message bodies load for the conversation being read, and search runs as a SQLite query instead
+  of a scan of an in-memory copy of everything. Measured on 300 conversations of 5 turns each
+  with tool rounds: 34.5 ms of blocking main-process work per message sent, down to 1.2 ms.
 Both of the hardening items listed here previously shipped in 1.0.3. Every file in
 `src/main/ipc/` now has a matching `.test.ts`.
 
@@ -267,3 +465,13 @@ Both of the hardening items listed here previously shipped in 1.0.3. Every file 
   recovery working copies at startup so a crash no longer leaves conversations readable on
   disk until the next erase, and covered `ipc/settings.ts` — including the authorization
   branch deciding which window may close Settings.
+- **1.0.4** — Fixed Responses replay for compatible servers that expose plaintext reasoning.
+  Sending it back as input is rejected, so it is dropped on the way out — in a plain reply, in
+  a tool round, and in the final output of a message that has tool rounds.
+- **1.1.0** — MCP server support. A stdio server is added in Settings → Servers, started as a
+  subprocess under a native prompt that shows the whole command line, handshaken in either era
+  of the protocol, and its tools appear in Settings → Tools under the same per-tool consent
+  every built-in gets. Credentials live in platform secure storage and never reach a renderer.
+  Also the first end-to-end tests (F7), and the three fixes the hostile-server suite turned up:
+  a truncated tool result that overshot its own cap, tool descriptions that reached the approval
+  UI undefanged, and a quit that could leave a server running with its parent gone.

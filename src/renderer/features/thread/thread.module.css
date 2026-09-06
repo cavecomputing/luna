@@ -84,3 +84,12 @@
   margin: 0 auto;
   padding: var(--s-4) var(--s-6) var(--s-6);
 }
+
+/* What the conversation has cost, in tokens. Quiet, and only once there is one. */
+.total {
+  margin: var(--s-2) 0 0;
+  color: var(--text-muted);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}

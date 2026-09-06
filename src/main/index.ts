@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import * as chats from './chats.js'
 import { registerAll } from './ipc/index.js'
 import { coordinator } from './ipc/chat.js'
+import { registry as toolRegistry } from './ipc/tools.js'
 import { emit } from './ipc/bus.js'
 import * as db from './db.js'
 import * as dock from './dock.js'
@@ -15,6 +16,32 @@ import * as window from './window.js'
 
 let quitting = false
 let launched = false
+/** Set once the servers have actually been stopped, so the retry quit goes through. */
+let stopped = false
+
+/**
+ * A tool source can outlive the app that started it, so ending one is not
+ * instant: close its input, wait, signal, wait, and only then force it. That
+ * cannot happen inside `will-quit`, which does not wait for anything.
+ *
+ * So the first quit is held here, exactly once, and re-issued when the last
+ * server is really gone. The ceiling is ours rather than the servers': a
+ * program that refuses every way of being asked must not be able to keep the
+ * app on screen.
+ */
+const SHUTDOWN_CEILING_MS = 4_000
+
+/** How long Settings gets to write down whatever it was still holding. */
+const FLUSH_CEILING_MS = 1_500
+
+function stopSources(): Promise<void> {
+  return Promise.race([
+    toolRegistry.stopAll(),
+    new Promise<void>((settle) => {
+      setTimeout(settle, SHUTDOWN_CEILING_MS).unref()
+    }),
+  ])
+}
 
 async function launch(): Promise<void> {
   if (launched) return
@@ -83,9 +110,18 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
   quitting = true
   window.beginQuit()
+  if (stopped) return
+
+  event.preventDefault()
+  // Both at once: neither has anything to do with the other, and the quit
+  // should cost the longer of them rather than the sum.
+  void Promise.all([stopSources(), window.flushSettings(FLUSH_CEILING_MS)]).finally(() => {
+    stopped = true
+    app.quit()
+  })
 })
 
 app.on('child-process-gone', (_event, details) => {
@@ -95,6 +131,8 @@ app.on('child-process-gone', (_event, details) => {
 // Checkpoints the WAL, so the next launch doesn't replay one.
 app.on('will-quit', () => {
   coordinator.stopAll()
+  // Tool sources are already down: `before-quit` held the quit open until they
+  // were, because a subprocess cannot be ended from here. See stopSources.
   db.close()
 })
 

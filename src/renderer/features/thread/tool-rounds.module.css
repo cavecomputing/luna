@@ -1,0 +1,83 @@
+.rounds {
+  margin-bottom: var(--s-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  background: var(--surface-hover);
+}
+
+.rounds summary {
+  padding: var(--s-2) var(--s-3);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  list-style: none;
+}
+
+.rounds summary::-webkit-details-marker {
+  display: none;
+}
+
+.failed {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin: 0;
+  padding: 0 var(--s-3) var(--s-3);
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.name {
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.source,
+.note {
+  font-size: var(--t-sm);
+  color: var(--text-muted);
+}
+
+.error {
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--danger);
+}
+
+/*
+ * Tool output is attacker-controlled text. It is rendered as preformatted,
+ * escaped content — never markdown, never the HTML preview — and it scrolls
+ * inside its own box so a long line cannot widen the thread.
+ */
+.code {
+  margin: 0;
+  padding: var(--s-2);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 14rem;
+  overflow: auto;
+}

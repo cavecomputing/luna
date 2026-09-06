@@ -10,7 +10,12 @@ import { app, BrowserWindow, dialog, session } from 'electron'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { err, ok, type Result } from '../../shared/result.js'
 import type { Prefs } from '../../shared/prefs.js'
-import type { Conversation, ModelSlots, Provider } from '../../shared/types.js'
+import type {
+  Conversation,
+  ConversationSummary,
+  ModelSlots,
+  Provider,
+} from '../../shared/types.js'
 import * as jobs from '../attachment-jobs.js'
 import { saveArchive, type ArchiveDeps } from '../chat-export.js'
 import * as chats from '../chats.js'
@@ -21,6 +26,7 @@ import { previewCache } from '../previews.js'
 import * as providers from '../providers.js'
 import * as secrets from '../secrets.js'
 import { broadcast, handle } from './bus.js'
+import { registry } from './tools.js'
 
 type Streams = {
   stopAll: () => void
@@ -28,11 +34,14 @@ type Streams = {
 }
 
 type Deps = {
+  /** Full conversations, for export. The broadcast below carries summaries. */
   chats: () => Conversation[]
   archive: ArchiveDeps
   confirm: () => Promise<boolean>
   stopStreams: () => void
   settleStreams: () => Promise<void>
+  /** Ends every running MCP server, which holds credentials Luna handed it. */
+  stopSources: () => Promise<void>
   clearPreviews: () => void
   clearKeys: () => Promise<void>
   clearBrowsingData: () => Promise<void>
@@ -44,7 +53,7 @@ type Deps = {
   notifyPrefs: (value: Prefs) => void
   notifyProviders: (value: Provider[]) => void
   notifyModels: (value: ModelSlots) => void
-  notifyChats: (value: Conversation[]) => void
+  notifyChats: (value: ConversationSummary[]) => void
   notifyAttachmentStorage: () => void
 }
 
@@ -98,7 +107,7 @@ async function clearBrowsingData(): Promise<void> {
 }
 
 const deps: Deps = {
-  chats: chats.load,
+  chats: chats.all,
   archive: {
     pickFolder,
     load: (conversationId) => jobs.readHistory(db.filePath(), conversationId),
@@ -115,6 +124,7 @@ const deps: Deps = {
     await streams.settle()
     await jobs.settle()
   },
+  stopSources: () => registry.stopAll(),
   clearPreviews: () => {
     previewCache.clearAll()
   },
@@ -181,6 +191,11 @@ export async function deleteAll(d: Deps): Promise<Result<{ deleted: boolean }>> 
     // Aborting a stream only starts its unwind, and the unwind writes a
     // terminal row. Closing the database under it would lose that row.
     await d.settleStreams()
+    // A running server is a program Luna started and handed the user's tokens
+    // to. Erasing the row that described it while the process is still alive
+    // with those variables in its environment would make "delete everything"
+    // untrue in the way that matters most.
+    await d.stopSources()
     d.clearPreviews()
 
     try {

@@ -3,18 +3,31 @@ import type {
   ApiKind,
   AttachmentMeta,
   Conversation,
+  ConversationSummary,
   Message,
   MessageStatus,
+  SearchHit,
   Mode,
   Role,
+  TokenUsage,
+  ToolPartKind,
+  ToolPartRef,
+  ToolRound,
+  ToolStep,
 } from '../shared/types.js'
 import * as db from './db.js'
 import * as attachments from './attachments.js'
 import type { StoredAttachment } from './attachments.js'
 import { object } from './parse.js'
 
-export type StoredMessage = Omit<Message, 'attachments'> & {
+/** Responses replay data stays in main and is stripped before IPC. */
+export type StoredToolRound = ToolRound & {
+  providerItems?: unknown[]
+}
+
+export type StoredMessage = Omit<Message, 'attachments' | 'toolRounds'> & {
   attachments: StoredAttachment[]
+  toolRounds?: StoredToolRound[]
   providerId?: string
   providerApi?: ApiKind
   providerItems?: unknown[]
@@ -31,7 +44,9 @@ export type MessageAction = Pick<Message, 'id' | 'role' | 'text' | 'status'> & {
 }
 
 /** What a rendered message needs. history() adds the provider columns on top. */
-const MESSAGE_COLUMNS = 'id, conversation_id, role, text, reasoning, status, created_at'
+const MESSAGE_COLUMNS =
+  'id, conversation_id, role, text, reasoning, status, created_at, tool_steps, trimmed, ' +
+  'input_tokens, output_tokens, reasoning_tokens, cached_tokens'
 const CONVERSATION_COLUMNS = 'id, title, draft, mode, pinned, updated_at'
 
 function mode(input: unknown): Mode | undefined {
@@ -55,15 +70,161 @@ function api(input: unknown): ApiKind | undefined {
   return input === 'responses' || input === 'chat-completions' ? input : undefined
 }
 
+function providerItemList(input: unknown): unknown[] | undefined {
+  return Array.isArray(input) && input.every((item) => object(item) !== undefined)
+    ? input
+    : undefined
+}
+
 function providerItems(input: unknown): unknown[] | undefined {
   if (typeof input !== 'string' || input === '') return undefined
   try {
-    const parsed: unknown = JSON.parse(input)
-    return Array.isArray(parsed) && parsed.every((item) => object(item) !== undefined)
-      ? parsed
-      : undefined
+    return providerItemList(JSON.parse(input))
   } catch {
     return undefined
+  }
+}
+
+function partKind(input: unknown): ToolPartKind | undefined {
+  return input === 'image' || input === 'audio' || input === 'resource' || input === 'resource_link'
+    ? input
+    : undefined
+}
+
+function count(input: unknown): number | undefined {
+  return typeof input === 'number' && Number.isSafeInteger(input) && input >= 0
+    ? input
+    : undefined
+}
+
+function toolPart(input: unknown): ToolPartRef | undefined {
+  const cell = object(input)
+  if (cell === undefined) return undefined
+  const kind = partKind(cell.kind)
+  if (
+    kind === undefined ||
+    (cell.mediaType !== undefined && typeof cell.mediaType !== 'string') ||
+    (cell.uri !== undefined && typeof cell.uri !== 'string') ||
+    (cell.size !== undefined && count(cell.size) === undefined)
+  ) {
+    return undefined
+  }
+  return {
+    kind,
+    ...(typeof cell.mediaType === 'string' ? { mediaType: cell.mediaType } : {}),
+    ...(typeof cell.size === 'number' ? { size: cell.size } : {}),
+    ...(typeof cell.uri === 'string' ? { uri: cell.uri } : {}),
+  }
+}
+
+function toolStep(input: unknown): ToolStep | undefined {
+  const cell = object(input)
+  if (cell === undefined) return undefined
+  if (
+    typeof cell.callId !== 'string' ||
+    typeof cell.source !== 'string' ||
+    typeof cell.name !== 'string' ||
+    typeof cell.arguments !== 'string' ||
+    typeof cell.text !== 'string' ||
+    typeof cell.isError !== 'boolean' ||
+    typeof cell.truncated !== 'boolean'
+  ) {
+    return undefined
+  }
+
+  let parts: ToolPartRef[] | undefined
+  if (cell.parts !== undefined) {
+    if (!Array.isArray(cell.parts)) return undefined
+    parts = []
+    for (const item of cell.parts) {
+      const part = toolPart(item)
+      if (part === undefined) return undefined
+      parts.push(part)
+    }
+  }
+
+  return {
+    callId: cell.callId,
+    source: cell.source,
+    name: cell.name,
+    arguments: cell.arguments,
+    text: cell.text,
+    // Any JSON value is legal here, including null, so presence is the only test.
+    ...('structured' in cell ? { structured: cell.structured } : {}),
+    ...(parts === undefined ? {} : { parts }),
+    isError: cell.isError,
+    truncated: cell.truncated,
+  }
+}
+
+/**
+ * Whole-or-nothing. One unreadable round invalidates the entire column.
+ *
+ * The .flatMap convention elsewhere drops a bad row and carries on, which would
+ * here mean losing an iteration boundary or replaying a tool call without its
+ * result. Both provider APIs reject half pairs, and later rounds must not move
+ * ahead of earlier results, so a partial array is worse than none.
+ */
+function toolRound(input: unknown): StoredToolRound | undefined {
+  const cell = object(input)
+  if (cell === undefined || typeof cell.text !== 'string' || !Array.isArray(cell.steps)) {
+    return undefined
+  }
+  const steps: ToolStep[] = []
+  for (const item of cell.steps) {
+    const step = toolStep(item)
+    if (step === undefined) return undefined
+    steps.push(step)
+  }
+  if (steps.length === 0) return undefined
+
+  let roundItems: unknown[] | undefined
+  if ('providerItems' in cell) {
+    roundItems = providerItemList(cell.providerItems)
+    if (roundItems === undefined) return undefined
+  }
+  return {
+    text: cell.text,
+    steps,
+    ...(roundItems === undefined ? {} : { providerItems: roundItems }),
+  }
+}
+
+function toolRounds(input: unknown): StoredToolRound[] | undefined {
+  if (typeof input !== 'string' || input === '') return undefined
+  try {
+    const parsed: unknown = JSON.parse(input)
+    if (!Array.isArray(parsed)) return undefined
+    const rounds: StoredToolRound[] = []
+    for (const item of parsed) {
+      const round = toolRound(item)
+      if (round === undefined) return undefined
+      rounds.push(round)
+    }
+    return rounds.length === 0 ? undefined : rounds
+  } catch {
+    return undefined
+  }
+}
+
+function usage(cell: Record<string, unknown>): TokenUsage | undefined {
+  const input = count(cell.input_tokens)
+  const output = count(cell.output_tokens)
+  const reasoning = count(cell.reasoning_tokens)
+  const cached = count(cell.cached_tokens)
+  if (
+    input === undefined &&
+    output === undefined &&
+    reasoning === undefined &&
+    cached === undefined
+  ) {
+    return undefined
+  }
+  return {
+    ...(input === undefined ? {} : { inputTokens: input }),
+    ...(output === undefined ? {} : { outputTokens: output }),
+    ...(reasoning === undefined ? {} : { reasoningTokens: reasoning }),
+    ...(cached === undefined ? {} : { cachedTokens: cached }),
   }
 }
 
@@ -87,6 +248,9 @@ function messageRow(row: unknown): (StoredMessage & { conversationId: string }) 
     return undefined
   }
 
+  const parsedRounds = toolRounds(cell.tool_steps)
+  const parsedUsage = usage(cell)
+
   return {
     id: cell.id,
     conversationId: cell.conversation_id,
@@ -96,13 +260,18 @@ function messageRow(row: unknown): (StoredMessage & { conversationId: string }) 
     status: parsedStatus,
     at: cell.created_at,
     attachments: [],
+    ...(parsedRole !== 'assistant' || parsedRounds === undefined
+      ? {}
+      : { toolRounds: parsedRounds }),
+    ...(parsedRole === 'assistant' && cell.trimmed === 1 ? { trimmed: true } : {}),
+    ...(parsedUsage === undefined ? {} : { usage: parsedUsage }),
     ...(typeof cell.provider_id !== 'string' ? {} : { providerId: cell.provider_id }),
     ...(parsedApi === undefined ? {} : { providerApi: parsedApi }),
     ...(parsedItems === undefined ? {} : { providerItems: parsedItems }),
   }
 }
 
-function conversationRow(row: unknown, messages: Message[]): Conversation | undefined {
+function summaryRow(row: unknown): ConversationSummary | undefined {
   const cell = object(row)
   if (cell === undefined) return undefined
   const parsedMode = mode(cell.mode)
@@ -126,12 +295,28 @@ function conversationRow(row: unknown, messages: Message[]): Conversation | unde
     mode: parsedMode,
     pinned: cell.pinned === 1,
     updatedAt: cell.updated_at,
-    messages,
+  }
+}
+
+function conversationRow(row: unknown, messages: Message[]): Conversation | undefined {
+  const summary = summaryRow(row)
+  return summary === undefined ? undefined : { ...summary, messages }
+}
+
+/** Removes message bodies before a conversation crosses a summary-only boundary. */
+export function summarize(conversation: Conversation): ConversationSummary {
+  return {
+    id: conversation.id,
+    title: conversation.title,
+    draft: conversation.draft,
+    mode: conversation.mode,
+    pinned: conversation.pinned,
+    updatedAt: conversation.updatedAt,
   }
 }
 
 function visibleMessage(
-  message: Omit<Message, 'attachments'> & { attachments: AttachmentMeta[] },
+  message: Omit<StoredMessage, 'attachments'> & { attachments: AttachmentMeta[] },
 ): Message {
   return {
     id: message.id,
@@ -142,7 +327,118 @@ function visibleMessage(
     at: message.at,
     attachments: message.attachments,
     ...(message.streamSeq === undefined ? {} : { streamSeq: message.streamSeq }),
+    ...(message.toolRounds === undefined
+      ? {}
+      : {
+          toolRounds: message.toolRounds.map((round) => ({
+            text: round.text,
+            steps: round.steps,
+          })),
+        }),
+    ...(message.trimmed === true ? { trimmed: true } : {}),
+    ...(message.usage === undefined ? {} : { usage: message.usage }),
   }
+}
+
+/**
+ * Every conversation, without message bodies.
+ *
+ * This is what the sidebar shows and what `chats:changed` broadcasts, so it
+ * runs several times per turn. Reading message text here made that cost scale
+ * with the whole database rather than with the conversation being read.
+ */
+export function summaries(conn: DatabaseSync): ConversationSummary[] {
+  return conn
+    .prepare(
+      `SELECT ${CONVERSATION_COLUMNS}
+       FROM conversations ORDER BY pinned DESC, updated_at DESC, id`,
+    )
+    .all()
+    .flatMap((row) => {
+      const parsed = summaryRow(row)
+      return parsed === undefined ? [] : [parsed]
+    })
+}
+
+const EXCERPT_LENGTH = 110
+const EXCERPT_CONTEXT = 36
+
+function normalized(value: string): string {
+  return value.replace(/\s+/g, ' ').trim()
+}
+
+/** A short window around the first match, for a search result row. */
+export function excerptAround(content: string, query: string): string | undefined {
+  const text = normalized(content)
+  const index = text.toLowerCase().indexOf(query)
+  if (index < 0) return undefined
+  if (text.length <= EXCERPT_LENGTH) return text
+  const start = Math.max(0, index - EXCERPT_CONTEXT)
+  const end = Math.min(text.length, start + EXCERPT_LENGTH)
+  return `${start > 0 ? '…' : ''}${text.slice(start, end).trim()}${end < text.length ? '…' : ''}`
+}
+
+/** Escapes the wildcards SQLite's LIKE would otherwise treat as syntax. */
+function likePattern(query: string): string {
+  return `%${query.replace(/[\\%_]/g, (match) => `\\${match}`)}%`
+}
+
+/**
+ * Searches titles and message text in SQLite.
+ *
+ * This used to filter an in-memory array of every conversation, which only
+ * worked because every message was already loaded into the renderer. Running it
+ * here is what lets the sidebar carry titles alone.
+ */
+export function searchChats(conn: DatabaseSync, query: string): SearchHit[] {
+  const q = normalized(query).toLowerCase()
+  if (q === '') return []
+  const pattern = likePattern(q)
+
+  const hits: SearchHit[] = []
+  for (const row of conn
+    .prepare(
+      `SELECT ${CONVERSATION_COLUMNS} FROM conversations
+       ORDER BY pinned DESC, updated_at DESC, id`,
+    )
+    .all()) {
+    const summary = summaryRow(row)
+    if (summary === undefined) continue
+
+    const match = object(
+      conn
+        .prepare(
+          `SELECT text, reasoning FROM messages
+           WHERE conversation_id = ?
+             AND (lower(text) LIKE ? ESCAPE '\\' OR lower(reasoning) LIKE ? ESCAPE '\\')
+           ORDER BY ordinal LIMIT 1`,
+        )
+        .get(summary.id, pattern, pattern),
+    )
+    const titleHit = summary.title.toLowerCase().includes(q)
+    if (match === undefined && !titleHit) continue
+
+    const excerpt =
+      match === undefined
+        ? undefined
+        : (typeof match.text === 'string' ? excerptAround(match.text, q) : undefined) ??
+          (typeof match.reasoning === 'string' ? excerptAround(match.reasoning, q) : undefined)
+    hits.push({ conversation: summary, ...(excerpt === undefined ? {} : { excerpt }) })
+  }
+  return hits
+}
+
+/** The messages of one conversation, loaded when it is opened. */
+export function messagesFor(conn: DatabaseSync, conversationId: string): Message[] {
+  const attachmentMap = attachments.messageMap(conn, conversationId)
+  return conn
+    .prepare(`SELECT ${MESSAGE_COLUMNS} FROM messages WHERE conversation_id = ? ORDER BY ordinal`)
+    .all(conversationId)
+    .flatMap((row) => {
+      const parsed = messageRow(row)
+      if (parsed === undefined) return []
+      return [visibleMessage({ ...parsed, attachments: attachmentMap.get(parsed.id) ?? [] })]
+    })
 }
 
 export function list(conn: DatabaseSync): Conversation[] {
@@ -264,7 +560,9 @@ export function restartMessage(
       .prepare(
         `UPDATE messages
          SET text = '', reasoning = '', status = 'streaming',
-             provider_id = NULL, provider_api = NULL, provider_items = NULL
+             provider_id = NULL, provider_api = NULL, provider_items = NULL,
+             tool_steps = NULL, trimmed = NULL, input_tokens = NULL, output_tokens = NULL,
+             reasoning_tokens = NULL, cached_tokens = NULL
          WHERE id = ? AND status IN ('error', 'cancelled')`,
       )
       .run(id)
@@ -418,6 +716,23 @@ export function beginTurn(
     : { conversation, userMessageId, assistantMessageId }
 }
 
+/**
+ * Everything a finished turn recorded besides its visible text.
+ *
+ * Grouped rather than passed positionally: a turn now carries provider replay
+ * data, the tools it called, and what it cost, and eight trailing optional
+ * arguments is a call site nobody can read.
+ */
+export type TurnOutcome = {
+  providerApi?: ApiKind
+  providerId?: string
+  items?: unknown[]
+  toolRounds?: StoredToolRound[]
+  usage?: TokenUsage
+  /** History had to be left out of this turn's request. */
+  trimmed?: boolean
+}
+
 export function finishMessage(
   conn: DatabaseSync,
   id: string,
@@ -425,25 +740,33 @@ export function finishMessage(
   reasoning: string,
   finalStatus: Exclude<MessageStatus, 'streaming'>,
   now: number,
-  providerApi?: ApiKind,
-  providerId?: string,
-  items?: unknown[],
+  outcome: TurnOutcome = {},
 ): Message | undefined {
   conn.exec('BEGIN')
   try {
     const result = conn
       .prepare(
         `UPDATE messages
-         SET text = ?, reasoning = ?, status = ?, provider_id = ?, provider_api = ?, provider_items = ?
+         SET text = ?, reasoning = ?, status = ?, provider_id = ?, provider_api = ?,
+             provider_items = ?, tool_steps = ?, trimmed = ?,
+             input_tokens = ?, output_tokens = ?, reasoning_tokens = ?, cached_tokens = ?
          WHERE id = ? AND role = 'assistant' AND status = 'streaming'`,
       )
       .run(
         text,
         reasoning,
         finalStatus,
-        providerId ?? null,
-        providerApi ?? null,
-        items === undefined ? null : JSON.stringify(items),
+        outcome.providerId ?? null,
+        outcome.providerApi ?? null,
+        outcome.items === undefined ? null : JSON.stringify(outcome.items),
+        outcome.toolRounds === undefined || outcome.toolRounds.length === 0
+          ? null
+          : JSON.stringify(outcome.toolRounds),
+        outcome.trimmed === true ? 1 : null,
+        count(outcome.usage?.inputTokens) ?? null,
+        count(outcome.usage?.outputTokens) ?? null,
+        count(outcome.usage?.reasoningTokens) ?? null,
+        count(outcome.usage?.cachedTokens) ?? null,
         id,
       )
     if (result.changes === 0) {
@@ -481,8 +804,27 @@ export function recoverInterrupted(conn: DatabaseSync): number {
     .run().changes)
 }
 
-export function load(): Conversation[] {
+/** What the sidebar and every chats:changed broadcast carry. */
+export function load(): ConversationSummary[] {
+  return summaries(db.handle())
+}
+
+/**
+ * Every conversation with its messages.
+ *
+ * Only the export path wants this — it genuinely needs the whole database. The
+ * sidebar uses load() instead, which is why that no longer reads message text.
+ */
+export function all(): Conversation[] {
   return list(db.handle())
+}
+
+export function messages(id: string): Message[] {
+  return messagesFor(db.handle(), id)
+}
+
+export function search(query: string): SearchHit[] {
+  return searchChats(db.handle(), query)
 }
 
 export function get(id: string): Conversation | undefined {

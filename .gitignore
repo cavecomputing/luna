@@ -138,6 +138,14 @@ Icon[\r]
 !.vscode/extensions.json
 !.vscode/launch.json
 
+# ─── Playwright ────────────────────────────────────────────────────────────
+# Traces from a failing e2e run. They are screenshots and DOM snapshots of a
+# real Luna window, so they can hold whatever was on screen.
+/test-results/
+/playwright-report/
+/blob-report/
+/.playwright/
+
 # ─── Claude Code ───────────────────────────────────────────────────────────
 CLAUDE.local.md
 .claude/settings.local.json
