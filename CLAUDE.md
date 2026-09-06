@@ -72,9 +72,11 @@ Because Luna handles the user's private conversations and their API credentials,
 ```
 npm install          # deps + electron binary + git hooks, all via lifecycle scripts
 npm run dev          # electron-vite dev, HMR on main + preload + renderer
-npm run typecheck    # tsc --noEmit against tsconfig.node.json and tsconfig.web.json
+npm run typecheck    # tsc --noEmit against the node, web and e2e projects
 npm run lint         # eslint --max-warnings 0
 npm run test         # vitest run
+npm run test:e2e     # package the app, then Playwright against it
+npm run test:e2e:only  # Playwright against whatever is already in release/
 npm run build        # typecheck + lint + electron-vite build
 npm run package      # electron-builder, unpacked app for the current operating system
 npm run dist         # DMG on macOS; NSIS installer on Windows
@@ -86,8 +88,20 @@ On Windows PowerShell, use `npm.cmd` if the local execution policy blocks the `n
 Prefer a single test file (`npm run test -- src/main/ipc/app.test.ts`) over the full suite
 while iterating.
 
-e2e is not wired yet. When it is, it's Playwright against the packaged app as `test:e2e`,
-and it joins the definition of done below.
+e2e is Playwright against the **packaged** app, in `e2e/`. Not against `electron-vite dev`:
+the parts most likely to break are the ones the dev server replaces — the custom protocol the
+renderer loads over, the asar bundle, and the CSP.
+
+Two things there are load-bearing, both in `e2e/luna.ts`:
+
+- **Every launch gets a throwaway `userData`.** The database, conversations and provider
+  configuration all live under `app.getPath('userData')`, so a run that does not point
+  `--user-data-dir` somewhere disposable is a run against a real person's Luna — and one of the
+  things worth testing is the privacy delete. It is not a parameter; it must never be forgotten.
+- **Native dialogs are replaced in the running main process**, not behind a flag in shipped
+  code. `dialog.showMessageBox` is drawn by the operating system, so Playwright has no button to
+  click; `answerDialogs()` swaps the function through `app.evaluate`. Never add an
+  `if (testing)` branch around a consent prompt — a prompt that can be turned off is not one.
 
 ## Stack
 
@@ -491,7 +505,9 @@ Tests are not optional and are not a follow-up task. A feature is not done until
 
 **Tools**
 - Vitest for unit and integration tests, colocated as `thing.test.ts` next to the source.
-- Playwright for e2e against the packaged app.
+- Playwright for e2e against the packaged app, in `e2e/*.spec.ts`. A fixture a test spawns
+  lives in `e2e/fixtures/` as a plain `.mjs` script, exempt from type-aware lint because it is
+  a program, not app code.
 - `npm run test` must pass before you report any change complete.
 
 **What must have a test**

@@ -122,6 +122,22 @@ export default defineConfig([
     },
   },
 
+  // ── e2e fixtures are standalone programs, not app code. ─────────────────
+  // A fixture is a small script run by `node` — the same shape as the `node -e`
+  // servers the unit tests spawn, just large enough to deserve a file. It reads
+  // arbitrary JSON off a pipe, so type-aware rules over it would mean writing a
+  // fully typed MCP server rather than something for a test to talk to.
+  {
+    files: ['e2e/fixtures/**/*.mjs'],
+    extends: [tseslint.configs.disableTypeChecked],
+    languageOptions: {
+      globals: { process: 'readonly' },
+    },
+    rules: {
+      '@typescript-eslint/no-misused-spread': 'off',
+    },
+  },
+
   // ── Config files run in Node before any boundary applies. ────────────────
   {
     files: ['*.config.{ts,js}', 'eslint.config.js'],

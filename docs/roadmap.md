@@ -230,6 +230,23 @@ them: a tool claiming `readOnlyHint` gets exactly the same gate as one that clai
 Both remaining pieces are built: the grant is enforced at dispatch, and the Tools panel in
 Settings lists every discovered tool with its enable and "Always allow" state.
 
+### F7. End-to-end tests
+
+**Needed by:** anything with a surface a unit test cannot reach.
+
+Built, as Playwright against the packaged app in `e2e/`. It exists because the MCP work had a
+seam nothing else could cover: the panel, the IPC boundary, the database, the subprocess and the
+native consent prompt only meet in a running app.
+
+Two decisions worth keeping. Every launch gets a throwaway `userData`, because the alternative
+is a test suite that runs against a real person's conversations and keys. And the native consent
+dialog is replaced inside the running main process rather than behind a flag in shipped code — a
+consent prompt with an `if (testing)` around it is a consent prompt that can be turned off.
+
+Covered today: adding a server, the consent prompt in both answers, discovery leaving tools
+switched off, a credential stored and never returned, deletion, and a command that is not a
+program. Not covered: a full turn with a model, which would need a provider and a key.
+
 ### F5. Update path
 
 **Needed by:** every version after 1.0, in practice.
