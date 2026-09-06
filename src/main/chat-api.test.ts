@@ -38,6 +38,12 @@ function request(api: ProviderConfig['api'] = 'responses'): ChatRequest {
   }
 }
 
+function setProviderItems(requestValue: ChatRequest, items: unknown[]): void {
+  const assistant = requestValue.history[1]
+  if (assistant === undefined) throw new Error('test request is missing its assistant message')
+  requestValue.history[1] = { ...assistant, providerItems: items }
+}
+
 function sse(parts: string[], status = 200): Response {
   return new Response(
     new ReadableStream<Uint8Array>({
@@ -97,6 +103,64 @@ describe('requestBody', () => {
       store: false,
       include: ['reasoning.encrypted_content'],
     })
+  })
+
+  it('omits plaintext reasoning with empty encrypted content from Responses replay', () => {
+    const configured = request()
+    setProviderItems(configured, [
+      {
+        id: 'rs_local',
+        type: 'reasoning',
+        content: [{ type: 'reasoning_text', text: 'Plaintext local reasoning.' }],
+        encrypted_content: '',
+      },
+      { type: 'message', role: 'assistant', id: 'msg_local', content: 'Hi' },
+    ])
+
+    expect(requestBody(configured).input).toEqual([
+      { role: 'user', content: 'Hello' },
+      { type: 'message', role: 'assistant', id: 'msg_local', content: 'Hi' },
+      { role: 'user', content: 'Again' },
+    ])
+  })
+
+  it('omits Responses reasoning without encrypted content from replay', () => {
+    const configured = request()
+    setProviderItems(configured, [
+      {
+        id: 'rs_compatible',
+        type: 'reasoning',
+        content: [{ type: 'reasoning_text', text: 'Compatible provider reasoning.' }],
+      },
+      { type: 'message', role: 'assistant', id: 'msg_compatible' },
+    ])
+
+    expect(requestBody(configured).input).toEqual([
+      { role: 'user', content: 'Hello' },
+      { type: 'message', role: 'assistant', id: 'msg_compatible' },
+      { role: 'user', content: 'Again' },
+    ])
+  })
+
+  it('preserves encrypted OpenAI reasoning in Responses replay', () => {
+    const configured = request()
+    const reasoning = {
+      id: 'rs_openai',
+      type: 'reasoning',
+      summary: [],
+      encrypted_content: 'encrypted-reasoning',
+    }
+    setProviderItems(configured, [
+      reasoning,
+      { type: 'message', role: 'assistant', id: 'msg_openai' },
+    ])
+
+    expect(requestBody(configured).input).toEqual([
+      { role: 'user', content: 'Hello' },
+      reasoning,
+      { type: 'message', role: 'assistant', id: 'msg_openai' },
+      { role: 'user', content: 'Again' },
+    ])
   })
 
   it('builds a Chat Completions request from visible roles and text', () => {
@@ -542,6 +606,76 @@ describe('tool calling', () => {
         ...secondItems,
         { type: 'function_call_output', call_id: 'call_2', output: 'again' },
         ...finalItems,
+      ])
+    })
+
+    /**
+     * The same rule as a plain reply, one level down. A tool round's stored
+     * output is replayed as input too, so a compatible server's plaintext
+     * reasoning has to be dropped there as well — a provider rejects it
+     * whichever list it arrives in.
+     */
+    it('omits plaintext reasoning from a replayed tool round', () => {
+      const roundItems = [
+        { type: 'reasoning', content: [{ type: 'reasoning_text', text: 'Thinking aloud.' }] },
+        { type: 'function_call', call_id: 'call_1', name: 'luna_echo' },
+      ]
+      const finalItems = [
+        { type: 'reasoning', encrypted_content: '' },
+        { type: 'message', role: 'assistant', content: 'Checked.' },
+      ]
+      const body = requestBody({
+        ...bare('responses'),
+        history: [
+          {
+            id: 'a1',
+            role: 'assistant',
+            text: 'Checked.',
+            status: 'complete',
+            at: 1,
+            attachments: [],
+            providerApi: 'responses',
+            providerId: 'openai',
+            providerItems: finalItems,
+            toolRounds: [{ text: 'First check.', steps: [step], providerItems: roundItems }],
+          },
+        ],
+      })
+
+      expect(body.input).toEqual([
+        { type: 'function_call', call_id: 'call_1', name: 'luna_echo' },
+        { type: 'function_call_output', call_id: 'call_1', output: 'hi' },
+        { type: 'message', role: 'assistant', content: 'Checked.' },
+      ])
+    })
+
+    it('keeps encrypted reasoning in a replayed tool round', () => {
+      const roundItems = [
+        { type: 'reasoning', encrypted_content: 'encrypted-round' },
+        { type: 'function_call', call_id: 'call_1', name: 'luna_echo' },
+      ]
+      const body = requestBody({
+        ...bare('responses'),
+        history: [
+          {
+            id: 'a1',
+            role: 'assistant',
+            text: 'Checked.',
+            status: 'complete',
+            at: 1,
+            attachments: [],
+            providerApi: 'responses',
+            providerId: 'openai',
+            providerItems: [{ type: 'message', role: 'assistant', content: 'Checked.' }],
+            toolRounds: [{ text: 'First check.', steps: [step], providerItems: roundItems }],
+          },
+        ],
+      })
+
+      expect(body.input).toEqual([
+        ...roundItems,
+        { type: 'function_call_output', call_id: 'call_1', output: 'hi' },
+        { type: 'message', role: 'assistant', content: 'Checked.' },
       ])
     })
 

@@ -141,6 +141,17 @@ function chatRound(round: ToolRound, messages: Record<string, unknown>[]): void 
   }
 }
 
+/** Compatible servers may expose plaintext reasoning that must not be replayed as input. */
+function replayItems(items: unknown[]): unknown[] {
+  return items.filter((item) => {
+    const value = object(item)
+    return (
+      value?.type !== 'reasoning' ||
+      (typeof value.encrypted_content === 'string' && value.encrypted_content !== '')
+    )
+  })
+}
+
 /** The same pair, as Responses input items. */
 function responseSteps(steps: readonly ToolStep[], input: unknown[], withCalls: boolean): void {
   for (const step of steps) {
@@ -161,7 +172,7 @@ function responseSteps(steps: readonly ToolStep[], input: unknown[], withCalls: 
 /** Replays one Responses round exactly when its provider output is available. */
 function responseRound(round: StoredToolRound, input: unknown[], exact: boolean): void {
   if (exact && round.providerItems !== undefined) {
-    input.push(...round.providerItems)
+    input.push(...replayItems(round.providerItems))
     responseSteps(round.steps, input, false)
     return
   }
@@ -211,8 +222,11 @@ export function requestBody(request: ChatRequest): Record<string, unknown> {
       const exact =
         message.providerId === request.provider.id && message.providerApi === 'responses'
       for (const round of message.toolRounds) responseRound(round, input, exact)
-      if (exact && message.providerItems !== undefined) input.push(...message.providerItems)
-      else input.push({ role: 'assistant', content: message.text })
+      if (exact && message.providerItems !== undefined) {
+        input.push(...replayItems(message.providerItems))
+      } else {
+        input.push({ role: 'assistant', content: message.text })
+      }
       continue
     }
     if (
@@ -221,7 +235,7 @@ export function requestBody(request: ChatRequest): Record<string, unknown> {
       message.providerApi === 'responses' &&
       message.providerItems !== undefined
     ) {
-      input.push(...message.providerItems)
+      input.push(...replayItems(message.providerItems))
       continue
     }
     input.push({
